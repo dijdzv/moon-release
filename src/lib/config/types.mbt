@@ -11,6 +11,7 @@ pub struct Config {
   git_release_draft : Bool
   git_release_name : String
   git_release_body : String?
+  git_release_latest : Bool
   publish : Bool
   publish_frozen : Bool
   semver_check : Bool
@@ -21,6 +22,8 @@ pub struct Config {
   allow_dirty : Bool
   custom_major_increment_regex : String?
   custom_minor_increment_regex : String?
+  max_analyze_commits : UInt?
+  publish_timeout : UInt  // 秒単位、現在は未使用（将来実装予定）
 } derive(Show, Eq)
 
 /// パッケージ設定（モノレポ用）
@@ -57,6 +60,7 @@ pub fn Config::default() -> Config {
     git_release_draft: false,
     git_release_name: "Release v{{ version }}",
     git_release_body: None,
+    git_release_latest: true,
     publish: true,
     publish_frozen: false,
     semver_check: false,
@@ -67,6 +71,8 @@ pub fn Config::default() -> Config {
     allow_dirty: false,
     custom_major_increment_regex: None,
     custom_minor_increment_regex: None,
+    max_analyze_commits: None,
+    publish_timeout: 300,  // デフォルト5分
   }
 }
 
@@ -118,6 +124,7 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     git_release_draft: parse_bool(obj, "git_release_draft", d.git_release_draft),
     git_release_name: parse_string(obj, "git_release_name", d.git_release_name),
     git_release_body: parse_optional_string(obj, "git_release_body", d.git_release_body),
+    git_release_latest: parse_bool(obj, "git_release_latest", d.git_release_latest),
     publish: parse_bool(obj, "publish", d.publish),
     publish_frozen: parse_bool(obj, "publish_frozen", d.publish_frozen),
     semver_check: parse_bool(obj, "semver_check", d.semver_check),
@@ -136,6 +143,12 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
       "custom_minor_increment_regex",
       d.custom_minor_increment_regex,
     ),
+    max_analyze_commits: parse_optional_uint(
+      obj,
+      "max_analyze_commits",
+      d.max_analyze_commits,
+    ),
+    publish_timeout: parse_uint(obj, "publish_timeout", d.publish_timeout),
   }
 }
 
@@ -237,6 +250,43 @@ fn parse_bool(
     Some(True) => true
     Some(False) => false
     Some(_) => raise ConfigError("'" + key + "' must be a boolean")
+    None => default
+  }
+}
+
+/// オプショナルな数値フィールドをパース
+fn parse_optional_uint(
+  obj : Map[String, Json],
+  key : String,
+  default : UInt?
+) -> UInt? raise ConfigError {
+  match obj.get(key) {
+    Some(Number(n, ..)) =>
+      if n >= 0.0 && n == n.to_int().to_double() {
+        Some(n.to_uint())
+      } else {
+        raise ConfigError("'" + key + "' must be a positive integer")
+      }
+    Some(Null) => None
+    Some(_) => raise ConfigError("'" + key + "' must be a number")
+    None => default
+  }
+}
+
+/// 数値フィールドをパース
+fn parse_uint(
+  obj : Map[String, Json],
+  key : String,
+  default : UInt
+) -> UInt raise ConfigError {
+  match obj.get(key) {
+    Some(Number(n, ..)) =>
+      if n >= 0.0 && n == n.to_int().to_double() {
+        n.to_uint()
+      } else {
+        raise ConfigError("'" + key + "' must be a positive integer")
+      }
+    Some(_) => raise ConfigError("'" + key + "' must be a number")
     None => default
   }
 }

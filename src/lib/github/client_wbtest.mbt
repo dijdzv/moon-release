@@ -41,6 +41,29 @@ test "create release command with prerelease" {
   assert_true(cmd.iter().any(fn(s) { s == "--prerelease" }))
 }
 
+test "create release command with latest true" {
+  let client = GitHubClient::new("owner", "repo")
+  let cmd = client.create_release_command(
+    "v1.0.0",
+    "Release",
+    "Notes",
+    latest=true,
+  )
+  assert_true(cmd.iter().any(fn(s) { s == "--latest" }))
+  assert_false(cmd.iter().any(fn(s) { s == "--latest=false" }))
+}
+
+test "create release command with latest false" {
+  let client = GitHubClient::new("owner", "repo")
+  let cmd = client.create_release_command(
+    "v1.0.0",
+    "Release",
+    "Notes",
+    latest=false,
+  )
+  assert_true(cmd.iter().any(fn(s) { s == "--latest=false" }))
+}
+
 test "get release command" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.get_release_command("v1.0.0")

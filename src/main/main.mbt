@@ -45,6 +45,12 @@ fn create_parser() -> @clap.Parser {
             short='p',
             help="Update all packages in monorepo mode",
           ),
+          "output": @clap.Arg::named(
+            short='o',
+            nargs=@clap.One,
+            defaults=["text"],
+            help="Output format (text, json)",
+          ),
         },
       ),
       "release-pr": @clap.SubCommand::new(
@@ -92,6 +98,14 @@ fn create_parser() -> @clap.Parser {
       "version": @clap.SubCommand::new(help="Show version information"),
       "check": @clap.SubCommand::new(
         help="Check the current state without making changes",
+        args={
+          "output": @clap.Arg::named(
+            short='o',
+            nargs=@clap.One,
+            defaults=["text"],
+            help="Output format (text, json)",
+          ),
+        },
       ),
       "set-version": @clap.SubCommand::new(
         help="Set the package version manually",
@@ -105,6 +119,18 @@ fn create_parser() -> @clap.Parser {
             help="The version to set (e.g., 1.2.3)",
           ),
         },
+      ),
+      "generate-completions": @clap.SubCommand::new(
+        help="Generate shell completion script",
+        args={
+          "shell": @clap.Arg::positional(
+            nargs=@clap.One,
+            help="Shell to generate completions for (bash, zsh, fish)",
+          ),
+        },
+      ),
+      "generate-schema": @clap.SubCommand::new(
+        help="Generate JSON Schema for release.json configuration",
       ),
     },
   )
@@ -167,6 +193,8 @@ async fn main {
         "version" => cmd_version()
         "check" => cmd_check(subcmd, dry_run, verbose, config_path)
         "set-version" => cmd_set_version(subcmd, dry_run, verbose)
+        "generate-completions" => cmd_generate_completions(subcmd)
+        "generate-schema" => cmd_generate_schema()
         _ => println("Unknown command: " + subcmd.name)
       }
     None => {
@@ -190,8 +218,14 @@ async fn cmd_update(
     None => false
   }
   let dry_run = global_dry_run || subcmd_dry_run
+  let output_format : String = try {
+    subcmd.get_one("output")
+  } catch {
+    _ => "text"
+  }
+  let json_output = output_format == "json"
 
-  if verbose {
+  if verbose && not(json_output) {
     println("Running update command...")
     println("  Config: " + config_path)
     println("  Dry run: " + dry_run.to_string())
@@ -203,6 +237,9 @@ async fn cmd_update(
 
   // dirty チェック
   if should_abort_dirty(config, repo, verbose) {
+    if json_output {
+      println("{\"error\": \"uncommitted changes in working directory\"}")
+    }
     return
   }
 
@@ -212,12 +249,18 @@ async fn cmd_update(
     None => false
   }
 
-  // モノレポモードの場合は各パッケージを個別に更新
+  // モノレポモードの場合は各パッケージを個別に更新（JSON未対応）
   if packages_mode || not(config.packages.is_empty()) {
     try {
       @workflow.run_update_packages(config, repo, dry_run, verbose)
     } catch {
-      e => println("Error: " + e.to_string())
+      e => {
+        if json_output {
+          println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
+        } else {
+          println("Error: " + e.to_string())
+        }
+      }
     }
     return
   }
@@ -227,7 +270,11 @@ async fn cmd_update(
     load_moon_mod("moon.mod.json")
   } catch {
     e => {
-      println("Error: " + e.to_string())
+      if json_output {
+        println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
+      } else {
+        println("Error: " + e.to_string())
+      }
       return
     }
   }
@@ -235,26 +282,38 @@ async fn cmd_update(
   let current_version = match @semver.Version::parse(moon_mod.version) {
     Some(v) => v
     None => {
-      println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
-      println("Hint: Version should follow semver format (e.g., 1.2.3 or 1.2.3-alpha)")
+      if json_output {
+        println("{\"error\": \"invalid version in moon.mod.json\"}")
+      } else {
+        println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
+        println("Hint: Version should follow semver format (e.g., 1.2.3 or 1.2.3-alpha)")
+      }
       return
     }
   }
 
   // コミットを解析
   let commits = try {
-    get_commits_since_last_tag(repo)
+    get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
   } catch {
     e => {
-      println("Error getting commits: " + e.to_string())
-      println("Hint: Make sure you are in a git repository with at least one commit")
+      if json_output {
+        println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
+      } else {
+        println("Error getting commits: " + e.to_string())
+        println("Hint: Make sure you are in a git repository with at least one commit")
+      }
       return
     }
   }
 
   if commits.is_empty() {
-    println("No commits found since last tag. Nothing to release.")
-    println("Hint: Create new commits or use 'moon-release set-version' to set version manually")
+    if json_output {
+      println("{\"error\": \"no commits found since last tag\"}")
+    } else {
+      println("No commits found since last tag. Nothing to release.")
+      println("Hint: Create new commits or use 'moon-release set-version' to set version manually")
+    }
     return
   }
 
@@ -270,8 +329,12 @@ async fn cmd_update(
       ) {
         Some(t) => t
         None => {
-          println("No releasable commits found (no feat, fix, or breaking changes)")
-          println("Hint: Use Conventional Commits (feat:, fix:) or --bump to force a version bump")
+          if json_output {
+            println("{\"error\": \"no releasable commits found\"}")
+          } else {
+            println("No releasable commits found (no feat, fix, or breaking changes)")
+            println("Hint: Use Conventional Commits (feat:, fix:) or --bump to force a version bump")
+          }
           return
         }
       }
@@ -286,7 +349,7 @@ async fn cmd_update(
       @workflow.should_release(new_version, moon_mod.name, verbose)
     } catch {
       e => {
-        if verbose {
+        if verbose && not(json_output) {
           println("Warning: Registry check failed: " + e.to_string())
         }
         true // エラーの場合はリリースを続行
@@ -294,9 +357,13 @@ async fn cmd_update(
     }
 
     if not(should_rel) {
-      println(
-        "Version \{new_version.to_string()} is not newer than registry version. Nothing to update.",
-      )
+      if json_output {
+        println("{\"error\": \"version not newer than registry\"}")
+      } else {
+        println(
+          "Version \{new_version.to_string()} is not newer than registry version. Nothing to update.",
+        )
+      }
       return
     }
   }
@@ -315,8 +382,31 @@ async fn cmd_update(
   // ワークフローを実行
   try {
     @workflow.run_update(ctx)
+    // JSON 出力
+    if json_output {
+      let bump_str = match bump_type {
+        @semver.Major => "major"
+        @semver.Minor => "minor"
+        @semver.Patch => "patch"
+      }
+      let json_str = build_json_object([
+        ("old_version", json_string(current_version.to_string())),
+        ("new_version", json_string(new_version.to_string())),
+        ("bump_type", json_string(bump_str)),
+        ("commits_count", commits.length().to_string()),
+        ("dry_run", dry_run.to_string()),
+        ("updated_files", "[\"moon.mod.json\"]"),
+      ])
+      println(json_str)
+    }
   } catch {
-    e => println("Error: " + e.to_string())
+    e => {
+      if json_output {
+        println("{\"error\": " + json_string(e.to_string()) + "}")
+      } else {
+        println("Error: " + e.to_string())
+      }
+    }
   }
 }
 
@@ -370,7 +460,7 @@ async fn cmd_release_pr(
 
   // コミットを解析
   let commits = try {
-    get_commits_since_last_tag(repo)
+    get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
   } catch {
     e => {
       println("Error getting commits: " + e.to_string())
@@ -486,7 +576,7 @@ async fn cmd_release(
 
   // コミットを解析
   let commits = try {
-    get_commits_since_last_tag(repo)
+    get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
   } catch {
     e => {
       println("Error getting commits: " + e.to_string())
@@ -752,13 +842,20 @@ async fn cmd_check(
     Some(arr) if arr.length() > 0 => Some(arr[0])
     _ => None
   }
+  let output_format : String = try {
+    subcmd.get_one("output")
+  } catch {
+    _ => "text"
+  }
+  let json_output = output_format == "json"
 
-  println("Checking current state...")
-  println("")
-
-  match from_tag {
-    Some(tag) => println("Analyzing commits since: " + tag)
-    None => println("Analyzing commits since last tag...")
+  if not(json_output) {
+    println("Checking current state...")
+    println("")
+    match from_tag {
+      Some(tag) => println("Analyzing commits since: " + tag)
+      None => println("Analyzing commits since last tag...")
+    }
   }
 
   // Git リポジトリを取得
@@ -771,9 +868,11 @@ async fn cmd_check(
     _ => None
   }
 
-  match latest_tag {
-    Some(tag) => println("Latest tag: " + tag)
-    None => println("No tags found")
+  if not(json_output) {
+    match latest_tag {
+      Some(tag) => println("Latest tag: " + tag)
+      None => println("No tags found")
+    }
   }
 
   // コミットを取得
@@ -781,11 +880,68 @@ async fn cmd_check(
     get_commits_since_last_tag(repo)
   } catch {
     e => {
-      println("Error getting commits: " + e.to_string())
+      if json_output {
+        println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
+      } else {
+        println("Error getting commits: " + e.to_string())
+      }
       return
     }
   }
 
+  // バンプタイプを決定
+  let bump_type = if commits.length() > 0 {
+    @semver.determine_bump(commits.map(fn(c) { c.0 }))
+  } else {
+    None
+  }
+
+  // JSON 出力
+  if json_output {
+    // latest_tag
+    let latest_tag_json = match latest_tag {
+      Some(tag) => json_string(tag)
+      None => "null"
+    }
+    // suggested_bump
+    let bump_json = match bump_type {
+      Some(@semver.Major) => "\"major\""
+      Some(@semver.Minor) => "\"minor\""
+      Some(@semver.Patch) => "\"patch\""
+      None => "null"
+    }
+    // commits 配列
+    let commits_json_arr : Array[String] = []
+    for i = 0; i < commits.length(); i = i + 1 {
+      let (cc, hash) = commits[i]
+      let scope_json = match cc.scope {
+        Some(s) => json_string(s)
+        None => "null"
+      }
+      let commit_json = build_json_object([
+        ("hash", json_string(hash)),
+        ("type", json_string(commit_type_to_string(cc.typ))),
+        ("scope", scope_json),
+        ("description", json_string(cc.description)),
+        ("breaking", cc.breaking.to_string()),
+      ])
+      commits_json_arr.push(commit_json)
+    }
+    let commits_json = "[" + commits_json_arr.iter().fold(init="", fn(acc, s) {
+      if acc.is_empty() { s } else { acc + "," + s }
+    }) + "]"
+
+    let json_str = build_json_object([
+      ("latest_tag", latest_tag_json),
+      ("commits_count", commits.length().to_string()),
+      ("suggested_bump", bump_json),
+      ("commits", commits_json),
+    ])
+    println(json_str)
+    return
+  }
+
+  // テキスト出力
   println("Commits since last tag: \{commits.length()}")
 
   if verbose && commits.length() > 0 {
@@ -793,20 +949,7 @@ async fn cmd_check(
     println("Commits:")
     for i = 0; i < commits.length() && i < 10; i = i + 1 {
       let (cc, hash) = commits[i]
-      let typ_str = match cc.typ {
-        @conventional.Feat => "feat"
-        @conventional.Fix => "fix"
-        @conventional.Docs => "docs"
-        @conventional.Style => "style"
-        @conventional.Refactor => "refactor"
-        @conventional.Perf => "perf"
-        @conventional.Test => "test"
-        @conventional.Build => "build"
-        @conventional.Ci => "ci"
-        @conventional.Chore => "chore"
-        @conventional.Revert => "revert"
-        @conventional.Custom(s) => s
-      }
+      let typ_str = commit_type_to_string(cc.typ)
       let scope_str = match cc.scope {
         Some(s) => "(" + s + ")"
         None => ""
@@ -820,9 +963,8 @@ async fn cmd_check(
     }
   }
 
-  // バンプタイプを決定
+  // バンプタイプを表示
   if commits.length() > 0 {
-    let bump_type = @semver.determine_bump(commits.map(fn(c) { c.0 }))
     println("")
     match bump_type {
       Some(@semver.Major) => println("Suggested bump: major (breaking changes)")
@@ -840,6 +982,63 @@ async fn cmd_check(
   println("  moon-release update            # Update files locally")
   println("  moon-release release-pr        # Create release PR")
   println("  moon-release release           # Create release")
+}
+
+/// コミットタイプを文字列に変換
+fn commit_type_to_string(typ : @conventional.CommitType) -> String {
+  match typ {
+    @conventional.Feat => "feat"
+    @conventional.Fix => "fix"
+    @conventional.Docs => "docs"
+    @conventional.Style => "style"
+    @conventional.Refactor => "refactor"
+    @conventional.Perf => "perf"
+    @conventional.Test => "test"
+    @conventional.Build => "build"
+    @conventional.Ci => "ci"
+    @conventional.Chore => "chore"
+    @conventional.Revert => "revert"
+    @conventional.Custom(s) => s
+  }
+}
+
+/// JSON 文字列をエスケープ
+fn escape_json_string(s : String) -> String {
+  let result = StringBuilder::new()
+  for c in s {
+    match c {
+      '"' => result.write_string("\\\"")
+      '\\' => result.write_string("\\\\")
+      '\n' => result.write_string("\\n")
+      '\r' => result.write_string("\\r")
+      '\t' => result.write_string("\\t")
+      _ => result.write_char(c)
+    }
+  }
+  result.to_string()
+}
+
+/// JSON 文字列リテラルを作成（クォート付き）
+fn json_string(s : String) -> String {
+  "\"" + escape_json_string(s) + "\""
+}
+
+/// JSON オブジェクトを構築
+fn build_json_object(pairs : Array[(String, String)]) -> String {
+  let result = StringBuilder::new()
+  result.write_string("{")
+  for i = 0; i < pairs.length(); i = i + 1 {
+    let (key, value) = pairs[i]
+    if i > 0 {
+      result.write_string(",")
+    }
+    result.write_string("\"")
+    result.write_string(key)
+    result.write_string("\":")
+    result.write_string(value)
+  }
+  result.write_string("}")
+  result.to_string()
 }
 
 // ======== Helper functions ========
@@ -873,7 +1072,8 @@ async fn load_moon_mod(path : String) -> @moon_mod.MoonMod raise {
 
 /// 最新タグから現在までのコミットを取得
 async fn get_commits_since_last_tag(
-  repo : @git.Repository
+  repo : @git.Repository,
+  max_commits~ : UInt? = None
 ) -> Array[(@conventional.ConventionalCommit, String)] raise {
   // 最新タグを取得
   let latest_tag = try {
@@ -886,10 +1086,26 @@ async fn get_commits_since_last_tag(
   let log_result = match latest_tag {
     Some(tag) => {
       let cmd = repo.get_commits_since_tag_command(tag)
+      // max_commits が指定されていれば追加
+      match max_commits {
+        Some(n) => {
+          cmd.push("-n")
+          cmd.push(n.to_string())
+        }
+        None => ()
+      }
       @executor.run_command(cmd)
     }
     None => {
       let cmd = repo.get_all_commits_command()
+      // max_commits が指定されていれば追加
+      match max_commits {
+        Some(n) => {
+          cmd.push("-n")
+          cmd.push(n.to_string())
+        }
+        None => ()
+      }
       @executor.run_command(cmd)
     }
   }
@@ -1016,4 +1232,400 @@ async fn should_abort_dirty(
     return true
   }
   false
+}
+
+/// generate-completions コマンド
+fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
+  let shell : String = if subcmd.positional_args.length() > 0 {
+    subcmd.positional_args[0]
+  } else {
+    println("Error: shell argument is required")
+    println("Usage: moon-release generate-completions <shell>")
+    println("Supported shells: bash, zsh, fish")
+    return
+  }
+
+  match shell {
+    "bash" => print_bash_completion()
+    "zsh" => print_zsh_completion()
+    "fish" => print_fish_completion()
+    _ => {
+      println("Error: unsupported shell: " + shell)
+      println("Supported shells: bash, zsh, fish")
+    }
+  }
+}
+
+/// bash 補完スクリプトを出力
+fn print_bash_completion() -> Unit {
+  let script =
+    #|# moon-release bash completion
+    #|# Add this to ~/.bashrc or source it
+    #|
+    #|_moon_release_completions() {
+    #|    local cur prev opts commands
+    #|    COMPREPLY=()
+    #|    cur="${COMP_WORDS[COMP_CWORD]}"
+    #|    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    #|
+    #|    commands="update release-pr release init version check set-version generate-completions"
+    #|    global_opts="-n --dry-run -v --verbose -c --config -h --help"
+    #|
+    #|    case "${COMP_WORDS[1]}" in
+    #|        update)
+    #|            opts="-n --dry-run -b --bump -p --packages -o --output"
+    #|            ;;
+    #|        release-pr)
+    #|            opts="-n --dry-run -b --bump"
+    #|            ;;
+    #|        release)
+    #|            opts="-n --dry-run -b --bump -p --prerelease"
+    #|            ;;
+    #|        init)
+    #|            opts="-f --force"
+    #|            ;;
+    #|        check)
+    #|            opts="-o --output"
+    #|            ;;
+    #|        set-version)
+    #|            opts="-n --dry-run"
+    #|            ;;
+    #|        generate-completions)
+    #|            if [[ ${COMP_CWORD} -eq 2 ]]; then
+    #|                COMPREPLY=( $(compgen -W "bash zsh fish" -- ${cur}) )
+    #|                return 0
+    #|            fi
+    #|            opts=""
+    #|            ;;
+    #|        *)
+    #|            if [[ ${COMP_CWORD} -eq 1 ]]; then
+    #|                COMPREPLY=( $(compgen -W "${commands}" -- ${cur}) )
+    #|                return 0
+    #|            fi
+    #|            opts="${global_opts}"
+    #|            ;;
+    #|    esac
+    #|
+    #|    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+    #|    return 0
+    #|}
+    #|
+    #|complete -F _moon_release_completions moon-release
+  println(script)
+}
+
+/// zsh 補完スクリプトを出力
+fn print_zsh_completion() -> Unit {
+  let script =
+    #|#compdef moon-release
+    #|# moon-release zsh completion
+    #|# Add this to ~/.zshrc or place in your fpath
+    #|
+    #|_moon-release() {
+    #|    local -a commands
+    #|    commands=(
+    #|        'update:Update version locally (no commit/push)'
+    #|        'release-pr:Create a release pull request'
+    #|        'release:Create a release (tag and GitHub release)'
+    #|        'init:Initialize release configuration'
+    #|        'version:Show version information'
+    #|        'check:Check the current state without making changes'
+    #|        'set-version:Set the package version manually'
+    #|        'generate-completions:Generate shell completion script'
+    #|    )
+    #|
+    #|    local -a global_opts
+    #|    global_opts=(
+    #|        '-n[Show what would be done without making changes]'
+    #|        '--dry-run[Show what would be done without making changes]'
+    #|        '-v[Enable verbose output]'
+    #|        '--verbose[Enable verbose output]'
+    #|        '-c[Path to config file]:config file:_files'
+    #|        '--config[Path to config file]:config file:_files'
+    #|        '-h[Show help]'
+    #|        '--help[Show help]'
+    #|    )
+    #|
+    #|    _arguments -C \
+    #|        $global_opts \
+    #|        '1:command:->command' \
+    #|        '*::arg:->args'
+    #|
+    #|    case $state in
+    #|        command)
+    #|            _describe -t commands 'moon-release command' commands
+    #|            ;;
+    #|        args)
+    #|            case $words[1] in
+    #|                update)
+    #|                    _arguments \
+    #|                        '-n[Show what would be done]' \
+    #|                        '--dry-run[Show what would be done]' \
+    #|                        '-b[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump[Force version bump]:bump:(major minor patch)' \
+    #|                        '-p[Update all packages]' \
+    #|                        '--packages[Update all packages]' \
+    #|                        '-o[Output format]:format:(text json)' \
+    #|                        '--output[Output format]:format:(text json)'
+    #|                    ;;
+    #|                release-pr)
+    #|                    _arguments \
+    #|                        '-n[Show what would be done]' \
+    #|                        '--dry-run[Show what would be done]' \
+    #|                        '-b[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump[Force version bump]:bump:(major minor patch)'
+    #|                    ;;
+    #|                release)
+    #|                    _arguments \
+    #|                        '-n[Show what would be done]' \
+    #|                        '--dry-run[Show what would be done]' \
+    #|                        '-b[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump[Force version bump]:bump:(major minor patch)' \
+    #|                        '-p[Prerelease identifier]:prerelease:' \
+    #|                        '--prerelease[Prerelease identifier]:prerelease:'
+    #|                    ;;
+    #|                init)
+    #|                    _arguments \
+    #|                        '-f[Overwrite existing configuration]' \
+    #|                        '--force[Overwrite existing configuration]'
+    #|                    ;;
+    #|                check)
+    #|                    _arguments \
+    #|                        '-o[Output format]:format:(text json)' \
+    #|                        '--output[Output format]:format:(text json)'
+    #|                    ;;
+    #|                set-version)
+    #|                    _arguments \
+    #|                        '-n[Show what would be done]' \
+    #|                        '--dry-run[Show what would be done]' \
+    #|                        ':version:'
+    #|                    ;;
+    #|                generate-completions)
+    #|                    _arguments \
+    #|                        ':shell:(bash zsh fish)'
+    #|                    ;;
+    #|            esac
+    #|            ;;
+    #|    esac
+    #|}
+    #|
+    #|_moon-release "$@"
+  println(script)
+}
+
+/// fish 補完スクリプトを出力
+fn print_fish_completion() -> Unit {
+  let script =
+    #|# moon-release fish completion
+    #|# Add this to ~/.config/fish/completions/moon-release.fish
+    #|
+    #|# Disable file completions
+    #|complete -c moon-release -f
+    #|
+    #|# Global options
+    #|complete -c moon-release -s n -l dry-run -d 'Show what would be done without making changes'
+    #|complete -c moon-release -s v -l verbose -d 'Enable verbose output'
+    #|complete -c moon-release -s c -l config -r -d 'Path to config file'
+    #|complete -c moon-release -s h -l help -d 'Show help'
+    #|
+    #|# Commands
+    #|complete -c moon-release -n '__fish_use_subcommand' -a update -d 'Update version locally'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a release-pr -d 'Create a release pull request'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a release -d 'Create a release'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a init -d 'Initialize release configuration'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a version -d 'Show version information'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a check -d 'Check the current state'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a set-version -d 'Set the package version manually'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a generate-completions -d 'Generate shell completion script'
+    #|
+    #|# update options
+    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s n -l dry-run -d 'Show what would be done'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s p -l packages -d 'Update all packages'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s o -l output -r -a 'text json' -d 'Output format'
+    #|
+    #|# release-pr options
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -s n -l dry-run -d 'Show what would be done'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|
+    #|# release options
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s n -l dry-run -d 'Show what would be done'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s p -l prerelease -r -d 'Prerelease identifier'
+    #|
+    #|# init options
+    #|complete -c moon-release -n '__fish_seen_subcommand_from init' -s f -l force -d 'Overwrite existing configuration'
+    #|
+    #|# check options
+    #|complete -c moon-release -n '__fish_seen_subcommand_from check' -s o -l output -r -a 'text json' -d 'Output format'
+    #|
+    #|# set-version options
+    #|complete -c moon-release -n '__fish_seen_subcommand_from set-version' -s n -l dry-run -d 'Show what would be done'
+    #|
+    #|# generate-completions options
+    #|complete -c moon-release -n '__fish_seen_subcommand_from generate-completions' -a 'bash zsh fish' -d 'Shell type'
+  println(script)
+}
+
+/// generate-schema コマンド
+fn cmd_generate_schema() -> Unit {
+  let schema =
+    #|{
+    #|  "$schema": "http://json-schema.org/draft-07/schema#",
+    #|  "title": "moon-release configuration",
+    #|  "description": "Configuration file for moon-release, a release automation tool for MoonBit projects",
+    #|  "type": "object",
+    #|  "properties": {
+    #|    "pr_title": {
+    #|      "type": "string",
+    #|      "description": "Title template for release PR. Use {{ version }} placeholder.",
+    #|      "default": "chore: release v{{ version }}"
+    #|    },
+    #|    "pr_draft": {
+    #|      "type": "boolean",
+    #|      "description": "Create PR as draft",
+    #|      "default": false
+    #|    },
+    #|    "pr_labels": {
+    #|      "type": "array",
+    #|      "items": { "type": "string" },
+    #|      "description": "Labels to add to release PR",
+    #|      "default": []
+    #|    },
+    #|    "pr_body": {
+    #|      "type": "string",
+    #|      "description": "Body template for release PR. Use {{ version }} placeholder.",
+    #|      "default": "## Release v{{ version }}\n\n---\n*This PR was automatically created by moon-release.*"
+    #|    },
+    #|    "allow_prerelease": {
+    #|      "type": "boolean",
+    #|      "description": "Allow prerelease versions",
+    #|      "default": false
+    #|    },
+    #|    "git_tag_enable": {
+    #|      "type": "boolean",
+    #|      "description": "Create git tag on release",
+    #|      "default": true
+    #|    },
+    #|    "git_tag_name": {
+    #|      "type": "string",
+    #|      "description": "Tag name template. Use {{ version }} placeholder.",
+    #|      "default": "v{{ version }}"
+    #|    },
+    #|    "git_release_enable": {
+    #|      "type": "boolean",
+    #|      "description": "Create GitHub release",
+    #|      "default": true
+    #|    },
+    #|    "git_release_draft": {
+    #|      "type": "boolean",
+    #|      "description": "Create GitHub release as draft",
+    #|      "default": false
+    #|    },
+    #|    "git_release_name": {
+    #|      "type": "string",
+    #|      "description": "Release name template. Use {{ version }} placeholder.",
+    #|      "default": "Release v{{ version }}"
+    #|    },
+    #|    "git_release_body": {
+    #|      "type": ["string", "null"],
+    #|      "description": "Release body template. Use {{ version }} and {{ changelog }} placeholders. If null, uses auto-generated changelog.",
+    #|      "default": null
+    #|    },
+    #|    "git_release_latest": {
+    #|      "type": "boolean",
+    #|      "description": "Mark the GitHub release as latest",
+    #|      "default": true
+    #|    },
+    #|    "publish": {
+    #|      "type": "boolean",
+    #|      "description": "Publish to mooncakes.io registry",
+    #|      "default": true
+    #|    },
+    #|    "publish_frozen": {
+    #|      "type": "boolean",
+    #|      "description": "Use --frozen flag when publishing",
+    #|      "default": false
+    #|    },
+    #|    "publish_timeout": {
+    #|      "type": "integer",
+    #|      "minimum": 0,
+    #|      "description": "Timeout in seconds for publish command (reserved for future use)",
+    #|      "default": 300
+    #|    },
+    #|    "semver_check": {
+    #|      "type": "boolean",
+    #|      "description": "Check semver compatibility before release",
+    #|      "default": false
+    #|    },
+    #|    "pr_branch_prefix": {
+    #|      "type": "string",
+    #|      "description": "Prefix for release branch names",
+    #|      "default": "release/"
+    #|    },
+    #|    "base_branch": {
+    #|      "type": "string",
+    #|      "description": "Base branch for release PRs",
+    #|      "default": "main"
+    #|    },
+    #|    "packages": {
+    #|      "type": "array",
+    #|      "description": "Package configurations for monorepo mode",
+    #|      "items": {
+    #|        "type": "object",
+    #|        "properties": {
+    #|          "name": {
+    #|            "type": "string",
+    #|            "description": "Package name"
+    #|          },
+    #|          "path": {
+    #|            "type": "string",
+    #|            "description": "Path to package directory",
+    #|            "default": "."
+    #|          },
+    #|          "publish": {
+    #|            "type": "boolean",
+    #|            "description": "Publish this package",
+    #|            "default": true
+    #|          },
+    #|          "version_group": {
+    #|            "type": ["string", "null"],
+    #|            "description": "Version group for synchronized versioning",
+    #|            "default": null
+    #|          }
+    #|        },
+    #|        "required": ["name"]
+    #|      },
+    #|      "default": []
+    #|    },
+    #|    "registry_check": {
+    #|      "type": "boolean",
+    #|      "description": "Check if version already exists in registry before release",
+    #|      "default": false
+    #|    },
+    #|    "allow_dirty": {
+    #|      "type": "boolean",
+    #|      "description": "Allow release with uncommitted changes",
+    #|      "default": false
+    #|    },
+    #|    "custom_major_increment_regex": {
+    #|      "type": ["string", "null"],
+    #|      "description": "Custom regex pattern for major version increment commits",
+    #|      "default": null
+    #|    },
+    #|    "custom_minor_increment_regex": {
+    #|      "type": ["string", "null"],
+    #|      "description": "Custom regex pattern for minor version increment commits",
+    #|      "default": null
+    #|    },
+    #|    "max_analyze_commits": {
+    #|      "type": ["integer", "null"],
+    #|      "minimum": 1,
+    #|      "description": "Maximum number of commits to analyze for version determination",
+    #|      "default": null
+    #|    }
+    #|  },
+    #|  "additionalProperties": false
+    #|}
+  println(schema)
 }

@@ -337,6 +337,7 @@ pub async fn run_release(
       release_title,
       release_notes,
       draft=ctx.config.git_release_draft,
+      latest=ctx.config.git_release_latest,
     )
 
     // gh コマンドの引数を抽出

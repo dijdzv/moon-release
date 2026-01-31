@@ -44,7 +44,8 @@ pub fn GitHubClient::create_release_command(
   title : String,
   notes : String,
   draft~ : Bool = false,
-  prerelease~ : Bool = false
+  prerelease~ : Bool = false,
+  latest~ : Bool = true
 ) -> Array[String] {
   let cmd : Array[String] = [
     "gh",
@@ -63,6 +64,11 @@ pub fn GitHubClient::create_release_command(
   }
   if prerelease {
     cmd.push("--prerelease")
+  }
+  if latest {
+    cmd.push("--latest")
+  } else {
+    cmd.push("--latest=false")
   }
   cmd
 }
