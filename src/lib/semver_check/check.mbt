@@ -1,4 +1,4 @@
-/// semver チェック結果
+/// Semver check result
 pub struct CheckResult {
   success : Bool
   suggested_bump : SuggestedBump
@@ -6,19 +6,19 @@ pub struct CheckResult {
   messages : Array[String]
 } derive(Show)
 
-/// 推奨されるバージョンバンプ
+/// Suggested version bump
 pub enum SuggestedBump {
-  /// 破壊的変更あり → Major
+  /// Breaking changes detected -> Major
   Major
-  /// 新機能追加あり → Minor
+  /// New features added -> Minor
   Minor
-  /// 変更なし or 互換性のある変更のみ → Patch
+  /// No changes or only compatible changes -> Patch
   Patch
-  /// API 変更なし
+  /// No API changes
   None
 } derive(Show, Eq)
 
-/// チェック結果を作成
+/// Create check result
 pub fn CheckResult::new(diff : ApiDiff) -> CheckResult {
   let messages : Array[String] = []
   let suggested_bump = if diff.has_breaking {
@@ -31,7 +31,7 @@ pub fn CheckResult::new(diff : ApiDiff) -> CheckResult {
     Patch
   }
 
-  // メッセージを生成
+  // Generate messages
   if diff.has_breaking {
     messages.push("BREAKING CHANGES detected:")
     for change in diff.changes {
@@ -55,7 +55,7 @@ pub fn CheckResult::new(diff : ApiDiff) -> CheckResult {
   CheckResult::{ success, suggested_bump, diff, messages }
 }
 
-/// 結果を表示用文字列に変換
+/// Convert result to display string
 pub fn CheckResult::format(self : CheckResult) -> String {
   let lines : Array[String] = []
 
@@ -93,7 +93,7 @@ pub fn CheckResult::format(self : CheckResult) -> String {
   })
 }
 
-/// バンプタイプに変換
+/// Convert to bump type
 pub fn SuggestedBump::to_bump_type(self : SuggestedBump) -> String? {
   match self {
     Major => Some("major")

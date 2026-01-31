@@ -11,7 +11,7 @@ pub enum ChangeKind {
   Compatible
 } derive(Show, Eq)
 
-/// API 変更
+/// API change
 pub struct ApiChange {
   kind : ChangeKind
   category : String
@@ -19,32 +19,32 @@ pub struct ApiChange {
   description : String
 } derive(Show)
 
-/// API 差分結果
+/// API diff result
 pub struct ApiDiff {
   changes : Array[ApiChange]
   has_breaking : Bool
   has_additions : Bool
 } derive(Show)
 
-/// 空の ApiDiff を作成
+/// Create empty ApiDiff
 pub fn ApiDiff::empty() -> ApiDiff {
   ApiDiff::{ changes: [], has_breaking: false, has_additions: false }
 }
 
-/// 2つの API を比較して差分を検出
+/// Compare two APIs and detect differences
 pub fn diff_api(old_api : PackageApi, new_api : PackageApi) -> ApiDiff {
   let changes : Array[ApiChange] = []
 
-  // 型の比較
+  // Compare types
   diff_types(old_api.types, new_api.types, changes)
 
-  // エラー型の比較
+  // Compare error types
   diff_errors(old_api.errors, new_api.errors, changes)
 
-  // トレイトの比較
+  // Compare traits
   diff_traits(old_api.traits, new_api.traits, changes)
 
-  // 値の比較
+  // Compare values
   diff_values(old_api.values, new_api.values, changes)
 
   let has_breaking = changes.iter().any(fn(c) { c.kind == Breaking })
@@ -53,13 +53,13 @@ pub fn diff_api(old_api : PackageApi, new_api : PackageApi) -> ApiDiff {
   ApiDiff::{ changes, has_breaking, has_additions }
 }
 
-/// 型の差分を検出
+/// Detect type differences
 fn diff_types(
   old_types : Array[TypeInfo],
   new_types : Array[TypeInfo],
   changes : Array[ApiChange]
 ) -> Unit {
-  // 名前でインデックス化
+  // Index by name
   let old_map : @hashmap.HashMap[String, TypeInfo] = @hashmap.new()
   for t in old_types {
     old_map.set(t.name, t)
@@ -70,7 +70,7 @@ fn diff_types(
     new_map.set(t.name, t)
   }
 
-  // 削除された型を検出
+  // Detect removed types
   for t in old_types {
     if new_map.get(t.name) is None {
       changes.push(
@@ -84,7 +84,7 @@ fn diff_types(
     }
   }
 
-  // 追加された型を検出
+  // Detect added types
   for t in new_types {
     if old_map.get(t.name) is None {
       changes.push(
@@ -98,11 +98,11 @@ fn diff_types(
     }
   }
 
-  // シグネチャの変更を検出
+  // Detect signature changes
   for new_type in new_types {
     match old_map.get(new_type.name) {
       Some(old_type) => {
-        // 構造体/enum のシグネチャ比較
+        // Compare struct/enum signature
         if old_type.signature != new_type.signature {
           changes.push(
             ApiChange::{
@@ -114,7 +114,7 @@ fn diff_types(
           )
         }
 
-        // メソッドの比較
+        // Compare methods
         diff_methods(
           old_type.methods,
           new_type.methods,
@@ -128,7 +128,7 @@ fn diff_types(
   }
 }
 
-/// エラー型の差分を検出
+/// Detect error type differences
 fn diff_errors(
   old_errors : Array[ErrorInfo],
   new_errors : Array[ErrorInfo],
@@ -144,7 +144,7 @@ fn diff_errors(
     new_map.set(e.name, e)
   }
 
-  // 削除されたエラー型
+  // Removed error types
   for e in old_errors {
     if new_map.get(e.name) is None {
       changes.push(
@@ -158,7 +158,7 @@ fn diff_errors(
     }
   }
 
-  // 追加されたエラー型
+  // Added error types
   for e in new_errors {
     if old_map.get(e.name) is None {
       changes.push(
@@ -172,7 +172,7 @@ fn diff_errors(
     }
   }
 
-  // シグネチャの変更
+  // Signature changes
   for new_err in new_errors {
     match old_map.get(new_err.name) {
       Some(old_err) => {
@@ -199,7 +199,7 @@ fn diff_errors(
   }
 }
 
-/// トレイトの差分を検出
+/// Detect trait differences
 fn diff_traits(
   old_traits : Array[TraitInfo],
   new_traits : Array[TraitInfo],
@@ -267,7 +267,7 @@ fn diff_traits(
   }
 }
 
-/// 値（トップレベル関数）の差分を検出
+/// Detect value (top-level function) differences
 fn diff_values(
   old_values : Array[ValueInfo],
   new_values : Array[ValueInfo],
@@ -328,7 +328,7 @@ fn diff_values(
   }
 }
 
-/// メソッドの差分を検出
+/// Detect method differences
 fn diff_methods(
   old_methods : Array[MethodInfo],
   new_methods : Array[MethodInfo],
@@ -346,7 +346,7 @@ fn diff_methods(
     new_map.set(m.name, m)
   }
 
-  // 削除されたメソッド
+  // Removed methods
   for m in old_methods {
     if new_map.get(m.name) is None {
       changes.push(
@@ -360,7 +360,7 @@ fn diff_methods(
     }
   }
 
-  // 追加されたメソッド
+  // Added methods
   for m in new_methods {
     if old_map.get(m.name) is None {
       changes.push(
@@ -374,7 +374,7 @@ fn diff_methods(
     }
   }
 
-  // シグネチャ変更
+  // Signature changes
   for new_method in new_methods {
     match old_map.get(new_method.name) {
       Some(old_method) => {

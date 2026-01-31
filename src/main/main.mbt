@@ -14,7 +14,7 @@ fn[T] exit_error() -> T {
   panic()
 }
 
-/// CLI パーサーを作成
+/// Create CLI parser
 fn create_parser() -> @clap.Parser {
   @clap.Parser::new(
     prog="moon-release",
@@ -146,19 +146,19 @@ fn create_parser() -> @clap.Parser {
   )
 }
 
-/// メイン関数 (async)
+/// Main function (async)
 async fn main {
   let parser = create_parser()
   let value = @clap.SimpleValue::new("moon-release")
 
-  // コマンドライン引数を取得（プログラム名をスキップ）
+  // Get command line arguments (skip program name)
   let all_args = @env.args()
   let args : Array[String] = []
   for i = 1; i < all_args.length(); i = i + 1 {
     args.push(all_args[i])
   }
 
-  // パース
+  // Parse
   let help_message = try {
     parser.parse(value, args[:])
   } catch {
@@ -177,7 +177,7 @@ async fn main {
     None => ()
   }
 
-  // グローバルオプション
+  // Global options
   let dry_run = match value.get_flag("dry-run") {
     Some(v) => v
     None => false
@@ -192,7 +192,7 @@ async fn main {
     _ => "release.json"
   }
 
-  // サブコマンドの処理
+  // Process subcommand
   match value.subcmd {
     Some(subcmd) =>
       match subcmd.name {
@@ -215,14 +215,14 @@ async fn main {
   }
 }
 
-/// update コマンド
+/// update command
 async fn cmd_update(
   subcmd : @clap.SimpleValue,
   global_dry_run : Bool,
   verbose : Bool,
   config_path : String
 ) -> Unit {
-  // サブコマンドのフラグも確認
+  // Check subcommand flags as well
   let subcmd_dry_run = match subcmd.get_flag("dry-run") {
     Some(v) => v
     None => false
@@ -241,7 +241,7 @@ async fn cmd_update(
     println("  Dry run: " + dry_run.to_string())
   }
 
-  // 設定を読み込む
+  // Load config
   let config = load_config(config_path)
   let repo = @git.Repository::current()
 
@@ -253,13 +253,13 @@ async fn cmd_update(
     exit_error()
   }
 
-  // モノレポモードかチェック
+  // Check if monorepo mode
   let packages_mode = match subcmd.get_flag("packages") {
     Some(v) => v
     None => false
   }
 
-  // モノレポモードの場合は各パッケージを個別に更新（JSON未対応）
+  // In monorepo mode, update each package separately (JSON not supported)
   if packages_mode || not(config.packages.is_empty()) {
     try {
       @workflow.run_update_packages(config, repo, dry_run, verbose)
@@ -379,7 +379,7 @@ async fn cmd_update(
     }
   }
 
-  // コンテキストを作成
+  // Create context
   let ctx = @workflow.ReleaseContext::new(
     config,
     repo,
@@ -390,10 +390,10 @@ async fn cmd_update(
     verbose~,
   )
 
-  // ワークフローを実行
+  // Run workflow
   try {
     @workflow.run_update(ctx)
-    // JSON 出力
+    // JSON output
     if json_output {
       let bump_str = match bump_type {
         @semver.Major => "major"
@@ -645,7 +645,7 @@ async fn cmd_release(
   // Calculate new version
   let new_version = @semver.bump_with_prerelease(current_version, bump_type, prerelease)
 
-  // コンテキストを作成
+  // Create context
   let ctx = @workflow.ReleaseContext::new(
     config,
     repo,
@@ -734,7 +734,7 @@ async fn cmd_init(
   println("  base_branch: " + config.base_branch)
 }
 
-/// デフォルト設定の JSON を生成
+/// Generate default config JSON
 fn generate_default_config_json() -> String {
   let json =
     #|{
@@ -760,7 +760,7 @@ fn generate_default_config_json() -> String {
   json
 }
 
-/// version コマンド
+/// version command
 fn cmd_version() -> Unit {
   println("moon-release v" + version)
   println("")
@@ -776,13 +776,13 @@ fn cmd_version() -> Unit {
   println("  - mooncakes.io publishing")
 }
 
-/// set-version コマンド
+/// set-version command
 async fn cmd_set_version(
   subcmd : @clap.SimpleValue,
   global_dry_run : Bool,
   verbose : Bool
 ) -> Unit {
-  // サブコマンドのフラグも確認
+  // Check subcommand flags as well
   let subcmd_dry_run = match subcmd.get_flag("dry-run") {
     Some(v) => v
     None => false
@@ -862,7 +862,7 @@ async fn cmd_set_version(
   println("  " + moon_mod.version + " -> " + new_version.to_string())
 }
 
-/// check コマンド
+/// check command
 async fn cmd_check(
   subcmd : @clap.SimpleValue,
   _dry_run : Bool,
@@ -889,10 +889,10 @@ async fn cmd_check(
     }
   }
 
-  // Git リポジトリを取得
+  // Get Git repository
   let repo = @git.Repository::current()
 
-  // 最新タグを取得
+  // Get latest tag
   let latest_tag = try {
     get_latest_tag(repo)
   } catch {
@@ -927,7 +927,7 @@ async fn cmd_check(
     None
   }
 
-  // JSON 出力
+  // JSON output
   if json_output {
     // latest_tag
     let latest_tag_json = match latest_tag {
@@ -941,7 +941,7 @@ async fn cmd_check(
       Some(@semver.Patch) => "\"patch\""
       None => "null"
     }
-    // commits 配列
+    // commits array
     let commits_json_arr : Array[String] = []
     for i = 0; i < commits.length(); i = i + 1 {
       let (cc, hash) = commits[i]
@@ -972,7 +972,7 @@ async fn cmd_check(
     return
   }
 
-  // テキスト出力
+  // Text output
   println("Commits since last tag: \{commits.length()}")
 
   if verbose && commits.length() > 0 {
@@ -994,7 +994,7 @@ async fn cmd_check(
     }
   }
 
-  // バンプタイプを表示
+  // Display bump type
   if commits.length() > 0 {
     println("")
     match bump_type {
@@ -1015,7 +1015,7 @@ async fn cmd_check(
   println("  moon-release release           # Create release")
 }
 
-/// コミットタイプを文字列に変換
+/// Convert commit type to string
 fn commit_type_to_string(typ : @conventional.CommitType) -> String {
   match typ {
     @conventional.Feat => "feat"
@@ -1033,33 +1033,33 @@ fn commit_type_to_string(typ : @conventional.CommitType) -> String {
   }
 }
 
-/// JSON 文字列をエスケープ (util モジュールのラッパー)
+/// Escape JSON string (wrapper for util module)
 fn escape_json_string(s : String) -> String {
   @util.escape_json_string(s)
 }
 
-/// JSON 文字列リテラルを作成（クォート付き）
+/// Create JSON string literal (with quotes)
 fn json_string(s : String) -> String {
   @util.json_string(s)
 }
 
-/// JSON オブジェクトを構築
+/// Build JSON object
 fn build_json_object(pairs : Array[(String, String)]) -> String {
   @util.build_json_object(pairs)
 }
 
 // ======== Helper functions ========
 
-/// 設定を読み込む
+/// Load configuration
 async fn load_config(path : String) -> @config.Config {
-  // ファイルが存在するか確認
+  // Check if file exists
   let content = try {
     @fs.read_file(path).text()
   } catch {
     _ => return @config.Config::default()
   }
 
-  // パース
+  // Parse
   try {
     @config.Config::parse(content)
   } catch {
@@ -1071,29 +1071,29 @@ async fn load_config(path : String) -> @config.Config {
   }
 }
 
-/// moon.mod.json を読み込む
+/// Load moon.mod.json
 async fn load_moon_mod(path : String) -> @moon_mod.MoonMod raise {
   let content = @fs.read_file(path).text()
   @moon_mod.parse(content)
 }
 
-/// 最新タグから現在までのコミットを取得
+/// Get commits from latest tag to current
 async fn get_commits_since_last_tag(
   repo : @git.Repository,
   max_commits~ : UInt? = None
 ) -> Array[(@conventional.ConventionalCommit, String)] raise {
-  // 最新タグを取得
+  // Get latest tag
   let latest_tag = try {
     get_latest_tag(repo)
   } catch {
     _ => None
   }
 
-  // コミットログを取得
+  // Get commit log
   let log_result = match latest_tag {
     Some(tag) => {
       let cmd = repo.get_commits_since_tag_command(tag)
-      // max_commits が指定されていれば追加
+      // Add max_commits if specified
       match max_commits {
         Some(n) => {
           cmd.push("-n")
@@ -1105,7 +1105,7 @@ async fn get_commits_since_last_tag(
     }
     None => {
       let cmd = repo.get_all_commits_command()
-      // max_commits が指定されていれば追加
+      // Add max_commits if specified
       match max_commits {
         Some(n) => {
           cmd.push("-n")
@@ -1117,12 +1117,12 @@ async fn get_commits_since_last_tag(
     }
   }
 
-  // パース
+  // Parse
   let git_commits = @git.parse_commit_log(log_result.stdout)
   @git.parse_conventional_commits(git_commits)
 }
 
-/// 最新タグを取得
+/// Get latest tag
 async fn get_latest_tag(repo : @git.Repository) -> String? raise {
   let cmd = repo.get_latest_tag_command()
   let result = @executor.run_command(cmd)
@@ -1134,7 +1134,7 @@ async fn get_latest_tag(repo : @git.Repository) -> String? raise {
   }
 }
 
-/// バンプタイプを取得
+/// Get bump type
 fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
   match subcmd.args.get("bump") {
     Some(arr) if arr.length() > 0 =>
@@ -1148,9 +1148,9 @@ fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
   }
 }
 
-/// GitHub クライアントを取得
+/// Get GitHub client
 async fn get_github_client() -> @github.GitHubClient raise {
-  // gh repo view で owner/repo を取得
+  // Get owner/repo using gh repo view
   let result = @executor.run_command(
     ["gh", "repo", "view", "--json", "owner,name"],
   )
@@ -1160,7 +1160,7 @@ async fn get_github_client() -> @github.GitHubClient raise {
     )
   }
 
-  // JSON をパース
+  // Parse JSON
   let json = try {
     @json.parse(result.stdout)
   } catch {
@@ -1187,7 +1187,7 @@ async fn get_github_client() -> @github.GitHubClient raise {
   }
 }
 
-/// ハッシュを短縮
+/// Shorten hash
 fn substr_hash(hash : String, len : Int) -> String {
   if hash.length() <= len {
     return hash
@@ -1202,7 +1202,7 @@ fn substr_hash(hash : String, len : Int) -> String {
   result.to_string()
 }
 
-/// 未コミット変更があるかチェック
+/// Check for uncommitted changes
 async fn check_dirty(repo : @git.Repository) -> Bool {
   let result = try {
     @executor.run_git(repo, ["status", "--porcelain"])
@@ -1212,7 +1212,7 @@ async fn check_dirty(repo : @git.Repository) -> Bool {
   not(result.stdout.trim().is_empty())
 }
 
-/// allow_dirty チェック（dirty かつ allow_dirty=false なら true を返す）
+/// Check allow_dirty (returns true if dirty and allow_dirty=false)
 async fn should_abort_dirty(
   config : @config.Config,
   repo : @git.Repository,
@@ -1241,7 +1241,7 @@ async fn should_abort_dirty(
   false
 }
 
-/// generate-completions コマンド
+/// generate-completions command
 fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
   let shell : String = if subcmd.positional_args.length() > 0 {
     subcmd.positional_args[0]
@@ -1264,7 +1264,7 @@ fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
   }
 }
 
-/// bash 補完スクリプトを出力
+/// Output bash completion script
 fn print_bash_completion() -> Unit {
   let script =
     #|# moon-release bash completion
@@ -1322,7 +1322,7 @@ fn print_bash_completion() -> Unit {
   println(script)
 }
 
-/// zsh 補完スクリプトを出力
+/// Output zsh completion script
 fn print_zsh_completion() -> Unit {
   let script =
     #|#compdef moon-release
@@ -1421,7 +1421,7 @@ fn print_zsh_completion() -> Unit {
   println(script)
 }
 
-/// fish 補完スクリプトを出力
+/// Output fish completion script
 fn print_fish_completion() -> Unit {
   let script =
     #|# moon-release fish completion
@@ -1475,7 +1475,7 @@ fn print_fish_completion() -> Unit {
   println(script)
 }
 
-/// generate-schema コマンド
+/// generate-schema command
 fn cmd_generate_schema() -> Unit {
   let schema =
     #|{

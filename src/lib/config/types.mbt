@@ -1,4 +1,4 @@
-/// 設定
+/// Configuration
 pub struct Config {
   pr_title : String
   pr_draft : Bool
@@ -23,10 +23,10 @@ pub struct Config {
   custom_major_increment_regex : String?
   custom_minor_increment_regex : String?
   max_analyze_commits : UInt?
-  publish_timeout : UInt  // 秒単位、現在は未使用（将来実装予定）
+  publish_timeout : UInt  // In seconds
 } derive(Show, Eq)
 
-/// パッケージ設定（モノレポ用）
+/// Package configuration (for monorepo)
 pub struct PackageConfig {
   name : String
   path : String
@@ -34,19 +34,19 @@ pub struct PackageConfig {
   version_group : String?
 } derive(Show, Eq)
 
-/// 設定エラー
+/// Configuration error
 pub suberror ConfigError {
   ConfigError(String)
 }
 
-/// ConfigError を文字列に変換
+/// Convert ConfigError to string
 pub fn ConfigError::to_string(self : ConfigError) -> String {
   match self {
     ConfigError(msg) => msg
   }
 }
 
-/// デフォルト設定
+/// Default configuration
 pub fn Config::default() -> Config {
   Config::{
     pr_title: "chore: release v{{ version }}",
@@ -72,11 +72,11 @@ pub fn Config::default() -> Config {
     custom_major_increment_regex: None,
     custom_minor_increment_regex: None,
     max_analyze_commits: None,
-    publish_timeout: 300,  // デフォルト5分
+    publish_timeout: 300,  // Default 5 minutes
   }
 }
 
-/// デフォルトパッケージ設定
+/// Default package configuration
 pub fn PackageConfig::default(name : String, path : String) -> PackageConfig {
   PackageConfig::{
     name,
@@ -86,7 +86,7 @@ pub fn PackageConfig::default(name : String, path : String) -> PackageConfig {
   }
 }
 
-/// JSON から設定をパース（デフォルト値とマージ）
+/// Parse configuration from JSON (merge with defaults)
 pub fn Config::parse(content : String) -> Config raise ConfigError {
   let d = Config::default()
 
@@ -105,7 +105,7 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     _ => raise ConfigError("Expected JSON object")
   }
 
-  // packages は特別な処理が必要
+  // packages needs special handling
   let packages = match obj.get("packages") {
     Some(Array(arr)) => parse_packages(arr)
     Some(_) => raise ConfigError("'packages' must be an array")
@@ -150,7 +150,7 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
   }
 }
 
-/// パッケージ設定をパース
+/// Parse package configuration
 fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
   let result : Array[PackageConfig] = []
   for i = 0; i < arr.length(); i = i + 1 {
@@ -217,7 +217,7 @@ fn parse_string(
   }
 }
 
-/// 必須の文字列フィールドをパース（パッケージ用）
+/// Parse required string field (for package)
 fn parse_pkg_required_string(
   obj : Map[String, Json],
   key : String
@@ -229,7 +229,7 @@ fn parse_pkg_required_string(
   }
 }
 
-/// 文字列フィールドをパース（パッケージ用）
+/// Parse string field (for package)
 fn parse_pkg_string(
   obj : Map[String, Json],
   key : String,
@@ -242,7 +242,7 @@ fn parse_pkg_string(
   }
 }
 
-/// オプショナルな文字列フィールドをパース
+/// Parse optional string field
 fn parse_optional_string(
   obj : Map[String, Json],
   key : String,
@@ -256,7 +256,7 @@ fn parse_optional_string(
   }
 }
 
-/// オプショナルな文字列フィールドをパース（パッケージ用）
+/// Parse optional string field (for package)
 fn parse_pkg_optional_string(
   obj : Map[String, Json],
   key : String,
@@ -270,7 +270,7 @@ fn parse_pkg_optional_string(
   }
 }
 
-/// ブーリアンフィールドをパース
+/// Parse boolean field
 fn parse_bool(
   obj : Map[String, Json],
   key : String,
@@ -284,7 +284,7 @@ fn parse_bool(
   }
 }
 
-/// オプショナルな数値フィールドをパース
+/// Parse optional number field
 fn parse_optional_uint(
   obj : Map[String, Json],
   key : String,
@@ -303,7 +303,7 @@ fn parse_optional_uint(
   }
 }
 
-/// 数値フィールドをパース
+/// Parse number field
 fn parse_uint(
   obj : Map[String, Json],
   key : String,
@@ -321,7 +321,7 @@ fn parse_uint(
   }
 }
 
-/// ブーリアンフィールドをパース（パッケージ用）
+/// Parse boolean field (for package)
 fn parse_pkg_bool(
   obj : Map[String, Json],
   key : String,
@@ -335,7 +335,7 @@ fn parse_pkg_bool(
   }
 }
 
-/// 文字列配列フィールドをパース
+/// Parse string array field
 fn parse_string_array(
   obj : Map[String, Json],
   key : String,
@@ -357,7 +357,7 @@ fn parse_string_array(
   }
 }
 
-/// タイトルテンプレートにバージョンを適用
+/// Apply version to title template
 pub fn Config::apply_version_template(self : Config, version : String) -> String {
   self.pr_title.replace(old="{{ version }}", new=version)
 }

@@ -1,16 +1,16 @@
-/// バンプの種別
+/// Bump type
 pub(all) enum BumpType {
   Major
   Minor
   Patch
 } derive(Show, Eq)
 
-/// バージョンをバンプ
+/// Bump version
 pub fn bump(version : Version, typ : BumpType) -> Version {
   bump_with_prerelease(version, typ, None)
 }
 
-/// バージョンをバンプ（prerelease 指定可能）
+/// Bump version (with optional prerelease)
 pub fn bump_with_prerelease(
   version : Version,
   typ : BumpType,
@@ -44,12 +44,12 @@ pub fn bump_with_prerelease(
   }
 }
 
-/// コミット群からバンプタイプを決定
+/// Determine bump type from commits
 pub fn determine_bump(commits : Array[@conventional.ConventionalCommit]) -> BumpType? {
   determine_bump_with_custom(commits, None, None)
 }
 
-/// カスタムルール付きでバンプタイプを決定
+/// Determine bump type with custom rules
 pub fn determine_bump_with_custom(
   commits : Array[@conventional.ConventionalCommit],
   custom_major_pattern : String?,
@@ -59,12 +59,12 @@ pub fn determine_bump_with_custom(
   let mut has_fix = false
 
   for commit in commits {
-    // breaking change は常に major
+    // Breaking change is always major
     if commit.breaking {
       return Some(Major)
     }
 
-    // カスタム major パターンをチェック
+    // Check custom major pattern
     match custom_major_pattern {
       Some(pattern) =>
         if commit.description.contains(pattern) {
@@ -73,7 +73,7 @@ pub fn determine_bump_with_custom(
       None => ()
     }
 
-    // カスタム minor パターンをチェック
+    // Check custom minor pattern
     match custom_minor_pattern {
       Some(pattern) =>
         if commit.description.contains(pattern) {
@@ -82,7 +82,7 @@ pub fn determine_bump_with_custom(
       None => ()
     }
 
-    // 標準の Conventional Commits ルール
+    // Standard Conventional Commits rules
     match commit.typ {
       Feat => has_feat = true
       Fix | Perf => has_fix = true

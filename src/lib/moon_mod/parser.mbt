@@ -1,23 +1,23 @@
-/// moon.mod.json の構造
+/// moon.mod.json structure
 pub struct MoonMod {
   name : String
   version : String
   deps : @hashmap.HashMap[String, String]?
 } derive(Show)
 
-/// パースエラー
+/// Parse error
 pub suberror ParseError {
   ParseError(String)
 }
 
-/// ParseError を文字列に変換
+/// Convert ParseError to string
 pub fn ParseError::to_string(self : ParseError) -> String {
   match self {
     ParseError(msg) => msg
   }
 }
 
-/// moon.mod.json をパース
+/// Parse moon.mod.json
 pub fn parse(content : String) -> MoonMod raise ParseError {
   let json = try {
     @json.parse(content)
@@ -30,21 +30,21 @@ pub fn parse(content : String) -> MoonMod raise ParseError {
     _ => raise ParseError("Expected JSON object")
   }
 
-  // name フィールド
+  // name field
   let name = match obj.get("name") {
     Some(String(s)) => s
     Some(_) => raise ParseError("'name' must be a string")
     None => raise ParseError("Missing 'name' field")
   }
 
-  // version フィールド
+  // version field
   let version = match obj.get("version") {
     Some(String(s)) => s
     Some(_) => raise ParseError("'version' must be a string")
     None => raise ParseError("Missing 'version' field")
   }
 
-  // deps フィールド（オプショナル）
+  // deps field (optional)
   let deps : @hashmap.HashMap[String, String]? = match obj.get("deps") {
     Some(Object(deps_obj)) => {
       let deps_map : @hashmap.HashMap[String, String] = @hashmap.new()
@@ -64,26 +64,26 @@ pub fn parse(content : String) -> MoonMod raise ParseError {
   MoonMod::{ name, version, deps }
 }
 
-/// バージョンを更新（JSON を維持しながら version のみ変更）
+/// Update version (change only version while preserving JSON)
 pub fn update_version(
   content : String,
   new_version : @semver.Version
 ) -> String raise ParseError {
-  // まずパースして有効な JSON か確認
+  // First parse to verify valid JSON
   let _ = parse(content)
 
-  // version フィールドを置換
+  // Replace version field
   let version_str = new_version.to_string()
   replace_json_field(content, "version", version_str)
 }
 
-/// JSON フィールドの値を置換（フォーマットを維持）
+/// Replace JSON field value (preserving format)
 fn replace_json_field(
   content : String,
   field : String,
   new_value : String
 ) -> String raise ParseError {
-  // new_value に JSON で特殊な文字が含まれていないか検証
+  // Verify new_value doesn't contain JSON special characters
   for c in new_value {
     if c == '"' || c == '\\' || c.to_int() < 32 {
       raise ParseError(
@@ -92,17 +92,17 @@ fn replace_json_field(
     }
   }
 
-  // "version": "..." のパターンを探して置換
+  // Find and replace "version": "..." pattern
   let pattern = "\"" + field + "\""
   let chars : Array[Char] = content.to_array()
 
-  // フィールド名を探す
+  // Find field name
   let field_start = find_pattern(content, pattern)
   if field_start < 0 {
     raise ParseError("Field '" + field + "' not found")
   }
 
-  // : の後の値を探す
+  // Find value after :
   let mut value_start = -1
   for i = field_start + pattern.length(); i < chars.length(); i = i + 1 {
     let c = chars[i]
@@ -116,13 +116,13 @@ fn replace_json_field(
     raise ParseError("Value for '" + field + "' not found")
   }
 
-  // 値の終端を探す
+  // Find end of value
   let mut value_end = -1
   let mut i = value_start + 1
   while i < chars.length() {
     let c = chars[i]
     if c == '\\' && i + 1 < chars.length() {
-      // エスケープシーケンスをスキップ
+      // Skip escape sequence
       i = i + 2
       continue
     }
@@ -137,13 +137,13 @@ fn replace_json_field(
     raise ParseError("Unterminated string value for '" + field + "'")
   }
 
-  // 新しい値で置換
+  // Replace with new value
   let before = substr_str(chars, 0, value_start)
   let after = substr_str(chars, value_end, chars.length())
   before + "\"" + new_value + "\"" + after
 }
 
-/// パターンの位置を探す
+/// Find pattern position
 fn find_pattern(haystack : String, needle : String) -> Int {
   let h_chars : Array[Char] = haystack.to_array()
   let n_chars : Array[Char] = needle.to_array()
@@ -167,7 +167,7 @@ fn find_pattern(haystack : String, needle : String) -> Int {
   -1
 }
 
-/// 文字配列から部分文字列を取得
+/// Get substring from character array
 fn substr_str(chars : Array[Char], start : Int, end : Int) -> String {
   let result = StringBuilder::new()
   for i = start; i < end; i = i + 1 {

@@ -26,7 +26,7 @@ pub fn merge_package_apis(apis : Array[PackageApi]) -> PackageApi {
   merged
 }
 
-/// API 差分から推奨バンプタイプを取得
+/// Get suggested bump type from API diff
 pub fn get_suggested_bump_from_diff(diff : ApiDiff) -> String? {
   if diff.has_breaking {
     Some("major")
@@ -39,7 +39,7 @@ pub fn get_suggested_bump_from_diff(diff : ApiDiff) -> String? {
   }
 }
 
-/// チェック結果を簡潔なサマリーで出力
+/// Format check result as concise summary
 pub fn format_summary(result : CheckResult) -> String {
   let lines : Array[String] = []
 

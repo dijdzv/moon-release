@@ -5,19 +5,19 @@ pub struct CommandResult {
   stderr : String
 } derive(Show)
 
-/// Executor エラー
+/// Executor error
 pub suberror ExecutorError {
   ExecutorError(String)
 }
 
-/// ExecutorError を文字列に変換
+/// Convert ExecutorError to string
 pub fn ExecutorError::to_string(self : ExecutorError) -> String {
   match self {
     ExecutorError(msg) => msg
   }
 }
 
-/// コマンドを実行し、stdout を収集する
+/// Execute command and collect stdout
 pub async fn run_command(cmd : Array[String]) -> CommandResult raise ExecutorError {
   if cmd.is_empty() {
     raise ExecutorError("Command is empty")
@@ -50,7 +50,7 @@ pub async fn run_command(cmd : Array[String]) -> CommandResult raise ExecutorErr
   CommandResult::{ exit_code, stdout: stdout_str, stderr: stderr_str }
 }
 
-/// コマンドを実行（出力を収集しない）
+/// Execute command without collecting output
 pub async fn run_command_simple(cmd : Array[String]) -> Int raise ExecutorError {
   if cmd.is_empty() {
     raise ExecutorError("Command is empty")
@@ -69,7 +69,7 @@ pub async fn run_command_simple(cmd : Array[String]) -> Int raise ExecutorError 
   }
 }
 
-/// Git コマンドを実行
+/// Execute git command
 pub async fn run_git(
   repo : @git.Repository,
   args : Array[String]
@@ -78,7 +78,7 @@ pub async fn run_git(
   run_command(cmd)
 }
 
-/// Git コマンドを構築
+/// Build git command array
 fn repo_git_command(repo : @git.Repository, args : Array[String]) -> Array[String] {
   let cmd : Array[String] = ["git", "-C", repo.path]
   for arg in args {
@@ -87,7 +87,7 @@ fn repo_git_command(repo : @git.Repository, args : Array[String]) -> Array[Strin
   cmd
 }
 
-/// gh CLI コマンドを実行
+/// Execute gh CLI command
 pub async fn run_gh(args : Array[String]) -> CommandResult raise ExecutorError {
   let cmd : Array[String] = ["gh"]
   for arg in args {
@@ -96,22 +96,22 @@ pub async fn run_gh(args : Array[String]) -> CommandResult raise ExecutorError {
   run_command(cmd)
 }
 
-/// コマンドが成功したかチェック
+/// Check if command succeeded
 pub fn CommandResult::is_success(self : CommandResult) -> Bool {
   self.exit_code == 0
 }
 
-/// 失敗した結果を作成
+/// Create a failed result
 pub fn CommandResult::failed(stderr : String) -> CommandResult {
   CommandResult::{ exit_code: 1, stdout: "", stderr }
 }
 
-/// stdout をトリムして返す
+/// Return trimmed stdout
 pub fn CommandResult::stdout_trimmed(self : CommandResult) -> String {
   self.stdout.trim().to_string()
 }
 
-/// 結果を検証し、失敗なら ExecutorError を発生させる
+/// Validate result and raise ExecutorError on failure
 pub fn CommandResult::check(
   self : CommandResult,
   context : String

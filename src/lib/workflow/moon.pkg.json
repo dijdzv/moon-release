@@ -8,6 +8,7 @@
     "moon-release/src/lib/moon_mod",
     "moon-release/src/lib/executor",
     "moon-release/src/lib/semver_check",
+    "moon-release/src/lib/util",
     "moonbitlang/async/fs",
     "moonbitlang/core/hashmap"
   ],

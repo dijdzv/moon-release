@@ -1,4 +1,4 @@
-/// リリースコンテキスト
+/// Release context
 pub struct ReleaseContext {
   config : @config.Config
   repo : @git.Repository
@@ -9,12 +9,12 @@ pub struct ReleaseContext {
   verbose : Bool
 }
 
-/// ワークフローエラー
+/// Workflow error
 pub(all) suberror WorkflowError {
   WorkflowError(String)
 }
 
-/// WorkflowError を文字列に変換
+/// Convert WorkflowError to string
 pub fn WorkflowError::to_string(self : WorkflowError) -> String {
   match self {
     WorkflowError(msg) => msg
@@ -22,24 +22,9 @@ pub fn WorkflowError::to_string(self : WorkflowError) -> String {
 }
 
 /// Validate path does not contain directory traversal
+/// Delegates to util module for common validation logic
 pub fn validate_path(path : String) -> Bool {
-  // Empty string and "." are allowed
-  if path.is_empty() || path == "." {
-    return true
-  }
-
-  // Reject paths containing ".."
-  if path.contains("..") {
-    return false
-  }
-
-  // Reject absolute paths (starting with /)
-  let chars = path.to_array()
-  if chars.length() > 0 && chars[0] == '/' {
-    return false
-  }
-
-  true
+  @util.is_safe_path(path)
 }
 
 /// Validate git ref name (branch/tag) according to git-check-ref-format rules
@@ -138,7 +123,7 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
   None
 }
 
-/// ReleaseContext を作成
+/// Create ReleaseContext
 pub fn ReleaseContext::new(
   config : @config.Config,
   repo : @git.Repository,

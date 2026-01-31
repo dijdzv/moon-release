@@ -1,4 +1,4 @@
-/// コミットメッセージをパースして ConventionalCommit を返す
+/// Parse commit message and return ConventionalCommit
 pub fn parse(message : String) -> ConventionalCommit? {
   let lines : Array[String] = message
     .split("\n")
@@ -9,17 +9,17 @@ pub fn parse(message : String) -> ConventionalCommit? {
   }
   let header = lines[0]
 
-  // ヘッダーをパース: type(scope)!: description
+  // Parse header: type(scope)!: description
   let parsed = match parse_header(header) {
     Some(p) => p
     None => return None
   }
   let (typ, scope, breaking_mark, description) = parsed
 
-  // body と footers を分離
+  // Separate body and footers
   let (body, footers) = parse_body_and_footers(lines)
 
-  // BREAKING CHANGE footer があれば breaking = true
+  // Set breaking = true if BREAKING CHANGE footer exists
   let breaking = breaking_mark ||
     footers.iter().any(fn(f) {
       f.0 == "BREAKING CHANGE" || f.0 == "BREAKING-CHANGE"
@@ -37,9 +37,9 @@ pub fn parse(message : String) -> ConventionalCommit? {
   )
 }
 
-/// ヘッダー行をパース
+/// Parse header line
 fn parse_header(header : String) -> (CommitType, String?, Bool, String)? {
-  // ": " の位置を探す
+  // Find position of ": "
   let colon_idx = match find_substring(header, ": ") {
     Some(i) => i
     None => return None
@@ -51,14 +51,14 @@ fn parse_header(header : String) -> (CommitType, String?, Bool, String)? {
     return None
   }
 
-  // breaking change の ! をチェック
+  // Check for breaking change indicator !
   let (type_scope_part, breaking) = if type_part.has_suffix("!") {
     (substr(type_part, 0, type_part.length() - 1), true)
   } else {
     (type_part, false)
   }
 
-  // scope をパース
+  // Parse scope
   let (type_str, scope) = if type_scope_part.contains("(") &&
     type_scope_part.has_suffix(")") {
     match find_substring(type_scope_part, "(") {
@@ -83,7 +83,7 @@ fn parse_header(header : String) -> (CommitType, String?, Bool, String)? {
   Some((typ, scope, breaking, description))
 }
 
-/// type 文字列を CommitType に変換
+/// Convert type string to CommitType
 fn parse_type(s : String) -> CommitType? {
   match s {
     "feat" => Some(Feat)
@@ -101,7 +101,7 @@ fn parse_type(s : String) -> CommitType? {
   }
 }
 
-/// 部分文字列を取得（安全版）
+/// Get substring (safe version)
 fn substr(s : String, start : Int, end : Int) -> String {
   if start < 0 || end > s.length() || start > end {
     return ""
@@ -116,7 +116,7 @@ fn substr(s : String, start : Int, end : Int) -> String {
   result.to_string()
 }
 
-/// 部分文字列の位置を検索
+/// Find position of substring
 fn find_substring(haystack : String, needle : String) -> Int? {
   let haystack_len = haystack.length()
   let needle_len = needle.length()
@@ -131,7 +131,7 @@ fn find_substring(haystack : String, needle : String) -> Int? {
   None
 }
 
-/// body と footers をパース
+/// Parse body and footers
 fn parse_body_and_footers(
   lines : Array[String]
 ) -> (String?, Array[(String, String)]) {
@@ -139,28 +139,28 @@ fn parse_body_and_footers(
     return (None, [])
   }
 
-  // 2行目以降を取得
+  // Get lines from 2nd line onwards
   let rest : Array[String] = []
   for i = 1; i < lines.length(); i = i + 1 {
     rest.push(lines[i])
   }
 
-  // 空行のみの場合
+  // If only empty lines
   if rest.iter().all(fn(l) { l.trim().is_empty() }) {
     return (None, [])
   }
 
-  // footer の開始位置を探す
+  // Find footer start position
   let mut footer_start = -1
   for i = 0; i < rest.length(); i = i + 1 {
     let line = rest[i]
     if is_footer_line(line) {
-      // footer より前に空行があることを確認
+      // Verify there is an empty line before footer
       if i > 0 && rest[i - 1].trim().is_empty() {
         footer_start = i
         break
       } else if i == 0 {
-        // 最初から footer の場合（空行のみで body なし）
+        // If footer starts from beginning (empty lines only, no body)
         footer_start = 0
         break
       }
@@ -183,22 +183,22 @@ fn parse_body_and_footers(
     }
   }
 
-  // body を構築（先頭の空行を除去）
+  // Build body (remove leading empty lines)
   let body = build_body(body_lines)
 
-  // footers をパース
+  // Parse footers
   let footers = parse_footers(footer_lines)
 
   (body, footers)
 }
 
-/// body 行群から body 文字列を構築
+/// Build body string from body lines
 fn build_body(lines : Array[String]) -> String? {
   if lines.is_empty() {
     return None
   }
 
-  // 先頭の空行をスキップ
+  // Skip leading empty lines
   let mut start_idx = 0
   while start_idx < lines.length() && lines[start_idx].trim().is_empty() {
     start_idx = start_idx + 1
@@ -220,20 +220,20 @@ fn build_body(lines : Array[String]) -> String? {
   }
 }
 
-/// footer 行かどうかを判定
+/// Check if line is a footer line
 fn is_footer_line(line : String) -> Bool {
   let trimmed = line.trim().to_string()
   if trimmed.is_empty() {
     return false
   }
 
-  // "BREAKING CHANGE: ..." 形式
+  // "BREAKING CHANGE: ..." format
   if trimmed.has_prefix("BREAKING CHANGE:") ||
     trimmed.has_prefix("BREAKING-CHANGE:") {
     return true
   }
 
-  // "token: value" または "token #value" 形式
+  // "token: value" or "token #value" format
   match find_substring(trimmed, ": ") {
     Some(colon_idx) => {
       let token = substr(trimmed, 0, colon_idx)
@@ -257,7 +257,7 @@ fn is_footer_line(line : String) -> Bool {
   false
 }
 
-/// token が有効かチェック（英数字とハイフンのみ）
+/// Check if token is valid (alphanumeric and hyphens only)
 fn is_valid_token(token : String) -> Bool {
   if token.is_empty() {
     return false
@@ -270,7 +270,7 @@ fn is_valid_token(token : String) -> Bool {
   })
 }
 
-/// footer 行群をパース
+/// Parse footer lines
 fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
   let footers : Array[(String, String)] = []
 
@@ -281,7 +281,7 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
       continue
     }
 
-    // "BREAKING CHANGE: value" 形式
+    // "BREAKING CHANGE: value" format
     if trimmed.has_prefix("BREAKING CHANGE:") {
       let value = substr(trimmed, 16, trimmed.length()).trim().to_string()
       footers.push(("BREAKING CHANGE", value))
@@ -294,7 +294,7 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
       continue
     }
 
-    // "token: value" 形式
+    // "token: value" format
     match find_substring(trimmed, ": ") {
       Some(colon_idx) => {
         let token = substr(trimmed, 0, colon_idx)
@@ -307,7 +307,7 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
       None => ()
     }
 
-    // "token #value" 形式
+    // "token #value" format
     match find_substring(trimmed, " #") {
       Some(hash_idx) => {
         let token = substr(trimmed, 0, hash_idx)

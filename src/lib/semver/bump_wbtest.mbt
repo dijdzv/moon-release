@@ -32,7 +32,7 @@ test "bump removes prerelease" {
 }
 
 test "determine_bump with parse" {
-  // parse 関数を使ってテストデータを作成
+  // Create test data using parse function
   let commit = @conventional.parse("feat!: breaking change")
   match commit {
     Some(c) => {

@@ -1,4 +1,4 @@
-/// Conventional Commits の種別
+/// Conventional Commits type
 pub enum CommitType {
   Feat
   Fix
@@ -14,7 +14,7 @@ pub enum CommitType {
   Custom(String)
 } derive(Show, Eq)
 
-/// Conventional Commits の構造化表現
+/// Structured representation of Conventional Commits
 pub struct ConventionalCommit {
   typ : CommitType
   scope : String?

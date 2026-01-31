@@ -1,4 +1,4 @@
-/// API 情報（package_data.json から抽出）
+/// API information (extracted from package_data.json)
 pub struct PackageApi {
   name : String
   types : Array[TypeInfo]
@@ -7,50 +7,50 @@ pub struct PackageApi {
   values : Array[ValueInfo]
 } derive(Show)
 
-/// 空の PackageApi を作成
+/// Create empty PackageApi
 pub fn PackageApi::empty() -> PackageApi {
   PackageApi::{ name: "", types: [], errors: [], traits: [], values: [] }
 }
 
-/// 型情報
+/// Type information
 pub struct TypeInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
 } derive(Show, Eq)
 
-/// エラー型情報
+/// Error type information
 pub struct ErrorInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
 } derive(Show, Eq)
 
-/// トレイト情報
+/// Trait information
 pub struct TraitInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
 } derive(Show, Eq)
 
-/// メソッド情報
+/// Method information
 pub struct MethodInfo {
   name : String
   signature : String
 } derive(Show, Eq)
 
-/// 値（トップレベル関数など）情報
+/// Value (top-level function, etc.) information
 pub struct ValueInfo {
   name : String
   signature : String
 } derive(Show, Eq)
 
-/// パースエラー
+/// Parse error
 pub suberror ParseError {
   ParseError(String)
 }
 
-/// シグネチャから HTML タグを除去
+/// Remove HTML tags from signature
 fn strip_html_tags(s : String) -> String {
   let result = StringBuilder::new()
   let mut in_tag = false
@@ -66,7 +66,7 @@ fn strip_html_tags(s : String) -> String {
   result.to_string()
 }
 
-/// package_data.json をパース
+/// Parse package_data.json
 pub fn parse_package_data(content : String) -> PackageApi raise ParseError {
   let json = try {
     @json.parse(content)
@@ -92,7 +92,7 @@ pub fn parse_package_data(content : String) -> PackageApi raise ParseError {
   PackageApi::{ name, types, errors, traits, values }
 }
 
-/// types 配列をパース
+/// Parse types array
 fn parse_types(obj : Map[String, Json]) -> Array[TypeInfo] {
   let result : Array[TypeInfo] = []
   match obj.get("types") {
@@ -120,7 +120,7 @@ fn parse_types(obj : Map[String, Json]) -> Array[TypeInfo] {
   result
 }
 
-/// errors 配列をパース
+/// Parse errors array
 fn parse_errors(obj : Map[String, Json]) -> Array[ErrorInfo] {
   let result : Array[ErrorInfo] = []
   match obj.get("errors") {
@@ -148,7 +148,7 @@ fn parse_errors(obj : Map[String, Json]) -> Array[ErrorInfo] {
   result
 }
 
-/// traits 配列をパース
+/// Parse traits array
 fn parse_traits(obj : Map[String, Json]) -> Array[TraitInfo] {
   let result : Array[TraitInfo] = []
   match obj.get("traits") {
@@ -176,7 +176,7 @@ fn parse_traits(obj : Map[String, Json]) -> Array[TraitInfo] {
   result
 }
 
-/// values 配列をパース
+/// Parse values array
 fn parse_values(obj : Map[String, Json]) -> Array[ValueInfo] {
   let result : Array[ValueInfo] = []
   match obj.get("values") {
@@ -203,7 +203,7 @@ fn parse_values(obj : Map[String, Json]) -> Array[ValueInfo] {
   result
 }
 
-/// methods 配列をパース
+/// Parse methods array
 fn parse_methods(obj : Map[String, Json]) -> Array[MethodInfo] {
   let result : Array[MethodInfo] = []
   match obj.get("methods") {

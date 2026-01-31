@@ -1,9 +1,9 @@
-/// Git リポジトリ
+/// Git repository
 pub struct Repository {
   path : String
 } derive(Show, Eq)
 
-/// Git コミット
+/// Git commit
 pub struct GitCommit {
   hash : String
   message : String
@@ -25,18 +25,15 @@ pub fn GitError::to_string(self : GitError) -> String {
 
 /// Validate repository path for security
 /// Rejects paths containing ".." (directory traversal)
+/// Delegates to util module for common validation logic
 fn validate_repo_path(path : String) -> String? {
-  // Empty path is normalized to "."
+  // Empty path is normalized to "." - always valid
   if path.is_empty() {
     return None
   }
 
-  // Check for directory traversal
-  if path.contains("..") {
-    return Some("path contains '..' (directory traversal not allowed)")
-  }
-
-  None
+  // Use common validation utility (allow absolute paths for repo)
+  @util.validate_path_full(path, allow_absolute=true).error_message()
 }
 
 /// Open repository with path validation
@@ -58,22 +55,22 @@ pub fn Repository::open_unchecked(path : String) -> Repository {
   Repository::{ path }
 }
 
-/// 現在のディレクトリでリポジトリを開く
+/// Open repository at current directory
 pub fn Repository::current() -> Repository {
   Repository::{ path: "." }
 }
 
-/// タグ一覧を取得するコマンド
+/// Get command to list tags
 pub fn Repository::get_tags_command(self : Repository) -> Array[String] {
   ["git", "-C", self.path, "tag", "--sort=-v:refname"]
 }
 
-/// 最新タグを取得するコマンド
+/// Get command to retrieve latest tag
 pub fn Repository::get_latest_tag_command(self : Repository) -> Array[String] {
   ["git", "-C", self.path, "describe", "--tags", "--abbrev=0"]
 }
 
-/// 2点間のコミットを取得するコマンド
+/// Get command to retrieve commits between two refs
 pub fn Repository::get_commits_command(
   self : Repository,
   from : String,
@@ -89,7 +86,7 @@ pub fn Repository::get_commits_command(
   ]
 }
 
-/// HEAD までのコミットを取得するコマンド（タグから）
+/// Get command to retrieve commits from tag to HEAD
 pub fn Repository::get_commits_since_tag_command(
   self : Repository,
   tag : String
@@ -104,12 +101,12 @@ pub fn Repository::get_commits_since_tag_command(
   ]
 }
 
-/// 全コミットを取得するコマンド（タグがない場合）
+/// Get command to retrieve all commits (when no tags exist)
 pub fn Repository::get_all_commits_command(self : Repository) -> Array[String] {
   ["git", "-C", self.path, "log", "--pretty=format:%H|%s|%an|%aI"]
 }
 
-/// タグを作成するコマンド
+/// Get command to create a tag
 pub fn Repository::create_tag_command(
   self : Repository,
   tag_name : String,
@@ -118,7 +115,7 @@ pub fn Repository::create_tag_command(
   ["git", "-C", self.path, "tag", "-a", tag_name, "-m", message]
 }
 
-/// コミットを作成するコマンド
+/// Get command to create a commit
 pub fn Repository::create_commit_command(
   self : Repository,
   message : String
@@ -126,7 +123,7 @@ pub fn Repository::create_commit_command(
   ["git", "-C", self.path, "commit", "-m", message]
 }
 
-/// ファイルをステージングするコマンド
+/// Get command to stage files
 pub fn Repository::stage_files_command(
   self : Repository,
   files : Array[String]
@@ -138,7 +135,7 @@ pub fn Repository::stage_files_command(
   cmd
 }
 
-/// push するコマンド
+/// Get command to push
 pub fn Repository::push_command(
   self : Repository,
   include_tags : Bool
@@ -150,7 +147,7 @@ pub fn Repository::push_command(
   }
 }
 
-/// コミットログをパース
+/// Parse commit log output
 pub fn parse_commit_log(output : String) -> Array[GitCommit] {
   let commits : Array[GitCommit] = []
   let lines : Array[String] = output
@@ -183,7 +180,7 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
   commits
 }
 
-/// GitCommit を ConventionalCommit にパース
+/// Parse GitCommit array to ConventionalCommit array
 pub fn parse_conventional_commits(
   commits : Array[GitCommit]
 ) -> Array[(@conventional.ConventionalCommit, String)] {
@@ -200,7 +197,7 @@ pub fn parse_conventional_commits(
   result
 }
 
-/// 現在の日付を取得するコマンド
+/// Get command to retrieve current date
 pub fn get_date_command() -> Array[String] {
   ["date", "+%Y-%m-%d"]
 }

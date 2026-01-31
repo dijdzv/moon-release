@@ -140,7 +140,7 @@ test "version compare prerelease order" {
 }
 
 test "version compare prerelease numeric vs string" {
-  // 数値部分は数値として比較（2 < 11）
+  // Numeric parts are compared as numbers (2 < 11)
   let v2 = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("beta.2"), build_metadata: None }
   let v11 = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("beta.11"), build_metadata: None }
 
@@ -148,7 +148,7 @@ test "version compare prerelease numeric vs string" {
 }
 
 test "version compare build metadata ignored" {
-  // build metadata は比較に影響しない
+  // Build metadata does not affect comparison
   let v1 = Version::{ major: 1, minor: 0, patch: 0, prerelease: None, build_metadata: Some("build.1") }
   let v2 = Version::{ major: 1, minor: 0, patch: 0, prerelease: None, build_metadata: Some("build.999") }
 
@@ -218,7 +218,7 @@ test "validate_prerelease - invalid plus" {
 
 // Integer overflow protection tests
 test "parse version - large but valid numbers" {
-  // 9桁以内の数値は許可 (max 999,999,999)
+  // Numbers within 9 digits are allowed (max 999,999,999)
   let result = Version::parse("999999999.0.0")
   match result {
     Some(v) => assert_eq(v.major, 999999999)
@@ -227,11 +227,11 @@ test "parse version - large but valid numbers" {
 }
 
 test "parse version - number too large (10 digits)" {
-  // 10桁以上は拒否（オーバーフロー防止）
+  // Reject 10+ digits (overflow prevention)
   assert_eq(Version::parse("1234567890.0.0"), None)
 }
 
 test "parse version - overflow protection" {
-  // 10桁は常に拒否
+  // 10 digits always rejected
   assert_eq(Version::parse("9999999999.0.0"), None)
 }

@@ -1,5 +1,5 @@
-/// JSON 文字列をエスケープ
-/// RFC 8259 に準拠したエスケープ処理
+/// Escape JSON string
+/// RFC 8259 compliant escaping
 pub fn escape_json_string(s : String) -> String {
   let result = StringBuilder::new()
   for c in s {
@@ -9,10 +9,10 @@ pub fn escape_json_string(s : String) -> String {
       '\n' => result.write_string("\\n")
       '\r' => result.write_string("\\r")
       '\t' => result.write_string("\\t")
-      '\u0008' => result.write_string("\\b")  // バックスペース
-      '\u000C' => result.write_string("\\f")  // フォームフィード
+      '\u0008' => result.write_string("\\b")  // backspace
+      '\u000C' => result.write_string("\\f")  // form feed
       _ =>
-        // 制御文字 (U+0000 - U+001F) は \uXXXX 形式でエスケープ
+        // Control characters (U+0000 - U+001F) are escaped as \uXXXX
         if c.to_uint() < 0x20 {
           result.write_string("\\u00")
           let code = c.to_uint()
@@ -28,7 +28,7 @@ pub fn escape_json_string(s : String) -> String {
   result.to_string()
 }
 
-/// 数値を16進数の文字に変換
+/// Convert number to hexadecimal digit
 fn hex_digit(n : UInt) -> Char {
   match n {
     0 => '0'
@@ -50,12 +50,12 @@ fn hex_digit(n : UInt) -> Char {
   }
 }
 
-/// JSON 文字列リテラルを作成（クォート付き）
+/// Create JSON string literal (with quotes)
 pub fn json_string(s : String) -> String {
   "\"" + escape_json_string(s) + "\""
 }
 
-/// JSON オブジェクトを構築
+/// Build JSON object
 /// Keys are escaped to prevent injection attacks
 pub fn build_json_object(pairs : Array[(String, String)]) -> String {
   let result = StringBuilder::new()
@@ -74,7 +74,7 @@ pub fn build_json_object(pairs : Array[(String, String)]) -> String {
   result.to_string()
 }
 
-/// JSON 配列を構築
+/// Build JSON array
 pub fn build_json_array(items : Array[String]) -> String {
   let result = StringBuilder::new()
   result.write_string("[")

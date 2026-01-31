@@ -1,4 +1,4 @@
-/// update コマンド: ローカル更新のみ
+/// update command: local update only
 pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   if ctx.verbose {
     println("Running update workflow...")
@@ -12,7 +12,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
     return
   }
 
-  // moon.mod.json を更新
+  // Update moon.mod.json
   let moon_mod_content = try {
     @fs.read_file("moon.mod.json").text()
   } catch {
@@ -34,7 +34,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
 }
 
-/// release-pr コマンド: PR 作成または更新
+/// release-pr command: create or update PR
 pub async fn run_release_pr(
   ctx : ReleaseContext,
   github : @github.GitHubClient
@@ -71,7 +71,7 @@ pub async fn run_release_pr(
     return
   }
 
-  // 既存のブランチがあるかチェック
+  // Check if branch already exists
   let branch_exists = try {
     check_branch_exists(ctx.repo, branch_name)
   } catch {
@@ -79,7 +79,7 @@ pub async fn run_release_pr(
   }
 
   if branch_exists {
-    // 既存ブランチに切り替え
+    // Switch to existing branch
     let checkout_result = try {
       @executor.run_git(ctx.repo, ["checkout", branch_name])
     } catch {
@@ -89,7 +89,7 @@ pub async fn run_release_pr(
       raise WorkflowError("Failed to checkout branch: " + checkout_result.stderr)
     }
 
-    // リモートから最新を取得
+    // Pull latest from remote
     let pull_result = try {
       @executor.run_git(ctx.repo, ["pull", "origin", branch_name])
     } catch {
@@ -100,7 +100,7 @@ pub async fn run_release_pr(
       println("[WARN] Continuing with local branch state...")
     }
   } else {
-    // 新しいブランチを作成
+    // Create new branch
     let create_branch_result = try {
       @executor.run_git(ctx.repo, ["checkout", "-b", branch_name])
     } catch {
@@ -113,10 +113,10 @@ pub async fn run_release_pr(
     }
   }
 
-  // update を実行（ファイル更新）
+  // Run update (file updates)
   run_update(ctx)
 
-  // 変更をステージング
+  // Stage changes
   let stage_result = try {
     @executor.run_git(ctx.repo, ["add", "moon.mod.json"])
   } catch {
@@ -126,7 +126,7 @@ pub async fn run_release_pr(
     raise WorkflowError("Failed to stage files: " + stage_result.stderr)
   }
 
-  // 変更があるかチェック
+  // Check if there are changes
   let diff_result = try {
     @executor.run_git(ctx.repo, ["diff", "--cached", "--quiet"])
   } catch {
@@ -135,7 +135,7 @@ pub async fn run_release_pr(
 
   if diff_result.is_success() {
     println("No changes to commit. Release PR is up to date.")
-    // 元のブランチに戻る
+    // Return to original branch
     let _ = try {
       @executor.run_git(ctx.repo, ["checkout", base_branch])
     } catch {
@@ -144,7 +144,7 @@ pub async fn run_release_pr(
     return
   }
 
-  // コミット
+  // Commit
   let commit_msg = ctx.config.apply_version_template(ctx.new_version.to_string())
   let commit_result = try {
     @executor.run_git(ctx.repo, ["commit", "-m", commit_msg])
@@ -155,7 +155,7 @@ pub async fn run_release_pr(
     raise WorkflowError("Failed to commit: " + commit_result.stderr)
   }
 
-  // Push（force push で更新）
+  // Push (force push to update)
   let push_result = try {
     @executor.run_git(ctx.repo, ["push", "-u", "--force-with-lease", "origin", branch_name])
   } catch {
@@ -165,7 +165,7 @@ pub async fn run_release_pr(
     raise WorkflowError("Failed to push: " + push_result.stderr)
   }
 
-  // 元のブランチに戻る
+  // Return to original branch
   let _ = try {
     @executor.run_git(ctx.repo, ["checkout", base_branch])
   } catch {
@@ -174,7 +174,7 @@ pub async fn run_release_pr(
 
   match existing_pr {
     Some((pr_num, _)) => {
-      // 既存 PR を更新
+      // Update existing PR
       let pr_body = build_pr_body(ctx)
       let update_result = try {
         @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body])
@@ -187,7 +187,7 @@ pub async fn run_release_pr(
       println("Updated pull request #\{pr_num}")
     }
     None => {
-      // 新しい PR を作成
+      // Create new PR
       let pr_title = commit_msg
       let pr_body = build_pr_body(ctx)
       let pr_cmd = github.create_pull_request_command(
@@ -199,7 +199,7 @@ pub async fn run_release_pr(
         labels=ctx.config.pr_labels,
       )
 
-      // gh コマンドの引数を抽出
+      // Extract gh command arguments
       let gh_args : Array[String] = []
       for i = 1; i < pr_cmd.length(); i = i + 1 {
         gh_args.push(pr_cmd[i])
@@ -229,7 +229,7 @@ async fn find_existing_release_pr(
 ) -> (UInt, String)? raise WorkflowError {
   let list_cmd = github.list_pull_requests_command(state="open")
 
-  // gh コマンドの引数を抽出
+  // Extract gh command arguments
   let gh_args : Array[String] = []
   for i = 1; i < list_cmd.length(); i = i + 1 {
     gh_args.push(list_cmd[i])
@@ -245,14 +245,14 @@ async fn find_existing_release_pr(
     return None
   }
 
-  // PR リストをパース
+  // Parse PR list
   let prs = try {
     @github.parse_pull_request_list_json(result.stdout)
   } catch {
     _ => return None
   }
 
-  // release/ で始まるブランチの PR を探す
+  // Find PR with branch starting with release/
   for pr in prs {
     if pr.head.has_prefix(branch_prefix) {
       return Some((pr.number, pr.head))
@@ -262,7 +262,7 @@ async fn find_existing_release_pr(
   None
 }
 
-/// ブランチが存在するかチェック
+/// Check if branch exists
 async fn check_branch_exists(
   repo : @git.Repository,
   branch_name : String
@@ -275,7 +275,7 @@ async fn check_branch_exists(
   result.is_success()
 }
 
-/// release コマンド: タグ・リリース作成
+/// release command: create tag and release
 pub async fn run_release(
   ctx : ReleaseContext,
   github : @github.GitHubClient
@@ -316,7 +316,7 @@ pub async fn run_release(
     return
   }
 
-  // タグを作成（git_tag_enable が true の場合のみ）
+  // Create tag (only if git_tag_enable is true)
   if ctx.config.git_tag_enable {
     let tag_msg = release_title
     let tag_result = try {
@@ -328,7 +328,7 @@ pub async fn run_release(
       raise WorkflowError("Failed to create tag: " + tag_result.stderr)
     }
 
-    // タグを Push
+    // Push tag
     let push_result = try {
       @executor.run_git(ctx.repo, ["push", "origin", tag_name])
     } catch {
@@ -341,9 +341,9 @@ pub async fn run_release(
     println("Created and pushed tag: " + tag_name)
   }
 
-  // GitHub Release を作成
+  // Create GitHub Release
   if ctx.config.git_release_enable {
-    // リリースノート: カスタムテンプレートがあればそれを使用、なければ自動生成
+    // Release notes: use custom template if available, otherwise auto-generate
     let release_notes = match ctx.config.git_release_body {
       Some(template) =>
         template
@@ -359,7 +359,7 @@ pub async fn run_release(
       latest=ctx.config.git_release_latest,
     )
 
-    // gh コマンドの引数を抽出
+    // Extract gh command arguments
     let gh_args : Array[String] = []
     for i = 1; i < release_cmd.length(); i = i + 1 {
       gh_args.push(release_cmd[i])
@@ -379,19 +379,19 @@ pub async fn run_release(
     println("Created GitHub release: " + tag_name)
   }
 
-  // mooncakes.io に公開
+  // Publish to mooncakes.io
   if ctx.config.publish {
     run_publish(ctx)
   }
 }
 
-/// publish コマンド: mooncakes.io に公開
+/// publish command: publish to mooncakes.io
 pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   if ctx.verbose {
     println("Publishing to mooncakes.io...")
   }
 
-  // semver_check が有効な場合は API 互換性チェックを実行
+  // Run API compatibility check if semver_check is enabled
   if ctx.config.semver_check {
     if ctx.verbose {
       println("Running API compatibility check...")
@@ -421,7 +421,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     }
   }
 
-  // publish コマンドを構築
+  // Build publish command
   let publish_cmd : Array[String] = if ctx.config.publish_frozen {
     ["moon", "publish", "--frozen"]
   } else {
@@ -497,7 +497,7 @@ pub async fn run_update_packages(
     println("Updating \{config.packages.length()} packages...")
   }
 
-  // Phase 1: 各パッケージの情報を収集
+  // Phase 1: Collect information for each package
   let updates : Array[PackageUpdateInfo] = []
 
   for pkg in config.packages {
@@ -505,7 +505,7 @@ pub async fn run_update_packages(
       println("  Analyzing package: " + pkg.name)
     }
 
-    // パス検証（ディレクトリトラバーサル防止）
+    // Path validation (prevent directory traversal)
     if not(validate_path(pkg.path)) {
       println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
       continue
@@ -514,7 +514,7 @@ pub async fn run_update_packages(
     let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
     let moon_mod_path = pkg_path + "moon.mod.json"
 
-    // moon.mod.json を読み込む
+    // Read moon.mod.json
     let moon_mod_content = try {
       @fs.read_file(moon_mod_path).text()
     } catch {
@@ -541,7 +541,7 @@ pub async fn run_update_packages(
       }
     }
 
-    // パッケージのコミットを取得（パスフィルター付き）
+    // Get commits for the package (with path filter)
     let commits = try {
       get_package_commits(repo, pkg.path)
     } catch {
@@ -558,7 +558,7 @@ pub async fn run_update_packages(
       continue
     }
 
-    // バンプタイプを決定
+    // Determine bump type
     let bump_type = match @semver.determine_bump(commits.map(fn(c) { c.0 })) {
       Some(t) => t
       None => {
@@ -580,7 +580,7 @@ pub async fn run_update_packages(
     )
   }
 
-  // Phase 2: version_group のバンプタイプを統合
+  // Phase 2: Consolidate bump types by version_group
   let group_bumps : @hashmap.HashMap[String, @semver.BumpType] = @hashmap.new()
 
   for update in updates {
@@ -599,9 +599,9 @@ pub async fn run_update_packages(
     }
   }
 
-  // Phase 3: 更新を実行
+  // Phase 3: Execute updates
   for update in updates {
-    // version_group がある場合はグループのバンプタイプを使用
+    // Use group bump type if version_group is specified
     let final_bump_type = match update.pkg.version_group {
       Some(group) =>
         match group_bumps.get(group) {
@@ -622,7 +622,7 @@ pub async fn run_update_packages(
       continue
     }
 
-    // バージョン更新
+    // Update version
     let updated_content = try {
       @moon_mod.update_version(update.moon_mod_content, new_version)
     } catch {
@@ -649,12 +649,12 @@ pub async fn run_update_packages(
   }
 }
 
-/// パッケージのコミットを取得（パスフィルター付き）
+/// Get commits for a package (with path filter)
 async fn get_package_commits(
   repo : @git.Repository,
   path : String
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
-  // 最新タグを取得
+  // Get latest tag
   let tag_result = try {
     @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
   } catch {
@@ -702,7 +702,7 @@ pub async fn run_publish_packages(
       continue
     }
 
-    // パス検証（ディレクトリトラバーサル防止）
+    // Path validation (prevent directory traversal)
     if not(validate_path(pkg.path)) {
       println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
       continue
@@ -753,7 +753,7 @@ pub async fn run_publish_packages(
 pub async fn get_registry_version(
   package_name : String
 ) -> @semver.Version? raise WorkflowError {
-  // moon info コマンドでパッケージ情報を取得
+  // Get package info with moon info command
   let result = try {
     @executor.run_command(["moon", "info", package_name])
   } catch {
@@ -764,8 +764,8 @@ pub async fn get_registry_version(
     return None
   }
 
-  // 出力からバージョンを抽出
-  // 出力形式: "name: package_name\nversion: x.y.z\n..."
+  // Extract version from output
+  // Output format: "name: package_name\nversion: x.y.z\n..."
   let lines : Array[String] = result.stdout
     .split("\n")
     .map(fn(sv) { sv.to_string() })
@@ -788,7 +788,7 @@ pub async fn get_registry_version(
   None
 }
 
-/// レジストリとローカルバージョンを比較し、リリースが必要かチェック
+/// Compare registry and local version to check if release is needed
 pub async fn should_release(
   local_version : @semver.Version,
   package_name : String,
@@ -820,7 +820,7 @@ pub async fn should_release(
   }
 }
 
-/// BumpType の優先度を返す（Major > Minor > Patch）
+/// Return priority of BumpType (Major > Minor > Patch)
 pub fn bump_priority(bump : @semver.BumpType) -> Int {
   match bump {
     Major => 3
@@ -829,12 +829,12 @@ pub fn bump_priority(bump : @semver.BumpType) -> Int {
   }
 }
 
-/// PR の body を構築（テンプレート適用）
+/// Build PR body (apply template)
 pub fn build_pr_body(ctx : ReleaseContext) -> String {
   ctx.config.pr_body.replace(old="{{ version }}", new=ctx.new_version.to_string())
 }
 
-/// リリースノートを生成（コミットサマリーから）
+/// Generate release notes (from commit summary)
 pub fn generate_release_notes(
   commits : Array[(@conventional.ConventionalCommit, String)]
 ) -> String {
@@ -852,7 +852,7 @@ pub fn generate_release_notes(
       None => ""
     }
     let short_hash = if hash.length() >= 7 {
-      // 先頭7文字を取得
+      // Get first 7 characters
       let chars = hash.to_array()
       let sb = StringBuilder::new()
       for k = 0; k < 7; k = k + 1 {
@@ -868,7 +868,7 @@ pub fn generate_release_notes(
   lines.iter().fold(init="", fn(acc, line) { acc + line + "\n" })
 }
 
-/// semver チェックを実行
+/// Run semver check
 pub async fn run_semver_check(
   repo : @git.Repository,
   verbose : Bool
@@ -877,7 +877,7 @@ pub async fn run_semver_check(
     println("Running semver check...")
   }
 
-  // 1. 最新タグを取得
+  // 1. Get latest tag
   let tag_result = try {
     @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
   } catch {
@@ -898,7 +898,7 @@ pub async fn run_semver_check(
     println("  Comparing against tag: " + latest_tag)
   }
 
-  // 2. 現在のブランチ名を保存
+  // 2. Save current branch name
   let branch_result = try {
     @executor.run_git(repo, ["rev-parse", "--abbrev-ref", "HEAD"])
   } catch {
@@ -906,7 +906,7 @@ pub async fn run_semver_check(
   }
   let current_branch = branch_result.stdout_trimmed()
 
-  // 3. 現在のコードで moon doc を実行
+  // 3. Run moon doc on current code
   if verbose {
     println("  Generating docs for current code...")
   }
@@ -919,14 +919,14 @@ pub async fn run_semver_check(
     raise WorkflowError("Failed to generate docs: " + doc_result.stderr)
   }
 
-  // 4. 現在の package_data.json を読み込む
+  // 4. Load current package_data.json
   let current_apis = try {
     load_package_apis("target/doc")
   } catch {
     e => raise WorkflowError("Failed to load current API: " + e.to_string())
   }
 
-  // 5. タグをチェックアウトして古い API を取得（安全なブランチ復帰を保証）
+  // 5. Checkout tag and get old API (ensure safe branch restoration)
   let old_apis = get_old_apis_with_safe_checkout(
     repo,
     latest_tag,
@@ -934,7 +934,7 @@ pub async fn run_semver_check(
     verbose,
   )
 
-  // 6. API を比較
+  // 6. Compare APIs
   if verbose {
     println("  Comparing APIs...")
   }
@@ -948,14 +948,14 @@ pub async fn run_semver_check(
   result
 }
 
-/// タグをチェックアウトして古い API を取得し、必ず元のブランチに戻る
+/// Checkout tag and get old API, ensuring restoration to original branch
 async fn get_old_apis_with_safe_checkout(
   repo : @git.Repository,
   tag : String,
   original_branch : String,
   verbose : Bool
 ) -> @semver_check.PackageApi raise WorkflowError {
-  // タグをチェックアウト
+  // Checkout tag
   if verbose {
     println("  Checking out tag: " + tag)
   }
@@ -968,9 +968,9 @@ async fn get_old_apis_with_safe_checkout(
     raise WorkflowError("Failed to checkout tag: " + checkout_result.stderr)
   }
 
-  // この時点からは必ず元のブランチに戻る必要がある
+  // From this point, we must return to the original branch
 
-  // タグのコードで moon doc を実行
+  // Run moon doc on tagged code
   if verbose {
     println("  Generating docs for previous version...")
   }
@@ -983,7 +983,7 @@ async fn get_old_apis_with_safe_checkout(
     }
   }
 
-  // package_data.json を読み込む
+  // Load package_data.json
   let old_apis = if old_doc_result.is_success() {
     try {
       load_package_apis("target/doc")
@@ -994,13 +994,13 @@ async fn get_old_apis_with_safe_checkout(
     @semver_check.PackageApi::empty()
   }
 
-  // 元のブランチに戻る
+  // Return to original branch
   let _ = try { restore_branch(repo, original_branch, verbose) } catch { _ => () }
 
   old_apis
 }
 
-/// 元のブランチに戻る（エラーは警告として処理）
+/// Return to original branch (errors are handled as warnings)
 async fn restore_branch(
   repo : @git.Repository,
   branch : String,
@@ -1024,9 +1024,9 @@ async fn restore_branch(
   }
 }
 
-/// target/doc から package_data.json を読み込む
+/// Load package_data.json from target/doc
 async fn load_package_apis(doc_dir : String) -> @semver_check.PackageApi raise WorkflowError {
-  // find コマンドで package_data.json を探す
+  // Find package_data.json with find command
   let find_result = try {
     @executor.run_command(
       ["find", doc_dir, "-name", "package_data.json", "-type", "f"],

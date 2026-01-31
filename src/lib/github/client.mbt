@@ -1,10 +1,10 @@
-/// GitHub API クライアント（gh CLI コマンド生成）
+/// GitHub API client (gh CLI command generation)
 pub struct GitHubClient {
   owner : String
   repo : String
 } derive(Show, Eq)
 
-/// GitHub リリース
+/// GitHub release
 pub struct Release {
   tag_name : String
   name : String
@@ -22,22 +22,22 @@ pub struct PullRequest {
   base : String
 } derive(Show, Eq)
 
-/// GitHub API エラー
+/// GitHub API error
 pub suberror GitHubError {
   GitHubError(String)
 }
 
-/// クライアントを作成
+/// Create client
 pub fn GitHubClient::new(owner : String, repo : String) -> GitHubClient {
   GitHubClient::{ owner, repo }
 }
 
-/// リポジトリ文字列を取得
+/// Get repository string
 fn GitHubClient::repo_string(self : GitHubClient) -> String {
   self.owner + "/" + self.repo
 }
 
-/// リリースを作成するコマンド
+/// Command to create a release
 pub fn GitHubClient::create_release_command(
   self : GitHubClient,
   tag_name : String,
@@ -73,7 +73,7 @@ pub fn GitHubClient::create_release_command(
   cmd
 }
 
-/// リリースを取得するコマンド（タグ名で）
+/// Command to get a release (by tag name)
 pub fn GitHubClient::get_release_command(
   self : GitHubClient,
   tag : String
@@ -81,7 +81,7 @@ pub fn GitHubClient::get_release_command(
   ["gh", "release", "view", tag, "--repo", self.repo_string(), "--json", "tagName,name,body,isDraft,isPrerelease"]
 }
 
-/// 最新リリースを取得するコマンド
+/// Command to get the latest release
 pub fn GitHubClient::get_latest_release_command(
   self : GitHubClient
 ) -> Array[String] {
@@ -98,7 +98,7 @@ pub fn GitHubClient::get_latest_release_command(
   ]
 }
 
-/// PR を作成するコマンド
+/// Command to create a PR
 pub fn GitHubClient::create_pull_request_command(
   self : GitHubClient,
   title : String,
@@ -133,7 +133,7 @@ pub fn GitHubClient::create_pull_request_command(
   cmd
 }
 
-/// PR を取得するコマンド
+/// Command to get a PR
 pub fn GitHubClient::get_pull_request_command(
   self : GitHubClient,
   number : UInt
@@ -150,7 +150,7 @@ pub fn GitHubClient::get_pull_request_command(
   ]
 }
 
-/// PR 一覧を取得するコマンド
+/// Command to list PRs
 pub fn GitHubClient::list_pull_requests_command(
   self : GitHubClient,
   state~ : String = "open",
@@ -171,7 +171,7 @@ pub fn GitHubClient::list_pull_requests_command(
   ]
 }
 
-/// リリースレスポンスをパース
+/// Parse release response
 pub fn parse_release_json(output : String) -> Release raise GitHubError {
   let json = try {
     @json.parse(output)
@@ -214,7 +214,7 @@ pub fn parse_release_json(output : String) -> Release raise GitHubError {
   Release::{ tag_name, name, body, draft, prerelease }
 }
 
-/// リリース一覧レスポンスをパース
+/// Parse release list response
 pub fn parse_release_list_json(
   output : String
 ) -> Array[Release] raise GitHubError {
@@ -260,7 +260,7 @@ pub fn parse_release_list_json(
   result
 }
 
-/// PR レスポンスをパース
+/// Parse PR response
 pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError {
   let json = try {
     @json.parse(output)
@@ -275,7 +275,7 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
 
   let number = match obj.get("number") {
     Some(Number(n, ..)) =>
-      // 負数や非整数の場合は 0 として扱う
+      // Treat negative or non-integer values as 0
       if n < 0.0 || n != n.to_int().to_double() {
         0U
       } else {
@@ -308,7 +308,7 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
   PullRequest::{ number, title, body, head, base }
 }
 
-/// PR 一覧レスポンスをパース
+/// Parse PR list response
 pub fn parse_pull_request_list_json(
   output : String
 ) -> Array[PullRequest] raise GitHubError {

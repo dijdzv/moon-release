@@ -1,4 +1,4 @@
-/// セマンティックバージョン
+/// Semantic version
 pub struct Version {
   major : UInt
   minor : UInt
@@ -7,19 +7,19 @@ pub struct Version {
   build_metadata : String?
 } derive(Show, Eq)
 
-/// 文字列からバージョンをパース
+/// Parse version from string
 pub fn Version::parse(s : String) -> Version? {
   if s.is_empty() {
     return None
   }
 
-  // build metadata を分離 (+以降)
+  // Separate build metadata (after +)
   let (version_pre, build_metadata) = split_at_char(s, '+')
 
-  // prerelease を分離 (-以降、ただし最初の . より前の - のみ)
+  // Separate prerelease (after -, but only - after first .)
   let (version_core, prerelease) = split_prerelease(version_pre)
 
-  // major.minor.patch をパース
+  // Parse major.minor.patch
   let parts : Array[String] = version_core
     .split(".")
     .map(fn(sv) { sv.to_string() })
@@ -44,7 +44,7 @@ pub fn Version::parse(s : String) -> Version? {
   Some(Version::{ major, minor, patch, prerelease, build_metadata })
 }
 
-/// 特定の文字で分割（最初の出現で）
+/// Split at character (first occurrence)
 fn split_at_char(s : String, c : Char) -> (String, String?) {
   let chars : Array[Char] = s.to_array()
   for i = 0; i < chars.length(); i = i + 1 {
@@ -57,7 +57,7 @@ fn split_at_char(s : String, c : Char) -> (String, String?) {
   (s, None)
 }
 
-/// prerelease を分離（major.minor.patch の後の - 以降）
+/// Separate prerelease (after - following major.minor.patch)
 fn split_prerelease(s : String) -> (String, String?) {
   let chars : Array[Char] = s.to_array()
   let mut dot_count = 0
@@ -65,7 +65,7 @@ fn split_prerelease(s : String) -> (String, String?) {
     if chars[i] == '.' {
       dot_count = dot_count + 1
     } else if chars[i] == '-' && dot_count >= 2 {
-      // 2つ目の . を見つけた後の - は prerelease の区切り
+      // - after 2nd . is the prerelease separator
       let before = substr_chars(chars, 0, i)
       let after = substr_chars(chars, i + 1, chars.length())
       return (before, if after.is_empty() { None } else { Some(after) })
@@ -74,7 +74,7 @@ fn split_prerelease(s : String) -> (String, String?) {
   (s, None)
 }
 
-/// 文字配列から部分文字列を取得
+/// Get substring from character array
 fn substr_chars(chars : Array[Char], start : Int, end : Int) -> String {
   let result = StringBuilder::new()
   for i = start; i < end; i = i + 1 {
@@ -85,14 +85,14 @@ fn substr_chars(chars : Array[Char], start : Int, end : Int) -> String {
   result.to_string()
 }
 
-/// 文字列を UInt にパース
-/// オーバーフロー防止のため、9桁を超える場合は拒否
+/// Parse string to UInt
+/// Reject numbers with more than 9 digits to prevent overflow
 fn parse_uint(s : String) -> UInt? {
   if s.is_empty() {
     return None
   }
-  // 9桁を超えるとオーバーフローの可能性があるため拒否
-  // 999,999,999 < UInt max (4,294,967,295) なので安全
+  // Reject more than 9 digits to prevent overflow
+  // 999,999,999 < UInt max (4,294,967,295) so it's safe
   if s.length() > 9 {
     return None
   }
@@ -107,7 +107,7 @@ fn parse_uint(s : String) -> UInt? {
   Some(result)
 }
 
-/// バージョンを文字列に変換
+/// Convert version to string
 pub fn Version::to_string(self : Version) -> String {
   let base = "\{self.major}.\{self.minor}.\{self.patch}"
   let with_pre = match self.prerelease {
@@ -120,12 +120,12 @@ pub fn Version::to_string(self : Version) -> String {
   }
 }
 
-/// バージョンを比較（SemVer 2.0.0 準拠）
-/// - major.minor.patch を比較
-/// - 同じ場合、prerelease を比較（prerelease なし > prerelease あり）
-/// - build_metadata は比較に影響しない
+/// Compare versions (SemVer 2.0.0 compliant)
+/// - Compare major.minor.patch
+/// - If equal, compare prerelease (no prerelease > with prerelease)
+/// - build_metadata does not affect comparison
 pub fn Version::compare(self : Version, other : Version) -> Int {
-  // major.minor.patch を比較
+  // Compare major.minor.patch
   if self.major != other.major {
     return if self.major > other.major { 1 } else { -1 }
   }
@@ -136,24 +136,24 @@ pub fn Version::compare(self : Version, other : Version) -> Int {
     return if self.patch > other.patch { 1 } else { -1 }
   }
 
-  // prerelease を比較
+  // Compare prerelease
   match (self.prerelease, other.prerelease) {
-    // 両方 prerelease なし → 同じ
+    // Both have no prerelease → equal
     (None, None) => 0
-    // self のみ prerelease あり → self が小さい
+    // Only self has prerelease → self is smaller
     (Some(_), None) => -1
-    // other のみ prerelease あり → self が大きい
+    // Only other has prerelease → self is larger
     (None, Some(_)) => 1
-    // 両方 prerelease あり → 文字列を比較
+    // Both have prerelease → compare strings
     (Some(self_pre), Some(other_pre)) => compare_prerelease(self_pre, other_pre)
   }
 }
 
-/// prerelease 文字列を比較（SemVer 2.0.0 仕様）
-/// - . で分割して各部分を比較
-/// - 数値のみの部分は数値として比較
-/// - それ以外は辞書順で比較
-/// - 部分が少ない方が小さい（alpha < alpha.1）
+/// Compare prerelease strings (SemVer 2.0.0 spec)
+/// - Split by . and compare each part
+/// - Numeric-only parts are compared as numbers
+/// - Others are compared lexicographically
+/// - Fewer parts means smaller (alpha < alpha.1)
 fn compare_prerelease(a : String, b : String) -> Int {
   let a_parts : Array[String] = a.split(".").map(fn(sv) { sv.to_string() }).collect()
   let b_parts : Array[String] = b.split(".").map(fn(sv) { sv.to_string() }).collect()
@@ -171,7 +171,7 @@ fn compare_prerelease(a : String, b : String) -> Int {
     }
   }
 
-  // 共通部分が同じなら、部分が多い方が大きい
+  // If common parts are equal, more parts means larger
   if a_parts.length() < b_parts.length() {
     -1
   } else if a_parts.length() > b_parts.length() {
@@ -181,13 +181,13 @@ fn compare_prerelease(a : String, b : String) -> Int {
   }
 }
 
-/// prerelease の各部分を比較
+/// Compare each part of prerelease
 fn compare_prerelease_part(a : String, b : String) -> Int {
   let a_num = parse_uint(a)
   let b_num = parse_uint(b)
 
   match (a_num, b_num) {
-    // 両方数値 → 数値として比較
+    // Both numeric → compare as numbers
     (Some(an), Some(bn)) =>
       if an < bn {
         -1
@@ -196,16 +196,16 @@ fn compare_prerelease_part(a : String, b : String) -> Int {
       } else {
         0
       }
-    // a のみ数値 → 数値が先（小さい）
+    // Only a is numeric → numeric comes first (smaller)
     (Some(_), None) => -1
-    // b のみ数値 → 数値が先（小さい）
+    // Only b is numeric → numeric comes first (smaller)
     (None, Some(_)) => 1
-    // 両方文字列 → 辞書順
+    // Both strings → lexicographic comparison
     (None, None) => compare_string(a, b)
   }
 }
 
-/// 文字列を辞書順で比較
+/// Compare strings lexicographically
 fn compare_string(a : String, b : String) -> Int {
   let a_chars = a.to_array()
   let b_chars = b.to_array()
@@ -232,11 +232,11 @@ fn compare_string(a : String, b : String) -> Int {
   }
 }
 
-/// prerelease 文字列のバリデーション（SemVer 2.0.0 準拠）
-/// - ASCII 英数字とハイフンのみ [0-9A-Za-z-]
-/// - ドットで区切られた識別子
-/// - 数値のみの識別子は先頭ゼロ禁止
-/// - 空文字列は禁止
+/// Validate prerelease string (SemVer 2.0.0 compliant)
+/// - Only ASCII alphanumeric and hyphen [0-9A-Za-z-]
+/// - Dot-separated identifiers
+/// - Numeric-only identifiers cannot have leading zeros
+/// - Empty string is not allowed
 pub fn validate_prerelease(prerelease : String) -> Bool {
   if prerelease.is_empty() {
     return false
@@ -256,7 +256,7 @@ pub fn validate_prerelease(prerelease : String) -> Bool {
   true
 }
 
-/// 単一の prerelease 識別子をバリデーション
+/// Validate a single prerelease identifier
 fn validate_prerelease_identifier(id : String) -> Bool {
   if id.is_empty() {
     return false
@@ -274,7 +274,7 @@ fn validate_prerelease_identifier(id : String) -> Bool {
     }
   }
 
-  // 数値のみの識別子は先頭ゼロ禁止（"0" は許可）
+  // Numeric-only identifiers cannot have leading zeros ("0" is allowed)
   if is_numeric && chars.length() > 1 && chars[0] == '0' {
     return false
   }
@@ -282,7 +282,7 @@ fn validate_prerelease_identifier(id : String) -> Bool {
   true
 }
 
-/// ASCII 英数字またはハイフンかどうかをチェック
+/// Check if character is ASCII alphanumeric or hyphen
 fn is_alphanumeric_or_hyphen(c : Char) -> Bool {
   (c >= '0' && c <= '9') ||
   (c >= 'A' && c <= 'Z') ||

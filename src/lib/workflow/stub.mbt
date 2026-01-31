@@ -1,7 +1,7 @@
 /// Stub for non-native targets
 /// The workflow module requires native target
 
-/// リリースコンテキスト
+/// Release context
 pub struct ReleaseContext {
   config : @config.Config
   repo : @git.Repository
@@ -13,12 +13,12 @@ pub struct ReleaseContext {
   verbose : Bool
 }
 
-/// ワークフローエラー
+/// Workflow error
 pub suberror WorkflowError {
   WorkflowError(String)
 }
 
-/// ReleaseContext を作成
+/// Create ReleaseContext
 pub fn ReleaseContext::new(
   config : @config.Config,
   repo : @git.Repository,
@@ -41,12 +41,12 @@ pub fn ReleaseContext::new(
   }
 }
 
-/// update コマンド (stub)
+/// update command (stub)
 pub fn run_update(_ctx : ReleaseContext) -> Unit raise WorkflowError {
   raise WorkflowError("Workflow requires native target")
 }
 
-/// release-pr コマンド (stub)
+/// release-pr command (stub)
 pub fn run_release_pr(
   _ctx : ReleaseContext,
   _github : @github.GitHubClient
@@ -54,7 +54,7 @@ pub fn run_release_pr(
   raise WorkflowError("Workflow requires native target")
 }
 
-/// release コマンド (stub)
+/// release command (stub)
 pub fn run_release(
   _ctx : ReleaseContext,
   _github : @github.GitHubClient
@@ -62,12 +62,12 @@ pub fn run_release(
   raise WorkflowError("Workflow requires native target")
 }
 
-/// publish コマンド (stub)
+/// publish command (stub)
 pub fn run_publish(_ctx : ReleaseContext) -> Unit raise WorkflowError {
   raise WorkflowError("Workflow requires native target")
 }
 
-/// モノレポ用: 複数パッケージの更新 (stub)
+/// Monorepo: update multiple packages (stub)
 pub fn run_update_packages(
   _config : @config.Config,
   _repo : @git.Repository,
@@ -77,7 +77,7 @@ pub fn run_update_packages(
   raise WorkflowError("Workflow requires native target")
 }
 
-/// モノレポ用: 複数パッケージの公開 (stub)
+/// Monorepo: publish multiple packages (stub)
 pub fn run_publish_packages(
   _config : @config.Config,
   _dry_run : Bool,
