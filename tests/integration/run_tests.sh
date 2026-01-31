@@ -372,6 +372,173 @@ EOF
   rm -rf "$TEST_DIR"
 }
 
+test_check_json_output() {
+  log_info "Testing: check command with JSON output"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  git tag v0.1.0
+  git commit -q --allow-empty -m "feat: add new feature"
+
+  # JSON 出力
+  output=$($BINARY check -o json 2>&1)
+
+  # 有効な JSON かチェック（開始と終了の括弧）
+  if echo "$output" | grep -q '^{' && echo "$output" | grep -q '}$'; then
+    log_pass "check -o json outputs valid JSON structure"
+  else
+    log_fail "check -o json should output valid JSON"
+  fi
+
+  # 必要なフィールドが含まれているか
+  if echo "$output" | grep -q '"latest_tag"' && \
+     echo "$output" | grep -q '"commits_count"' && \
+     echo "$output" | grep -q '"suggested_bump"'; then
+    log_pass "check -o json contains required fields"
+  else
+    log_fail "check -o json missing required fields"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_update_json_output() {
+  log_info "Testing: update command with JSON output"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  git tag v0.1.0
+  git commit -q --allow-empty -m "feat: add new feature"
+
+  # JSON 出力 (dry-run)
+  output=$($BINARY update --dry-run -o json 2>&1)
+
+  # 有効な JSON かチェック
+  if echo "$output" | grep -q '"old_version"' && \
+     echo "$output" | grep -q '"new_version"' && \
+     echo "$output" | grep -q '"bump_type"'; then
+    log_pass "update -o json contains version info"
+  else
+    log_fail "update -o json missing version info"
+  fi
+
+  # バージョンの値が正しいか
+  if echo "$output" | grep -q '"old_version":"0.1.0"' && \
+     echo "$output" | grep -q '"new_version":"0.2.0"'; then
+    log_pass "update -o json shows correct versions"
+  else
+    log_fail "update -o json should show 0.1.0 -> 0.2.0"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_generate_completions() {
+  log_info "Testing: generate-completions command"
+
+  # bash
+  output=$($BINARY generate-completions bash 2>&1)
+  if echo "$output" | grep -q '_moon_release_completions'; then
+    log_pass "generate-completions bash"
+  else
+    log_fail "generate-completions bash should output completion function"
+  fi
+
+  # zsh
+  output=$($BINARY generate-completions zsh 2>&1)
+  if echo "$output" | grep -q '#compdef moon-release'; then
+    log_pass "generate-completions zsh"
+  else
+    log_fail "generate-completions zsh should output compdef"
+  fi
+
+  # fish
+  output=$($BINARY generate-completions fish 2>&1)
+  if echo "$output" | grep -q 'complete -c moon-release'; then
+    log_pass "generate-completions fish"
+  else
+    log_fail "generate-completions fish should output complete commands"
+  fi
+
+  # invalid shell
+  output=$($BINARY generate-completions invalid 2>&1)
+  if echo "$output" | grep -q "unsupported shell"; then
+    log_pass "generate-completions rejects invalid shell"
+  else
+    log_fail "generate-completions should reject invalid shell"
+  fi
+}
+
+test_generate_schema() {
+  log_info "Testing: generate-schema command"
+
+  output=$($BINARY generate-schema 2>&1)
+
+  # JSON Schema の基本構造
+  if echo "$output" | grep -q '"\$schema"' && \
+     echo "$output" | grep -q '"properties"'; then
+    log_pass "generate-schema outputs valid JSON Schema structure"
+  else
+    log_fail "generate-schema should output JSON Schema"
+  fi
+
+  # 主要なプロパティが含まれているか
+  if echo "$output" | grep -q '"pr_title"' && \
+     echo "$output" | grep -q '"git_release_enable"' && \
+     echo "$output" | grep -q '"publish"'; then
+    log_pass "generate-schema contains config properties"
+  else
+    log_fail "generate-schema missing config properties"
+  fi
+
+  # 新しく追加したプロパティ
+  if echo "$output" | grep -q '"git_release_latest"' && \
+     echo "$output" | grep -q '"publish_timeout"' && \
+     echo "$output" | grep -q '"max_analyze_commits"'; then
+    log_pass "generate-schema contains new config options"
+  else
+    log_fail "generate-schema missing new config options"
+  fi
+}
+
+test_max_analyze_commits() {
+  log_info "Testing: max_analyze_commits config option"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  git tag v0.1.0
+
+  # 複数のコミットを追加
+  for i in 1 2 3 4 5; do
+    git commit -q --allow-empty -m "feat: feature $i"
+  done
+
+  # max_analyze_commits: 2 の設定を作成
+  cat > release.json << 'EOF'
+{
+  "max_analyze_commits": 2
+}
+EOF
+
+  git add release.json
+  git commit -q -m "chore: add config"
+
+  # check コマンドで確認（2件のみ表示されるはず）
+  output=$($BINARY check 2>&1)
+
+  # コミット数が制限されているか（完全な検証は難しいので、エラーなく実行できることを確認）
+  if echo "$output" | grep -q "Commits since last tag"; then
+    log_pass "max_analyze_commits config is accepted"
+  else
+    log_fail "max_analyze_commits config should be accepted"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
 # ===== メイン =====
 
 main() {
@@ -408,6 +575,11 @@ main() {
   test_update_force_bump
   test_dirty_check
   test_prerelease
+  test_check_json_output
+  test_update_json_output
+  test_generate_completions
+  test_generate_schema
+  test_max_analyze_commits
 
   echo ""
   echo "================================"
