@@ -7,10 +7,40 @@ pub(all) enum BumpType {
 
 /// バージョンをバンプ
 pub fn bump(version : Version, typ : BumpType) -> Version {
+  bump_with_prerelease(version, typ, None)
+}
+
+/// バージョンをバンプ（prerelease 指定可能）
+pub fn bump_with_prerelease(
+  version : Version,
+  typ : BumpType,
+  prerelease : String?
+) -> Version {
   match typ {
-    Major => { ..version, major: version.major + 1, minor: 0, patch: 0, prerelease: None }
-    Minor => { ..version, minor: version.minor + 1, patch: 0, prerelease: None }
-    Patch => { ..version, patch: version.patch + 1, prerelease: None }
+    Major =>
+      Version::{
+        major: version.major + 1,
+        minor: 0,
+        patch: 0,
+        prerelease,
+        build_metadata: None,
+      }
+    Minor =>
+      Version::{
+        major: version.major,
+        minor: version.minor + 1,
+        patch: 0,
+        prerelease,
+        build_metadata: None,
+      }
+    Patch =>
+      Version::{
+        major: version.major,
+        minor: version.minor,
+        patch: version.patch + 1,
+        prerelease,
+        build_metadata: None,
+      }
   }
 }
 

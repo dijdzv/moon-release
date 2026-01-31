@@ -109,3 +109,48 @@ test "version compare" {
   assert_true(v1.compare(v4) < 0)
   assert_true(v1.compare(v1) == 0)
 }
+
+test "version compare with prerelease" {
+  // 1.0.0-alpha < 1.0.0
+  let alpha = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("alpha"), build_metadata: None }
+  let release = Version::{ major: 1, minor: 0, patch: 0, prerelease: None, build_metadata: None }
+
+  assert_true(alpha.compare(release) < 0)
+  assert_true(release.compare(alpha) > 0)
+}
+
+test "version compare prerelease order" {
+  // SemVer 2.0.0: 1.0.0-alpha < 1.0.0-alpha.1 < 1.0.0-alpha.beta < 1.0.0-beta < 1.0.0-beta.2 < 1.0.0-beta.11 < 1.0.0-rc.1 < 1.0.0
+  let alpha = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("alpha"), build_metadata: None }
+  let alpha1 = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("alpha.1"), build_metadata: None }
+  let alpha_beta = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("alpha.beta"), build_metadata: None }
+  let beta = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("beta"), build_metadata: None }
+  let beta2 = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("beta.2"), build_metadata: None }
+  let beta11 = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("beta.11"), build_metadata: None }
+  let rc1 = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("rc.1"), build_metadata: None }
+  let release = Version::{ major: 1, minor: 0, patch: 0, prerelease: None, build_metadata: None }
+
+  assert_true(alpha.compare(alpha1) < 0)
+  assert_true(alpha1.compare(alpha_beta) < 0)
+  assert_true(alpha_beta.compare(beta) < 0)
+  assert_true(beta.compare(beta2) < 0)
+  assert_true(beta2.compare(beta11) < 0)
+  assert_true(beta11.compare(rc1) < 0)
+  assert_true(rc1.compare(release) < 0)
+}
+
+test "version compare prerelease numeric vs string" {
+  // 数値部分は数値として比較（2 < 11）
+  let v2 = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("beta.2"), build_metadata: None }
+  let v11 = Version::{ major: 1, minor: 0, patch: 0, prerelease: Some("beta.11"), build_metadata: None }
+
+  assert_true(v2.compare(v11) < 0)
+}
+
+test "version compare build metadata ignored" {
+  // build metadata は比較に影響しない
+  let v1 = Version::{ major: 1, minor: 0, patch: 0, prerelease: None, build_metadata: Some("build.1") }
+  let v2 = Version::{ major: 1, minor: 0, patch: 0, prerelease: None, build_metadata: Some("build.999") }
+
+  assert_true(v1.compare(v2) == 0)
+}

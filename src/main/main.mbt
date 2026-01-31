@@ -219,6 +219,7 @@ async fn cmd_update(
     Some(v) => v
     None => {
       println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
+      println("Hint: Version should follow semver format (e.g., 1.2.3 or 1.2.3-alpha)")
       return
     }
   }
@@ -229,12 +230,14 @@ async fn cmd_update(
   } catch {
     e => {
       println("Error getting commits: " + e.to_string())
+      println("Hint: Make sure you are in a git repository with at least one commit")
       return
     }
   }
 
   if commits.is_empty() {
     println("No commits found since last tag. Nothing to release.")
+    println("Hint: Create new commits or use 'moon-release set-version' to set version manually")
     return
   }
 
@@ -251,6 +254,7 @@ async fn cmd_update(
         Some(t) => t
         None => {
           println("No releasable commits found (no feat, fix, or breaking changes)")
+          println("Hint: Use Conventional Commits (feat:, fix:) or --bump to force a version bump")
           return
         }
       }
@@ -335,6 +339,7 @@ async fn cmd_release_pr(
     Some(v) => v
     None => {
       println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
+      println("Hint: Version should follow semver format (e.g., 1.2.3)")
       return
     }
   }
@@ -345,6 +350,7 @@ async fn cmd_release_pr(
   } catch {
     e => {
       println("Error getting commits: " + e.to_string())
+      println("Hint: Make sure you are in a git repository with at least one commit")
       return
     }
   }
@@ -367,6 +373,7 @@ async fn cmd_release_pr(
         Some(t) => t
         None => {
           println("No releasable commits found")
+          println("Hint: Use Conventional Commits or --bump to force a version bump")
           return
         }
       }
@@ -392,6 +399,7 @@ async fn cmd_release_pr(
   } catch {
     e => {
       println("Error: " + e.to_string())
+      println("Hint: Make sure gh CLI is installed and you're logged in (gh auth login)")
       return
     }
   }
@@ -440,6 +448,7 @@ async fn cmd_release(
     Some(v) => v
     None => {
       println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
+      println("Hint: Version should follow semver format (e.g., 1.2.3)")
       return
     }
   }
@@ -450,6 +459,7 @@ async fn cmd_release(
   } catch {
     e => {
       println("Error getting commits: " + e.to_string())
+      println("Hint: Make sure you are in a git repository")
       return
     }
   }
@@ -469,8 +479,22 @@ async fn cmd_release(
       }
   }
 
+  // prerelease 識別子を取得
+  let prerelease : String? = try {
+    Some(subcmd.get_one("prerelease"))
+  } catch {
+    _ => None
+  }
+
+  // prerelease が指定されているが、config で許可されていない場合はエラー
+  if prerelease is Some(_) && not(config.allow_prerelease) {
+    println("Error: Prerelease is not allowed in configuration.")
+    println("Hint: Set 'allow_prerelease: true' in release.json to enable prereleases")
+    return
+  }
+
   // 新しいバージョンを計算
-  let new_version = @semver.bump(current_version, bump_type)
+  let new_version = @semver.bump_with_prerelease(current_version, bump_type, prerelease)
 
   // コンテキストを作成
   let ctx = @workflow.ReleaseContext::new(
@@ -489,6 +513,7 @@ async fn cmd_release(
   } catch {
     e => {
       println("Error: " + e.to_string())
+      println("Hint: Make sure gh CLI is installed and you're logged in (gh auth login)")
       return
     }
   }

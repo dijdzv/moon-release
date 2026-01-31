@@ -75,3 +75,48 @@ test "determine_bump chore returns None" {
     None => fail("Expected Some")
   }
 }
+
+test "bump_with_prerelease alpha" {
+  let v = Version::{
+    major: 1,
+    minor: 2,
+    patch: 3,
+    prerelease: None,
+    build_metadata: None,
+  }
+  let result = bump_with_prerelease(v, Minor, Some("alpha"))
+  assert_eq(result.major, 1)
+  assert_eq(result.minor, 3)
+  assert_eq(result.patch, 0)
+  assert_eq(result.prerelease, Some("alpha"))
+  assert_eq(result.build_metadata, None)
+}
+
+test "bump_with_prerelease rc.1" {
+  let v = Version::{
+    major: 2,
+    minor: 0,
+    patch: 0,
+    prerelease: None,
+    build_metadata: None,
+  }
+  let result = bump_with_prerelease(v, Major, Some("rc.1"))
+  assert_eq(result.major, 3)
+  assert_eq(result.minor, 0)
+  assert_eq(result.patch, 0)
+  assert_eq(result.prerelease, Some("rc.1"))
+}
+
+test "bump_with_prerelease None clears prerelease" {
+  let v = Version::{
+    major: 1,
+    minor: 0,
+    patch: 0,
+    prerelease: Some("beta"),
+    build_metadata: Some("build.123"),
+  }
+  let result = bump_with_prerelease(v, Patch, None)
+  assert_eq(result.patch, 1)
+  assert_eq(result.prerelease, None)
+  assert_eq(result.build_metadata, None)
+}

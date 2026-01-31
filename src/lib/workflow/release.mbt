@@ -861,59 +861,15 @@ pub async fn run_semver_check(
     e => raise WorkflowError("Failed to load current API: " + e.to_string())
   }
 
-  // 5. タグをチェックアウト
-  if verbose {
-    println("  Checking out tag: " + latest_tag)
-  }
-  let checkout_result = try {
-    @executor.run_git(repo, ["checkout", latest_tag])
-  } catch {
-    e => raise WorkflowError("Failed to checkout tag: " + e.to_string())
-  }
-  if not(checkout_result.is_success()) {
-    raise WorkflowError("Failed to checkout tag: " + checkout_result.stderr)
-  }
+  // 5. タグをチェックアウトして古い API を取得（安全なブランチ復帰を保証）
+  let old_apis = get_old_apis_with_safe_checkout(
+    repo,
+    latest_tag,
+    current_branch,
+    verbose,
+  )
 
-  // 6. タグのコードで moon doc を実行
-  if verbose {
-    println("  Generating docs for previous version...")
-  }
-  let old_doc_result = try {
-    @executor.run_command(["moon", "doc"])
-  } catch {
-    e => {
-      // エラーが発生しても元のブランチに戻る
-      let _ = try {
-        @executor.run_git(repo, ["checkout", current_branch])
-      } catch {
-        _ => @executor.CommandResult::failed("")
-      }
-      raise WorkflowError("Failed to run moon doc on tag: " + e.to_string())
-    }
-  }
-
-  // 7. タグの package_data.json を読み込む
-  let old_apis = if old_doc_result.is_success() {
-    try {
-      load_package_apis("target/doc")
-    } catch {
-      _ => @semver_check.PackageApi::empty()
-    }
-  } else {
-    @semver_check.PackageApi::empty()
-  }
-
-  // 8. 元のブランチに戻る
-  if verbose {
-    println("  Restoring original branch...")
-  }
-  let _ = try {
-    @executor.run_git(repo, ["checkout", current_branch])
-  } catch {
-    e => raise WorkflowError("Failed to restore branch: " + e.to_string())
-  }
-
-  // 9. API を比較
+  // 6. API を比較
   if verbose {
     println("  Comparing APIs...")
   }
@@ -925,6 +881,82 @@ pub async fn run_semver_check(
   }
 
   result
+}
+
+/// タグをチェックアウトして古い API を取得し、必ず元のブランチに戻る
+async fn get_old_apis_with_safe_checkout(
+  repo : @git.Repository,
+  tag : String,
+  original_branch : String,
+  verbose : Bool
+) -> @semver_check.PackageApi raise WorkflowError {
+  // タグをチェックアウト
+  if verbose {
+    println("  Checking out tag: " + tag)
+  }
+  let checkout_result = try {
+    @executor.run_git(repo, ["checkout", tag])
+  } catch {
+    e => raise WorkflowError("Failed to checkout tag: " + e.to_string())
+  }
+  if not(checkout_result.is_success()) {
+    raise WorkflowError("Failed to checkout tag: " + checkout_result.stderr)
+  }
+
+  // この時点からは必ず元のブランチに戻る必要がある
+
+  // タグのコードで moon doc を実行
+  if verbose {
+    println("  Generating docs for previous version...")
+  }
+  let old_doc_result = try {
+    @executor.run_command(["moon", "doc"])
+  } catch {
+    e => {
+      restore_branch(repo, original_branch, verbose)
+      raise WorkflowError("Failed to run moon doc on tag: " + e.to_string())
+    }
+  }
+
+  // package_data.json を読み込む
+  let old_apis = if old_doc_result.is_success() {
+    try {
+      load_package_apis("target/doc")
+    } catch {
+      _ => @semver_check.PackageApi::empty()
+    }
+  } else {
+    @semver_check.PackageApi::empty()
+  }
+
+  // 元のブランチに戻る
+  restore_branch(repo, original_branch, verbose)
+
+  old_apis
+}
+
+/// 元のブランチに戻る（エラーは警告として処理）
+async fn restore_branch(
+  repo : @git.Repository,
+  branch : String,
+  verbose : Bool
+) -> Unit {
+  if verbose {
+    println("  Restoring original branch...")
+  }
+  let result = try {
+    @executor.run_git(repo, ["checkout", branch])
+  } catch {
+    e => {
+      println("Warning: Failed to restore branch: " + e.to_string())
+      println("You may need to manually checkout: git checkout " + branch)
+      return
+    }
+  }
+  if not(result.is_success()) {
+    println("Warning: Failed to restore branch: " + result.stderr)
+    println("You may need to manually checkout: git checkout " + branch)
+  }
 }
 
 /// target/doc から package_data.json を読み込む

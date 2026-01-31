@@ -82,10 +82,10 @@ pub fn PackageConfig::default(name : String, path : String) -> PackageConfig {
 
 /// JSON から設定をパース（デフォルト値とマージ）
 pub fn Config::parse(content : String) -> Config raise ConfigError {
-  let default = Config::default()
+  let d = Config::default()
 
   if content.trim().is_empty() {
-    return default
+    return d
   }
 
   let json = try {
@@ -99,181 +99,43 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     _ => raise ConfigError("Expected JSON object")
   }
 
-  // 各フィールドをオプショナルでパース
-  let pr_title = match obj.get("pr_title") {
-    Some(String(s)) => s
-    Some(_) => raise ConfigError("'pr_title' must be a string")
-    None => default.pr_title
-  }
-
-  let pr_draft = match obj.get("pr_draft") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'pr_draft' must be a boolean")
-    None => default.pr_draft
-  }
-
-  let pr_labels = match obj.get("pr_labels") {
-    Some(Array(arr)) => {
-      let result : Array[String] = []
-      for i = 0; i < arr.length(); i = i + 1 {
-        match arr[i] {
-          String(s) => result.push(s)
-          _ => raise ConfigError("'pr_labels' must be an array of strings")
-        }
-      }
-      result
-    }
-    Some(_) => raise ConfigError("'pr_labels' must be an array")
-    None => default.pr_labels
-  }
-
-  let pr_body = match obj.get("pr_body") {
-    Some(String(s)) => s
-    Some(_) => raise ConfigError("'pr_body' must be a string")
-    None => default.pr_body
-  }
-
-  let allow_prerelease = match obj.get("allow_prerelease") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'allow_prerelease' must be a boolean")
-    None => default.allow_prerelease
-  }
-
-  let git_tag_enable = match obj.get("git_tag_enable") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'git_tag_enable' must be a boolean")
-    None => default.git_tag_enable
-  }
-
-  let git_tag_name = match obj.get("git_tag_name") {
-    Some(String(s)) => s
-    Some(_) => raise ConfigError("'git_tag_name' must be a string")
-    None => default.git_tag_name
-  }
-
-  let git_release_enable = match obj.get("git_release_enable") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'git_release_enable' must be a boolean")
-    None => default.git_release_enable
-  }
-
-  let git_release_draft = match obj.get("git_release_draft") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'git_release_draft' must be a boolean")
-    None => default.git_release_draft
-  }
-
-  let git_release_name = match obj.get("git_release_name") {
-    Some(String(s)) => s
-    Some(_) => raise ConfigError("'git_release_name' must be a string")
-    None => default.git_release_name
-  }
-
-  let git_release_body : String? = match obj.get("git_release_body") {
-    Some(String(s)) => Some(s)
-    Some(Null) => None
-    Some(_) => raise ConfigError("'git_release_body' must be a string")
-    None => default.git_release_body
-  }
-
-  let publish = match obj.get("publish") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'publish' must be a boolean")
-    None => default.publish
-  }
-
-  let publish_frozen = match obj.get("publish_frozen") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'publish_frozen' must be a boolean")
-    None => default.publish_frozen
-  }
-
-  let semver_check = match obj.get("semver_check") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'semver_check' must be a boolean")
-    None => default.semver_check
-  }
-
-  let pr_branch_prefix = match obj.get("pr_branch_prefix") {
-    Some(String(s)) => s
-    Some(_) => raise ConfigError("'pr_branch_prefix' must be a string")
-    None => default.pr_branch_prefix
-  }
-
-  let base_branch = match obj.get("base_branch") {
-    Some(String(s)) => s
-    Some(_) => raise ConfigError("'base_branch' must be a string")
-    None => default.base_branch
-  }
-
+  // packages は特別な処理が必要
   let packages = match obj.get("packages") {
     Some(Array(arr)) => parse_packages(arr)
     Some(_) => raise ConfigError("'packages' must be an array")
-    None => default.packages
-  }
-
-  let registry_check = match obj.get("registry_check") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'registry_check' must be a boolean")
-    None => default.registry_check
-  }
-
-  let allow_dirty = match obj.get("allow_dirty") {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'allow_dirty' must be a boolean")
-    None => default.allow_dirty
-  }
-
-  let custom_major_increment_regex : String? = match obj.get(
-    "custom_major_increment_regex",
-  ) {
-    Some(String(s)) => Some(s)
-    Some(Null) => None
-    Some(_) => raise ConfigError("'custom_major_increment_regex' must be a string")
-    None => default.custom_major_increment_regex
-  }
-
-  let custom_minor_increment_regex : String? = match obj.get(
-    "custom_minor_increment_regex",
-  ) {
-    Some(String(s)) => Some(s)
-    Some(Null) => None
-    Some(_) => raise ConfigError("'custom_minor_increment_regex' must be a string")
-    None => default.custom_minor_increment_regex
+    None => d.packages
   }
 
   Config::{
-    pr_title,
-    pr_draft,
-    pr_labels,
-    pr_body,
-    allow_prerelease,
-    git_tag_enable,
-    git_tag_name,
-    git_release_enable,
-    git_release_draft,
-    git_release_name,
-    git_release_body,
-    publish,
-    publish_frozen,
-    semver_check,
-    pr_branch_prefix,
-    base_branch,
+    pr_title: parse_string(obj, "pr_title", d.pr_title),
+    pr_draft: parse_bool(obj, "pr_draft", d.pr_draft),
+    pr_labels: parse_string_array(obj, "pr_labels", d.pr_labels),
+    pr_body: parse_string(obj, "pr_body", d.pr_body),
+    allow_prerelease: parse_bool(obj, "allow_prerelease", d.allow_prerelease),
+    git_tag_enable: parse_bool(obj, "git_tag_enable", d.git_tag_enable),
+    git_tag_name: parse_string(obj, "git_tag_name", d.git_tag_name),
+    git_release_enable: parse_bool(obj, "git_release_enable", d.git_release_enable),
+    git_release_draft: parse_bool(obj, "git_release_draft", d.git_release_draft),
+    git_release_name: parse_string(obj, "git_release_name", d.git_release_name),
+    git_release_body: parse_optional_string(obj, "git_release_body", d.git_release_body),
+    publish: parse_bool(obj, "publish", d.publish),
+    publish_frozen: parse_bool(obj, "publish_frozen", d.publish_frozen),
+    semver_check: parse_bool(obj, "semver_check", d.semver_check),
+    pr_branch_prefix: parse_string(obj, "pr_branch_prefix", d.pr_branch_prefix),
+    base_branch: parse_string(obj, "base_branch", d.base_branch),
     packages,
-    registry_check,
-    allow_dirty,
-    custom_major_increment_regex,
-    custom_minor_increment_regex,
+    registry_check: parse_bool(obj, "registry_check", d.registry_check),
+    allow_dirty: parse_bool(obj, "allow_dirty", d.allow_dirty),
+    custom_major_increment_regex: parse_optional_string(
+      obj,
+      "custom_major_increment_regex",
+      d.custom_major_increment_regex,
+    ),
+    custom_minor_increment_regex: parse_optional_string(
+      obj,
+      "custom_minor_increment_regex",
+      d.custom_minor_increment_regex,
+    ),
   }
 }
 
@@ -283,41 +145,136 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
   for i = 0; i < arr.length(); i = i + 1 {
     match arr[i] {
       Object(pkg_obj) => {
-        let name = match pkg_obj.get("name") {
-          Some(String(s)) => s
-          Some(_) => raise ConfigError("package 'name' must be a string")
-          None => raise ConfigError("package 'name' is required")
-        }
-        let path = match pkg_obj.get("path") {
-          Some(String(s)) => s
-          Some(_) => raise ConfigError("package 'path' must be a string")
-          None => "."
-        }
-        let publish = match pkg_obj.get("publish") {
-          Some(True) => true
-          Some(False) => false
-          Some(_) => raise ConfigError("package 'publish' must be a boolean")
-          None => true
-        }
-        let version_group : String? = match pkg_obj.get("version_group") {
-          Some(String(s)) => Some(s)
-          Some(Null) => None
-          Some(_) => raise ConfigError("package 'version_group' must be a string")
-          None => None
-        }
-        result.push(
-          PackageConfig::{
-            name,
-            path,
-            publish,
-            version_group,
-          },
-        )
+        let name = parse_pkg_required_string(pkg_obj, "name")
+        let path = parse_pkg_string(pkg_obj, "path", ".")
+        let publish = parse_pkg_bool(pkg_obj, "publish", true)
+        let version_group = parse_pkg_optional_string(pkg_obj, "version_group", None)
+        result.push(PackageConfig::{ name, path, publish, version_group })
       }
       _ => raise ConfigError("package must be an object")
     }
   }
   result
+}
+
+// ============================================================================
+// JSON パースヘルパー関数
+// ============================================================================
+
+/// 文字列フィールドをパース
+fn parse_string(
+  obj : Map[String, Json],
+  key : String,
+  default : String
+) -> String raise ConfigError {
+  match obj.get(key) {
+    Some(String(s)) => s
+    Some(_) => raise ConfigError("'" + key + "' must be a string")
+    None => default
+  }
+}
+
+/// 必須の文字列フィールドをパース（パッケージ用）
+fn parse_pkg_required_string(
+  obj : Map[String, Json],
+  key : String
+) -> String raise ConfigError {
+  match obj.get(key) {
+    Some(String(s)) => s
+    Some(_) => raise ConfigError("package '" + key + "' must be a string")
+    None => raise ConfigError("package '" + key + "' is required")
+  }
+}
+
+/// 文字列フィールドをパース（パッケージ用）
+fn parse_pkg_string(
+  obj : Map[String, Json],
+  key : String,
+  default : String
+) -> String raise ConfigError {
+  match obj.get(key) {
+    Some(String(s)) => s
+    Some(_) => raise ConfigError("package '" + key + "' must be a string")
+    None => default
+  }
+}
+
+/// オプショナルな文字列フィールドをパース
+fn parse_optional_string(
+  obj : Map[String, Json],
+  key : String,
+  default : String?
+) -> String? raise ConfigError {
+  match obj.get(key) {
+    Some(String(s)) => Some(s)
+    Some(Null) => None
+    Some(_) => raise ConfigError("'" + key + "' must be a string")
+    None => default
+  }
+}
+
+/// オプショナルな文字列フィールドをパース（パッケージ用）
+fn parse_pkg_optional_string(
+  obj : Map[String, Json],
+  key : String,
+  default : String?
+) -> String? raise ConfigError {
+  match obj.get(key) {
+    Some(String(s)) => Some(s)
+    Some(Null) => None
+    Some(_) => raise ConfigError("package '" + key + "' must be a string")
+    None => default
+  }
+}
+
+/// ブーリアンフィールドをパース
+fn parse_bool(
+  obj : Map[String, Json],
+  key : String,
+  default : Bool
+) -> Bool raise ConfigError {
+  match obj.get(key) {
+    Some(True) => true
+    Some(False) => false
+    Some(_) => raise ConfigError("'" + key + "' must be a boolean")
+    None => default
+  }
+}
+
+/// ブーリアンフィールドをパース（パッケージ用）
+fn parse_pkg_bool(
+  obj : Map[String, Json],
+  key : String,
+  default : Bool
+) -> Bool raise ConfigError {
+  match obj.get(key) {
+    Some(True) => true
+    Some(False) => false
+    Some(_) => raise ConfigError("package '" + key + "' must be a boolean")
+    None => default
+  }
+}
+
+/// 文字列配列フィールドをパース
+fn parse_string_array(
+  obj : Map[String, Json],
+  key : String,
+  default : Array[String]
+) -> Array[String] raise ConfigError {
+  match obj.get(key) {
+    Some(Array(arr)) => {
+      let result : Array[String] = []
+      for i = 0; i < arr.length(); i = i + 1 {
+        match arr[i] {
+          String(s) => result.push(s)
+          _ => raise ConfigError("'" + key + "' must be an array of strings")
+        }
+      }
+      result
+    }
+    Some(_) => raise ConfigError("'" + key + "' must be an array")
+    None => default
+  }
 }
 
 /// タイトルテンプレートにバージョンを適用

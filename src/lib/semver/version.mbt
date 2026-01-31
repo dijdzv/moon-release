@@ -114,8 +114,12 @@ pub fn Version::to_string(self : Version) -> String {
   }
 }
 
-/// バージョンを比較
+/// バージョンを比較（SemVer 2.0.0 準拠）
+/// - major.minor.patch を比較
+/// - 同じ場合、prerelease を比較（prerelease なし > prerelease あり）
+/// - build_metadata は比較に影響しない
 pub fn Version::compare(self : Version, other : Version) -> Int {
+  // major.minor.patch を比較
   if self.major != other.major {
     return if self.major > other.major { 1 } else { -1 }
   }
@@ -125,5 +129,99 @@ pub fn Version::compare(self : Version, other : Version) -> Int {
   if self.patch != other.patch {
     return if self.patch > other.patch { 1 } else { -1 }
   }
-  0
+
+  // prerelease を比較
+  match (self.prerelease, other.prerelease) {
+    // 両方 prerelease なし → 同じ
+    (None, None) => 0
+    // self のみ prerelease あり → self が小さい
+    (Some(_), None) => -1
+    // other のみ prerelease あり → self が大きい
+    (None, Some(_)) => 1
+    // 両方 prerelease あり → 文字列を比較
+    (Some(self_pre), Some(other_pre)) => compare_prerelease(self_pre, other_pre)
+  }
+}
+
+/// prerelease 文字列を比較（SemVer 2.0.0 仕様）
+/// - . で分割して各部分を比較
+/// - 数値のみの部分は数値として比較
+/// - それ以外は辞書順で比較
+/// - 部分が少ない方が小さい（alpha < alpha.1）
+fn compare_prerelease(a : String, b : String) -> Int {
+  let a_parts : Array[String] = a.split(".").map(fn(sv) { sv.to_string() }).collect()
+  let b_parts : Array[String] = b.split(".").map(fn(sv) { sv.to_string() }).collect()
+
+  let min_len = if a_parts.length() < b_parts.length() {
+    a_parts.length()
+  } else {
+    b_parts.length()
+  }
+
+  for i = 0; i < min_len; i = i + 1 {
+    let cmp = compare_prerelease_part(a_parts[i], b_parts[i])
+    if cmp != 0 {
+      return cmp
+    }
+  }
+
+  // 共通部分が同じなら、部分が多い方が大きい
+  if a_parts.length() < b_parts.length() {
+    -1
+  } else if a_parts.length() > b_parts.length() {
+    1
+  } else {
+    0
+  }
+}
+
+/// prerelease の各部分を比較
+fn compare_prerelease_part(a : String, b : String) -> Int {
+  let a_num = parse_uint(a)
+  let b_num = parse_uint(b)
+
+  match (a_num, b_num) {
+    // 両方数値 → 数値として比較
+    (Some(an), Some(bn)) =>
+      if an < bn {
+        -1
+      } else if an > bn {
+        1
+      } else {
+        0
+      }
+    // a のみ数値 → 数値が先（小さい）
+    (Some(_), None) => -1
+    // b のみ数値 → 数値が先（小さい）
+    (None, Some(_)) => 1
+    // 両方文字列 → 辞書順
+    (None, None) => compare_string(a, b)
+  }
+}
+
+/// 文字列を辞書順で比較
+fn compare_string(a : String, b : String) -> Int {
+  let a_chars = a.to_array()
+  let b_chars = b.to_array()
+  let min_len = if a_chars.length() < b_chars.length() {
+    a_chars.length()
+  } else {
+    b_chars.length()
+  }
+
+  for i = 0; i < min_len; i = i + 1 {
+    if a_chars[i] < b_chars[i] {
+      return -1
+    } else if a_chars[i] > b_chars[i] {
+      return 1
+    }
+  }
+
+  if a_chars.length() < b_chars.length() {
+    -1
+  } else if a_chars.length() > b_chars.length() {
+    1
+  } else {
+    0
+  }
 }
