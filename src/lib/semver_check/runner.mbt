@@ -1,9 +1,4 @@
-/// semver チェックエラー
-pub suberror SemverCheckError {
-  SemverCheckError(String)
-}
-
-/// 複数の package_data.json を読み込んでマージ
+/// Merge multiple package_data.json files
 pub fn merge_package_apis(apis : Array[PackageApi]) -> PackageApi {
   let merged = PackageApi::{
     name: "",

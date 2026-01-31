@@ -1,8 +1,8 @@
-/// コマンド実行結果
+/// Command execution result
 pub struct CommandResult {
-  pub exit_code : Int
-  pub stdout : String
-  pub stderr : String
+  exit_code : Int
+  stdout : String
+  stderr : String
 } derive(Show)
 
 /// Executor エラー

@@ -1,76 +1,76 @@
 # moon-release
 
-MoonBit プロジェクト用のリリース自動化ツール。[release-plz](https://release-plz.dev/) にインスパイアされ、MoonBit エコシステムに最適化されています。
+Automated release management tool for MoonBit projects. Inspired by [release-plz](https://github.com/release-plz/release-plz), optimized for the MoonBit ecosystem.
 
-## 特徴
+## Features
 
-- **Conventional Commits** からセマンティックバージョンを自動決定
-- **GitHub Release** の自動作成（タグ + リリースノート）
-- **Release PR** の自動作成・更新
-- **mooncakes.io** への自動公開
-- **API 互換性チェック**（自前実装の semver-checks）
-- **モノレポ対応**（version_group による同期）
+- **Conventional Commits** - Automatically determine semantic version from commits
+- **GitHub Release** - Automatic creation of tags and release notes
+- **Release PR** - Automatic creation and update of release pull requests
+- **mooncakes.io** - Automatic publishing to the MoonBit package registry
+- **API Compatibility Check** - semver-checks for breaking change detection
+- **Monorepo Support** - Version synchronization via version_group
 
-## インストール
+## Installation
 
 ```bash
-# ソースからビルド
+# Build from source
 git clone https://github.com/dijdzv/moon-release
 cd moon-release
 moon build --target native
 
-# バイナリを PATH に追加
+# Add binary to PATH
 cp target/native/release/build/src/main/main.exe ~/.local/bin/moon-release
 ```
 
-## クイックスタート
+## Quick Start
 
 ```bash
-# 設定ファイルを初期化
+# Initialize configuration file
 moon-release init
 
-# 現在の状態を確認
+# Check current state
 moon-release check
 
-# バージョン更新をプレビュー
+# Preview version update
 moon-release update --dry-run
 
-# バージョンを更新
+# Update version
 moon-release update
 
-# リリース PR を作成
+# Create release PR
 moon-release release-pr
 
-# リリースを作成（タグ + GitHub Release + publish）
+# Create release (tag + GitHub Release + publish)
 moon-release release
 ```
 
-## コマンド
+## Commands
 
 ### `moon-release check`
 
-現在の状態を確認し、推奨されるバージョンバンプを表示します。
+Check the current state and display recommended version bump.
 
 ```bash
 moon-release check
-moon-release check --verbose  # コミット詳細を表示
-moon-release check -o json    # JSON 形式で出力
+moon-release check --verbose  # Show commit details
+moon-release check -o json    # Output in JSON format
 ```
 
 ### `moon-release update`
 
-`moon.mod.json` のバージョンを更新します（コミット/プッシュなし）。
+Update the version in `moon.mod.json` (no commit/push).
 
 ```bash
-moon-release update              # 自動決定
-moon-release update --bump major # 強制的に major バンプ
-moon-release update --dry-run    # プレビューのみ
-moon-release update -o json      # JSON 形式で出力
+moon-release update              # Auto-determine
+moon-release update --bump major # Force major bump
+moon-release update --dry-run    # Preview only
+moon-release update -o json      # Output in JSON format
 ```
 
 ### `moon-release release-pr`
 
-リリース用の Pull Request を作成または更新します。
+Create or update a release Pull Request.
 
 ```bash
 moon-release release-pr
@@ -79,17 +79,17 @@ moon-release release-pr --dry-run
 
 ### `moon-release release`
 
-Git タグと GitHub Release を作成し、mooncakes.io に公開します。
+Create Git tag and GitHub Release, and publish to mooncakes.io.
 
 ```bash
 moon-release release
-moon-release release --prerelease alpha  # プレリリース
+moon-release release --prerelease alpha  # Prerelease
 moon-release release --dry-run
 ```
 
 ### `moon-release set-version`
 
-バージョンを手動で設定します。
+Manually set the version.
 
 ```bash
 moon-release set-version 1.0.0
@@ -97,16 +97,16 @@ moon-release set-version 1.0.0
 
 ### `moon-release init`
 
-設定ファイル `release.json` を作成します。
+Create the configuration file `release.json`.
 
 ```bash
 moon-release init
-moon-release init --force  # 上書き
+moon-release init --force  # Overwrite
 ```
 
 ### `moon-release generate-completions`
 
-シェル補完スクリプトを生成します。
+Generate shell completion scripts.
 
 ```bash
 moon-release generate-completions bash > ~/.local/share/bash-completion/completions/moon-release
@@ -116,15 +116,15 @@ moon-release generate-completions fish > ~/.config/fish/completions/moon-release
 
 ### `moon-release generate-schema`
 
-設定ファイルの JSON Schema を生成します。IDE での補完に使用できます。
+Generate JSON Schema for the configuration file. Can be used for IDE autocompletion.
 
 ```bash
 moon-release generate-schema > release-schema.json
 ```
 
-## 設定
+## Configuration
 
-`release.json` で動作をカスタマイズできます。
+Customize behavior with `release.json`.
 
 ```json
 {
@@ -155,56 +155,56 @@ moon-release generate-schema > release-schema.json
 }
 ```
 
-### 設定オプション
+### Configuration Options
 
-| オプション | デフォルト | 説明 |
-|-----------|-----------|------|
-| `pr_title` | `"chore: release v{{ version }}"` | PR タイトルのテンプレート |
-| `pr_draft` | `false` | ドラフト PR として作成 |
-| `pr_labels` | `[]` | PR に付与するラベル |
-| `pr_body` | - | PR 本文のテンプレート |
-| `pr_branch_prefix` | `"release/"` | リリースブランチのプレフィックス |
-| `base_branch` | `"main"` | PR のベースブランチ |
-| `git_tag_enable` | `true` | Git タグを作成するか |
-| `git_tag_name` | `"v{{ version }}"` | タグ名のテンプレート |
-| `git_release_enable` | `true` | GitHub Release を作成するか |
-| `git_release_draft` | `false` | ドラフトリリースとして作成 |
-| `git_release_name` | `"Release v{{ version }}"` | リリース名のテンプレート |
-| `git_release_body` | `null` | リリース本文のテンプレート（null で自動生成） |
-| `git_release_latest` | `true` | GitHub Release を latest としてマーク |
-| `publish` | `true` | mooncakes.io に公開するか |
-| `publish_frozen` | `false` | `moon publish --frozen` を使用 |
-| `publish_timeout` | `300` | publish のタイムアウト秒数（将来実装予定） |
-| `semver_check` | `false` | API 互換性チェックを実行 |
-| `registry_check` | `false` | 公開前にレジストリのバージョンを確認 |
-| `allow_dirty` | `false` | 未コミット変更があっても実行を許可 |
-| `custom_major_increment_regex` | `null` | Major バンプのカスタム正規表現 |
-| `custom_minor_increment_regex` | `null` | Minor バンプのカスタム正規表現 |
-| `max_analyze_commits` | `null` | 解析するコミット数の上限 |
+| Option | Default | Description |
+|--------|---------|-------------|
+| `pr_title` | `"chore: release v{{ version }}"` | PR title template |
+| `pr_draft` | `false` | Create as draft PR |
+| `pr_labels` | `[]` | Labels to add to PR |
+| `pr_body` | - | PR body template |
+| `pr_branch_prefix` | `"release/"` | Release branch prefix |
+| `base_branch` | `"main"` | PR base branch |
+| `git_tag_enable` | `true` | Whether to create Git tag |
+| `git_tag_name` | `"v{{ version }}"` | Tag name template |
+| `git_release_enable` | `true` | Whether to create GitHub Release |
+| `git_release_draft` | `false` | Create as draft release |
+| `git_release_name` | `"Release v{{ version }}"` | Release name template |
+| `git_release_body` | `null` | Release body template (null for auto-generate) |
+| `git_release_latest` | `true` | Mark GitHub Release as latest |
+| `publish` | `true` | Whether to publish to mooncakes.io |
+| `publish_frozen` | `false` | Use `moon publish --frozen` |
+| `publish_timeout` | `300` | Publish timeout in seconds (future implementation) |
+| `semver_check` | `false` | Run API compatibility check |
+| `registry_check` | `false` | Check registry version before publish |
+| `allow_dirty` | `false` | Allow uncommitted changes |
+| `custom_major_increment_regex` | `null` | Custom regex for major bump |
+| `custom_minor_increment_regex` | `null` | Custom regex for minor bump |
+| `max_analyze_commits` | `null` | Maximum number of commits to analyze |
 
-### テンプレート変数
+### Template Variables
 
-| 変数 | 説明 |
-|------|------|
-| `{{ version }}` | 新しいバージョン番号 |
-| `{{ changelog }}` | 自動生成されたリリースノート（`git_release_body` のみ） |
+| Variable | Description |
+|----------|-------------|
+| `{{ version }}` | New version number |
+| `{{ changelog }}` | Auto-generated release notes (`git_release_body` only) |
 
 ## Conventional Commits
 
-moon-release は [Conventional Commits](https://www.conventionalcommits.org/) を解析してバージョンを自動決定します。
+moon-release parses [Conventional Commits](https://www.conventionalcommits.org/) to automatically determine the version.
 
-| コミットタイプ | バンプ | 例 |
-|--------------|--------|-----|
+| Commit Type | Bump | Example |
+|-------------|------|---------|
 | `feat` | Minor | `feat: add new feature` |
 | `fix` | Patch | `fix: resolve bug` |
 | `feat!` / `fix!` | Major | `feat!: breaking change` |
-| `BREAKING CHANGE:` | Major | footer に記載 |
+| `BREAKING CHANGE:` | Major | In footer |
 
-その他のタイプ（`docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`）はバージョンに影響しません。
+Other types (`docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`) do not affect the version.
 
-## API 互換性チェック（semver_check）
+## API Compatibility Check (semver_check)
 
-`semver_check: true` を設定すると、リリース前に API の破壊的変更を検出します。
+Setting `semver_check: true` detects breaking API changes before release.
 
 ```json
 {
@@ -212,25 +212,25 @@ moon-release は [Conventional Commits](https://www.conventionalcommits.org/) �
 }
 ```
 
-### 検出される変更
+### Detected Changes
 
-| 変更 | 影響 |
-|------|------|
-| pub 型/関数/メソッドの削除 | Breaking (Major) |
-| シグネチャの変更 | Breaking (Major) |
-| 構造体フィールドの削除/変更 | Breaking (Major) |
-| 新しい pub 型/関数の追加 | Addition (Minor) |
+| Change | Impact |
+|--------|--------|
+| Removal of pub type/function/method | Breaking (Major) |
+| Signature change | Breaking (Major) |
+| Struct field removal/change | Breaking (Major) |
+| Addition of new pub type/function | Addition (Minor) |
 
-### 動作の仕組み
+### How It Works
 
-1. 最新タグをチェックアウト → `moon doc` で API を生成
-2. 現在のコードに戻る → `moon doc` で API を生成
-3. 2つの `package_data.json` を比較
-4. 破壊的変更があれば警告を表示
+1. Checkout latest tag → Generate API with `moon doc`
+2. Return to current code → Generate API with `moon doc`
+3. Compare the two `package_data.json` files
+4. Display warning if breaking changes are found
 
-## モノレポ対応
+## Monorepo Support
 
-複数パッケージを含むモノレポでは、`packages` で個別に設定できます。
+For monorepos with multiple packages, configure each package individually with `packages`.
 
 ```json
 {
@@ -258,13 +258,13 @@ moon-release は [Conventional Commits](https://www.conventionalcommits.org/) �
 
 ### version_group
 
-同じ `version_group` を持つパッケージは、グループ内で最も大きなバンプタイプに揃えられます。
+Packages with the same `version_group` are aligned to the largest bump type within the group.
 
-例: `core` に breaking change、`utils` に feat がある場合、両方とも major バンプになります。
+Example: If `core` has a breaking change and `utils` has a feat, both will receive a major bump.
 
 ## GitHub Actions
 
-### 基本的な使い方
+### Basic Usage
 
 ```yaml
 name: Release
@@ -291,29 +291,29 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-### mooncakes.io への自動 publish
+### Auto-publish to mooncakes.io
 
-mooncakes.io に自動で publish するには、認証情報を設定する必要があります。
+To automatically publish to mooncakes.io, you need to configure authentication.
 
-#### 1. トークンの取得
+#### 1. Get Token
 
 ```bash
-# ローカルで認証
+# Authenticate locally
 moon login
 
-# トークンを確認
+# Check token
 cat ~/.moon/credentials.json
 # {"token": "xxxxx", "username": "your-username"}
 ```
 
-#### 2. GitHub Secrets の設定
+#### 2. Configure GitHub Secrets
 
-リポジトリの Settings → Secrets and variables → Actions で以下を設定：
+In your repository's Settings → Secrets and variables → Actions, set:
 
-- `MOONCAKES_TOKEN`: credentials.json の `token` の値
-- `MOONCAKES_USERNAME`: credentials.json の `username` の値
+- `MOONCAKES_TOKEN`: The `token` value from credentials.json
+- `MOONCAKES_USERNAME`: The `username` value from credentials.json
 
-#### 3. ワークフローの設定
+#### 3. Configure Workflow
 
 ```yaml
 - uses: dijdzv/moon-release@main
@@ -324,29 +324,29 @@ cat ~/.moon/credentials.json
     mooncakes-username: ${{ secrets.MOONCAKES_USERNAME }}
 ```
 
-> **⚠️ セキュリティに関する注意**
+> **⚠️ Security Notice**
 >
-> mooncakes.io は現時点で CI 用の限定スコープトークンを提供していません。
-> `~/.moon/credentials.json` のトークンはアカウントの全権限を持つ可能性があります。
-> リスクを理解した上で使用してください。
+> mooncakes.io does not currently provide limited-scope tokens for CI use.
+> The token in `~/.moon/credentials.json` may have full account permissions.
+> Use at your own risk with this understanding.
 
-### ワークフローテンプレート
+### Workflow Template
 
-[templates/release.yml](./templates/release.yml) をリポジトリにコピーして使用できます。
+Copy [templates/release.yml](./templates/release.yml) to your repository.
 
-## release-plz との違い
+## Differences from release-plz
 
-| 機能 | release-plz | moon-release |
-|------|-------------|--------------|
-| プラットフォーム | GitHub, GitLab, Gitea | GitHub のみ |
-| CHANGELOG | git-cliff で自動生成 | なし（GitHub Release で代替） |
-| 依存関係更新 | `cargo update` | なし（MoonBit は minimal version selection） |
-| API 互換性チェック | `cargo-semver-checks` | 自前実装（moon doc 利用） |
-| 設定形式 | TOML | JSON |
-| レジストリ | crates.io | mooncakes.io |
+| Feature | release-plz | moon-release |
+|---------|-------------|--------------|
+| Platform | GitHub, GitLab, Gitea | GitHub only |
+| CHANGELOG | Auto-generated with git-cliff | None (use GitHub Release instead) |
+| Dependency Update | `cargo update` | None (MoonBit uses minimal version selection) |
+| API Compatibility Check | `cargo-semver-checks` | Built-in (uses moon doc) |
+| Config Format | TOML | JSON |
+| Registry | crates.io | mooncakes.io |
 
-詳細は [DESIGN_DECISIONS.md](./DESIGN_DECISIONS.md) を参照してください。
+See [DESIGN_DECISIONS.md](./docs/DESIGN_DECISIONS.md) for details.
 
-## ライセンス
+## License
 
 MIT

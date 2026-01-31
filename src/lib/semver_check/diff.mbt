@@ -1,10 +1,13 @@
-/// API 変更の種類
+/// API change kind
+// Suppress: Compatible is kept for semantic completeness (Breaking/Addition/Compatible triad)
+// even though current implementation only tracks actual changes, not "no change" status.
+#warnings("-unused_constructor")
 pub enum ChangeKind {
-  /// 破壊的変更（Major）
+  /// Breaking change (Major)
   Breaking
-  /// 機能追加（Minor）
+  /// Addition (Minor)
   Addition
-  /// 変更なし
+  /// No change (compatible)
   Compatible
 } derive(Show, Eq)
 

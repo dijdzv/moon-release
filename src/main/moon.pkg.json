@@ -13,8 +13,6 @@
     "TheWaWaR/clap",
     "moonbitlang/async",
     "moonbitlang/async/fs",
-    "moonbitlang/async/process",
-    "moonbitlang/async/stdio",
     "moonbitlang/async/io",
     "moonbitlang/core/json",
     "moonbitlang/core/env"

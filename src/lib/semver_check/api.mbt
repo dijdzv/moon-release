@@ -93,7 +93,7 @@ pub fn parse_package_data(content : String) -> PackageApi raise ParseError {
 }
 
 /// types 配列をパース
-fn parse_types(obj : Map[String, Json]) -> Array[TypeInfo] raise ParseError {
+fn parse_types(obj : Map[String, Json]) -> Array[TypeInfo] {
   let result : Array[TypeInfo] = []
   match obj.get("types") {
     Some(Array(arr)) => {
@@ -121,7 +121,7 @@ fn parse_types(obj : Map[String, Json]) -> Array[TypeInfo] raise ParseError {
 }
 
 /// errors 配列をパース
-fn parse_errors(obj : Map[String, Json]) -> Array[ErrorInfo] raise ParseError {
+fn parse_errors(obj : Map[String, Json]) -> Array[ErrorInfo] {
   let result : Array[ErrorInfo] = []
   match obj.get("errors") {
     Some(Array(arr)) => {
@@ -149,7 +149,7 @@ fn parse_errors(obj : Map[String, Json]) -> Array[ErrorInfo] raise ParseError {
 }
 
 /// traits 配列をパース
-fn parse_traits(obj : Map[String, Json]) -> Array[TraitInfo] raise ParseError {
+fn parse_traits(obj : Map[String, Json]) -> Array[TraitInfo] {
   let result : Array[TraitInfo] = []
   match obj.get("traits") {
     Some(Array(arr)) => {
@@ -177,7 +177,7 @@ fn parse_traits(obj : Map[String, Json]) -> Array[TraitInfo] raise ParseError {
 }
 
 /// values 配列をパース
-fn parse_values(obj : Map[String, Json]) -> Array[ValueInfo] raise ParseError {
+fn parse_values(obj : Map[String, Json]) -> Array[ValueInfo] {
   let result : Array[ValueInfo] = []
   match obj.get("values") {
     Some(Array(arr)) => {

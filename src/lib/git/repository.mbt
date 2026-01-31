@@ -11,12 +11,7 @@ pub struct GitCommit {
   date : String
 } derive(Show, Eq)
 
-/// Git エラー
-pub suberror GitError {
-  GitError(String)
-}
-
-/// リポジトリを開く
+/// Open repository
 pub fn Repository::open(path : String) -> Repository {
   Repository::{ path }
 }

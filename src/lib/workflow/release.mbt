@@ -212,7 +212,10 @@ pub async fn run_release_pr(
   }
 }
 
-/// 既存のリリース PR を検索
+/// Find existing release PR
+// Suppress: WorkflowError declared for API consistency with other workflow functions.
+// Errors are caught internally and returned as None.
+#warnings("-unused_error_type")
 async fn find_existing_release_pr(
   github : @github.GitHubClient,
   branch_prefix : String
@@ -432,17 +435,19 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   println("Published to mooncakes.io")
 }
 
-/// パッケージ更新情報
+/// Package update info
 priv struct PackageUpdateInfo {
   pkg : @config.PackageConfig
   moon_mod_path : String
   moon_mod_content : String
   current_version : @semver.Version
   bump_type : @semver.BumpType
-  commits : Array[(@conventional.ConventionalCommit, String)]
 }
 
-/// モノレポ用: 複数パッケージの更新
+/// Monorepo: update multiple packages
+// Suppress: WorkflowError declared for API consistency. Errors are handled internally
+// with warnings printed to stdout, allowing partial success in monorepo scenarios.
+#warnings("-unused_error_type")
 pub async fn run_update_packages(
   config : @config.Config,
   repo : @git.Repository,
@@ -539,7 +544,6 @@ pub async fn run_update_packages(
         moon_mod_content,
         current_version,
         bump_type,
-        commits,
       },
     )
   }
@@ -642,7 +646,10 @@ async fn get_package_commits(
   @git.parse_conventional_commits(git_commits)
 }
 
-/// モノレポ用: 複数パッケージの公開
+/// Monorepo: publish multiple packages
+// Suppress: WorkflowError declared for API consistency. Errors are handled internally
+// with warnings printed to stdout, allowing partial success in monorepo scenarios.
+#warnings("-unused_error_type")
 pub async fn run_publish_packages(
   config : @config.Config,
   dry_run : Bool,
@@ -707,7 +714,10 @@ pub async fn run_publish_packages(
   }
 }
 
-/// レジストリのバージョンを取得
+/// Get version from registry
+// Suppress: WorkflowError declared for API consistency with other workflow functions.
+// Errors are caught internally and returned as None (package not found).
+#warnings("-unused_error_type")
 pub async fn get_registry_version(
   package_name : String
 ) -> @semver.Version? raise WorkflowError {
