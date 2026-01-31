@@ -20,7 +20,7 @@ cd moon-release
 moon build --target native
 
 # バイナリを PATH に追加
-cp target/native/release/build/main/main ~/.local/bin/moon-release
+cp target/native/release/build/src/main/main.exe ~/.local/bin/moon-release
 ```
 
 ## クイックスタート
@@ -54,6 +54,7 @@ moon-release release
 ```bash
 moon-release check
 moon-release check --verbose  # コミット詳細を表示
+moon-release check -o json    # JSON 形式で出力
 ```
 
 ### `moon-release update`
@@ -64,6 +65,7 @@ moon-release check --verbose  # コミット詳細を表示
 moon-release update              # 自動決定
 moon-release update --bump major # 強制的に major バンプ
 moon-release update --dry-run    # プレビューのみ
+moon-release update -o json      # JSON 形式で出力
 ```
 
 ### `moon-release release-pr`
@@ -102,6 +104,24 @@ moon-release init
 moon-release init --force  # 上書き
 ```
 
+### `moon-release generate-completions`
+
+シェル補完スクリプトを生成します。
+
+```bash
+moon-release generate-completions bash > ~/.local/share/bash-completion/completions/moon-release
+moon-release generate-completions zsh > ~/.zfunc/_moon-release
+moon-release generate-completions fish > ~/.config/fish/completions/moon-release.fish
+```
+
+### `moon-release generate-schema`
+
+設定ファイルの JSON Schema を生成します。IDE での補完に使用できます。
+
+```bash
+moon-release generate-schema > release-schema.json
+```
+
 ## 設定
 
 `release.json` で動作をカスタマイズできます。
@@ -121,13 +141,16 @@ moon-release init --force  # 上書き
   "git_release_draft": false,
   "git_release_name": "Release v{{ version }}",
   "git_release_body": "{{ changelog }}",
+  "git_release_latest": true,
   "publish": true,
   "publish_frozen": false,
+  "publish_timeout": 300,
   "semver_check": true,
   "registry_check": false,
   "allow_dirty": false,
   "custom_major_increment_regex": null,
   "custom_minor_increment_regex": null,
+  "max_analyze_commits": null,
   "packages": []
 }
 ```
@@ -148,13 +171,16 @@ moon-release init --force  # 上書き
 | `git_release_draft` | `false` | ドラフトリリースとして作成 |
 | `git_release_name` | `"Release v{{ version }}"` | リリース名のテンプレート |
 | `git_release_body` | `null` | リリース本文のテンプレート（null で自動生成） |
+| `git_release_latest` | `true` | GitHub Release を latest としてマーク |
 | `publish` | `true` | mooncakes.io に公開するか |
 | `publish_frozen` | `false` | `moon publish --frozen` を使用 |
+| `publish_timeout` | `300` | publish のタイムアウト秒数（将来実装予定） |
 | `semver_check` | `false` | API 互換性チェックを実行 |
 | `registry_check` | `false` | 公開前にレジストリのバージョンを確認 |
 | `allow_dirty` | `false` | 未コミット変更があっても実行を許可 |
 | `custom_major_increment_regex` | `null` | Major バンプのカスタム正規表現 |
 | `custom_minor_increment_regex` | `null` | Minor バンプのカスタム正規表現 |
+| `max_analyze_commits` | `null` | 解析するコミット数の上限 |
 
 ### テンプレート変数
 
@@ -238,6 +264,8 @@ moon-release は [Conventional Commits](https://www.conventionalcommits.org/) �
 
 ## GitHub Actions
 
+### 基本的な使い方
+
 ```yaml
 name: Release
 
@@ -257,18 +285,54 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit
-        uses: aspect-build/setup-moonbit@v1
-
-      - name: Install moon-release
-        run: |
-          # moon-release をインストール
-
-      - name: Create Release PR
-        run: moon-release release-pr
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dijdzv/moon-release@main
+        with:
+          command: release-pr
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+### mooncakes.io への自動 publish
+
+mooncakes.io に自動で publish するには、認証情報を設定する必要があります。
+
+#### 1. トークンの取得
+
+```bash
+# ローカルで認証
+moon login
+
+# トークンを確認
+cat ~/.moon/credentials.json
+# {"token": "xxxxx", "username": "your-username"}
+```
+
+#### 2. GitHub Secrets の設定
+
+リポジトリの Settings → Secrets and variables → Actions で以下を設定：
+
+- `MOONCAKES_TOKEN`: credentials.json の `token` の値
+- `MOONCAKES_USERNAME`: credentials.json の `username` の値
+
+#### 3. ワークフローの設定
+
+```yaml
+- uses: dijdzv/moon-release@main
+  with:
+    command: release
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    mooncakes-token: ${{ secrets.MOONCAKES_TOKEN }}
+    mooncakes-username: ${{ secrets.MOONCAKES_USERNAME }}
+```
+
+> **⚠️ セキュリティに関する注意**
+>
+> mooncakes.io は現時点で CI 用の限定スコープトークンを提供していません。
+> `~/.moon/credentials.json` のトークンはアカウントの全権限を持つ可能性があります。
+> リスクを理解した上で使用してください。
+
+### ワークフローテンプレート
+
+[templates/release.yml](./templates/release.yml) をリポジトリにコピーして使用できます。
 
 ## release-plz との違い
 

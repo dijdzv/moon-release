@@ -1,5 +1,5 @@
 # Moon Release Workflow Template
-# Copy this file to .github/workflows/release.yml in your MoonBit project
+# Copy this file to .github/workflows/ in your MoonBit project
 
 name: Release
 
@@ -56,6 +56,12 @@ jobs:
         with:
           command: release
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # mooncakes.io への自動 publish を有効にする場合は以下を設定
+          # 1. ローカルで `moon login` を実行
+          # 2. ~/.moon/credentials.json の token と username を取得
+          # 3. GitHub Secrets に MOONCAKES_TOKEN と MOONCAKES_USERNAME を設定
+          mooncakes-token: ${{ secrets.MOONCAKES_TOKEN }}
+          mooncakes-username: ${{ secrets.MOONCAKES_USERNAME }}
           verbose: 'true'
 
   check:

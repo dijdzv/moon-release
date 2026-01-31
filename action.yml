@@ -8,11 +8,17 @@ branding:
 
 inputs:
   command:
-    description: 'Command to run: release-pr or release'
+    description: 'Command to run: check, update, release-pr, or release'
     required: true
   github-token:
     description: 'GitHub token for API access'
     required: true
+  mooncakes-token:
+    description: 'mooncakes.io token for publishing (from ~/.moon/credentials.json)'
+    required: false
+  mooncakes-username:
+    description: 'mooncakes.io username'
+    required: false
   config-file:
     description: 'Path to configuration file'
     required: false
@@ -43,6 +49,19 @@ runs:
     - name: Setup MoonBit
       uses: aspect-build/setup-moonbit@v1
 
+    - name: Setup mooncakes.io credentials
+      if: inputs.mooncakes-token != '' && inputs.mooncakes-username != ''
+      shell: bash
+      run: |
+        mkdir -p ~/.moon
+        cat > ~/.moon/credentials.json << EOF
+        {
+          "token": "${{ inputs.mooncakes-token }}",
+          "username": "${{ inputs.mooncakes-username }}"
+        }
+        EOF
+        chmod 600 ~/.moon/credentials.json
+
     - name: Build moon-release
       shell: bash
       run: |
@@ -64,7 +83,7 @@ runs:
           VERBOSE_FLAG="--verbose"
         fi
 
-        ${{ github.action_path }}/target/native/release/build/main/main \
+        ${{ github.action_path }}/target/native/release/build/src/main/main.exe \
           ${{ inputs.command }} \
           --config "${{ inputs.config-file }}" \
           $DRY_RUN_FLAG \
