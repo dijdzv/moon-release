@@ -435,17 +435,33 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     return
   }
 
+  // Use timeout from config (default 300 seconds = 5 minutes)
+  let timeout = ctx.config.publish_timeout
+  if ctx.verbose {
+    println("  Timeout: \{timeout} seconds")
+  }
+
   let publish_result = try {
-    @executor.run_command(publish_cmd)
+    @executor.run_command_with_timeout(publish_cmd, timeout)
   } catch {
     e => raise WorkflowError("Failed to publish: " + e.to_string())
   }
 
-  if not(publish_result.is_success()) {
-    // publish 失敗は警告として扱う（タグは既に作成されているため）
-    println("Warning: Failed to publish to mooncakes.io: " + publish_result.stderr)
-    println("You can manually publish with: moon publish")
-    return
+  match publish_result {
+    None => {
+      // Timeout occurred
+      println("Warning: Publish timed out after \{timeout} seconds")
+      println("The publish process may still be running in the background.")
+      println("You can manually publish with: moon publish")
+      return
+    }
+    Some(result) =>
+      if not(result.is_success()) {
+        // publish failed - treat as warning since tag is already created
+        println("Warning: Failed to publish to mooncakes.io: " + result.stderr)
+        println("You can manually publish with: moon publish")
+        return
+      }
   }
 
   println("Published to mooncakes.io")

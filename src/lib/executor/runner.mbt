@@ -125,3 +125,23 @@ pub fn CommandResult::check(
     raise ExecutorError(msg)
   }
 }
+
+/// Run command with timeout (in seconds)
+/// Returns None if timed out, Some(result) otherwise
+pub async fn run_command_with_timeout(
+  cmd : Array[String],
+  timeout_seconds : UInt
+) -> CommandResult? raise ExecutorError {
+  if cmd.is_empty() {
+    raise ExecutorError("Command is empty")
+  }
+
+  let timeout_ms = timeout_seconds.reinterpret_as_int() * 1000
+
+  try {
+    @async.with_timeout_opt(timeout_ms, async fn() { run_command(cmd) })
+  } catch {
+    ExecutorError(_) as e => raise e
+    e => raise ExecutorError("Command failed: " + e.to_string())
+  }
+}

@@ -11,8 +11,50 @@ pub struct GitCommit {
   date : String
 } derive(Show, Eq)
 
-/// Open repository
-pub fn Repository::open(path : String) -> Repository {
+/// Git error
+pub suberror GitError {
+  GitError(String)
+}
+
+/// GitError to string
+pub fn GitError::to_string(self : GitError) -> String {
+  match self {
+    GitError(msg) => msg
+  }
+}
+
+/// Validate repository path for security
+/// Rejects paths containing ".." (directory traversal)
+fn validate_repo_path(path : String) -> String? {
+  // Empty path is normalized to "."
+  if path.is_empty() {
+    return None
+  }
+
+  // Check for directory traversal
+  if path.contains("..") {
+    return Some("path contains '..' (directory traversal not allowed)")
+  }
+
+  None
+}
+
+/// Open repository with path validation
+/// Returns error if path is dangerous (e.g., contains "..")
+pub fn Repository::open(path : String) -> Repository raise GitError {
+  match validate_repo_path(path) {
+    Some(reason) => raise GitError("Invalid repository path: " + reason)
+    None => ()
+  }
+
+  // Normalize empty path to "."
+  let normalized_path = if path.is_empty() { "." } else { path }
+  Repository::{ path: normalized_path }
+}
+
+/// Open repository without validation (for internal use and testing)
+/// Use Repository::open for untrusted paths
+pub fn Repository::open_unchecked(path : String) -> Repository {
   Repository::{ path }
 }
 

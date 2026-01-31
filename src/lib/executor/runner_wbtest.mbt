@@ -74,7 +74,7 @@ test "CommandResult::check - failure raises with exit code when no stderr" {
 
 // repo_git_command tests (internal function)
 test "repo_git_command - builds correct command" {
-  let repo = @git.Repository::open("/path/to/repo")
+  let repo = @git.Repository::open_unchecked("/path/to/repo")
   let cmd = repo_git_command(repo, ["status", "-s"])
   assert_eq(cmd.length(), 5)
   assert_eq(cmd[0], "git")

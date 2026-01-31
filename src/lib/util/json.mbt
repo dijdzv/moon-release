@@ -56,6 +56,7 @@ pub fn json_string(s : String) -> String {
 }
 
 /// JSON オブジェクトを構築
+/// Keys are escaped to prevent injection attacks
 pub fn build_json_object(pairs : Array[(String, String)]) -> String {
   let result = StringBuilder::new()
   result.write_string("{")
@@ -65,7 +66,7 @@ pub fn build_json_object(pairs : Array[(String, String)]) -> String {
       result.write_string(",")
     }
     result.write_string("\"")
-    result.write_string(key)
+    result.write_string(escape_json_string(key))
     result.write_string("\":")
     result.write_string(value)
   }

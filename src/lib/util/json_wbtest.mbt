@@ -94,6 +94,18 @@ test "build_json_object - nested object" {
   assert_eq(outer, "{\"point\":{\"x\":1,\"y\":2}}")
 }
 
+test "build_json_object - key with special characters is escaped" {
+  let pairs = [("key\"with\"quotes", "\"value\"")]
+  let result = build_json_object(pairs)
+  assert_eq(result, "{\"key\\\"with\\\"quotes\":\"value\"}")
+}
+
+test "build_json_object - key with newline is escaped" {
+  let pairs = [("key\nwith\nnewlines", "\"value\"")]
+  let result = build_json_object(pairs)
+  assert_eq(result, "{\"key\\nwith\\nnewlines\":\"value\"}")
+}
+
 // build_json_array tests
 
 test "build_json_array - empty" {

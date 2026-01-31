@@ -25,9 +25,39 @@ test "parse conventional commits" {
   assert_eq(conventional.length(), 2)
 }
 
-test "repository open" {
-  let repo = Repository::open("/path/to/repo")
+test "repository open - valid path" {
+  let repo = try { Repository::open("/path/to/repo") } catch { _ => fail("unexpected error") }
   assert_eq(repo.path, "/path/to/repo")
+}
+
+test "repository open - empty path normalizes to dot" {
+  let repo = try { Repository::open("") } catch { _ => fail("unexpected error") }
+  assert_eq(repo.path, ".")
+}
+
+test "repository open - rejects directory traversal" {
+  try {
+    let _ = Repository::open("../etc/passwd")
+    fail("expected error")
+  } catch {
+    GitError(msg) => assert_true(msg.contains("directory traversal"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "repository open - rejects traversal in middle of path" {
+  try {
+    let _ = Repository::open("/safe/path/../etc")
+    fail("expected error")
+  } catch {
+    GitError(msg) => assert_true(msg.contains("directory traversal"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "repository open_unchecked - allows any path" {
+  let repo = Repository::open_unchecked("../dangerous/path")
+  assert_eq(repo.path, "../dangerous/path")
 }
 
 test "repository current" {
@@ -36,7 +66,7 @@ test "repository current" {
 }
 
 test "get tags command" {
-  let repo = Repository::open("/repo")
+  let repo = Repository::open_unchecked("/repo")
   let cmd = repo.get_tags_command()
   assert_eq(cmd[0], "git")
   assert_eq(cmd[1], "-C")
@@ -45,26 +75,26 @@ test "get tags command" {
 }
 
 test "get commits since tag command" {
-  let repo = Repository::open("/repo")
+  let repo = Repository::open_unchecked("/repo")
   let cmd = repo.get_commits_since_tag_command("v1.0.0")
   assert_true(cmd.iter().any(fn(s) { s.contains("v1.0.0..HEAD") }))
 }
 
 test "create tag command" {
-  let repo = Repository::open("/repo")
+  let repo = Repository::open_unchecked("/repo")
   let cmd = repo.create_tag_command("v2.0.0", "Release 2.0.0")
   assert_true(cmd.iter().any(fn(s) { s == "v2.0.0" }))
   assert_true(cmd.iter().any(fn(s) { s == "Release 2.0.0" }))
 }
 
 test "push command with tags" {
-  let repo = Repository::open("/repo")
+  let repo = Repository::open_unchecked("/repo")
   let cmd = repo.push_command(true)
   assert_true(cmd.iter().any(fn(s) { s == "--follow-tags" }))
 }
 
 test "push command without tags" {
-  let repo = Repository::open("/repo")
+  let repo = Repository::open_unchecked("/repo")
   let cmd = repo.push_command(false)
   assert_false(cmd.iter().any(fn(s) { s == "--follow-tags" }))
 }
