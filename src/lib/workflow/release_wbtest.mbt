@@ -76,6 +76,32 @@ test "generate_release_notes - short hash" {
   }
 }
 
+// Path validation tests
+
+test "validate_path - empty string is valid" {
+  assert_true(validate_path(""))
+}
+
+test "validate_path - dot is valid" {
+  assert_true(validate_path("."))
+}
+
+test "validate_path - relative path is valid" {
+  assert_true(validate_path("packages/core"))
+}
+
+test "validate_path - path with double dots is invalid" {
+  assert_false(validate_path("../etc/passwd"))
+}
+
+test "validate_path - path containing double dots is invalid" {
+  assert_false(validate_path("packages/../secrets"))
+}
+
+test "validate_path - absolute path is invalid" {
+  assert_false(validate_path("/etc/passwd"))
+}
+
 test "build_pr_body - replaces version template" {
   let config = @config.Config::default()
   let current_version = @semver.Version::parse("1.0.0")

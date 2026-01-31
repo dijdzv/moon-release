@@ -268,7 +268,13 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
   }
 
   let number = match obj.get("number") {
-    Some(Number(n, ..)) => n.to_uint()
+    Some(Number(n, ..)) =>
+      // 負数や非整数の場合は 0 として扱う
+      if n < 0.0 || n != n.to_int().to_double() {
+        0U
+      } else {
+        n.to_uint()
+      }
     _ => 0U
   }
 

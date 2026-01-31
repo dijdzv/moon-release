@@ -83,6 +83,15 @@ fn replace_json_field(
   field : String,
   new_value : String
 ) -> String raise ParseError {
+  // new_value に JSON で特殊な文字が含まれていないか検証
+  for c in new_value {
+    if c == '"' || c == '\\' || c.to_int() < 32 {
+      raise ParseError(
+        "Invalid character in value: values cannot contain quotes, backslashes, or control characters",
+      )
+    }
+  }
+
   // "version": "..." のパターンを探して置換
   let pattern = "\"" + field + "\""
   let chars : Array[Char] = content.to_array()

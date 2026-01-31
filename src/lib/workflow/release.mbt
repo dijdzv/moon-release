@@ -467,6 +467,12 @@ pub async fn run_update_packages(
       println("  Analyzing package: " + pkg.name)
     }
 
+    // パス検証（ディレクトリトラバーサル防止）
+    if not(validate_path(pkg.path)) {
+      println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
+      continue
+    }
+
     let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
     let moon_mod_path = pkg_path + "moon.mod.json"
 
@@ -656,6 +662,12 @@ pub async fn run_publish_packages(
       continue
     }
 
+    // パス検証（ディレクトリトラバーサル防止）
+    if not(validate_path(pkg.path)) {
+      println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
+      continue
+    }
+
     if dry_run {
       println("[dry-run] Would publish " + pkg.name)
       continue
@@ -797,7 +809,13 @@ pub fn generate_release_notes(
       None => ""
     }
     let short_hash = if hash.length() >= 7 {
-      hash.substring(end=7)
+      // 先頭7文字を取得
+      let chars = hash.to_array()
+      let sb = StringBuilder::new()
+      for k = 0; k < 7; k = k + 1 {
+        sb.write_char(chars[k])
+      }
+      sb.to_string()
     } else {
       hash
     }
