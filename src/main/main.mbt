@@ -417,6 +417,7 @@ async fn cmd_update(
       } else {
         println("Error: " + e.to_string())
       }
+      exit_error()
     }
   }
 }

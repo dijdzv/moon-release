@@ -71,25 +71,25 @@ pub async fn run_release_pr(
     return
   }
 
-  // Check if branch already exists
-  let branch_exists = try {
-    check_branch_exists(ctx.repo, branch_name)
+  // Check if branch exists on remote (for pull later)
+  let remote_branch_exists = try {
+    check_remote_branch_exists(ctx.repo, branch_name)
   } catch {
     _ => false
   }
 
-  if branch_exists {
-    // Switch to existing branch
-    let checkout_result = try {
-      @executor.run_git(ctx.repo, ["checkout", branch_name])
-    } catch {
-      e => raise WorkflowError("Failed to checkout branch: " + e.to_string())
-    }
-    if not(checkout_result.is_success()) {
-      raise WorkflowError("Failed to checkout branch: " + checkout_result.stderr)
-    }
+  // Use checkout -B for atomic create-or-reset (avoids race condition)
+  let checkout_result = try {
+    @executor.run_git(ctx.repo, ["checkout", "-B", branch_name])
+  } catch {
+    e => raise WorkflowError("Failed to checkout branch: " + e.to_string())
+  }
+  if not(checkout_result.is_success()) {
+    raise WorkflowError("Failed to checkout branch: " + checkout_result.stderr)
+  }
 
-    // Pull latest from remote
+  // Pull from remote if branch exists there
+  if remote_branch_exists {
     let pull_result = try {
       @executor.run_git(ctx.repo, ["pull", "origin", branch_name])
     } catch {
@@ -98,18 +98,6 @@ pub async fn run_release_pr(
     if not(pull_result.is_success()) && ctx.verbose {
       println("[WARN] Failed to pull from remote: " + pull_result.stderr)
       println("[WARN] Continuing with local branch state...")
-    }
-  } else {
-    // Create new branch
-    let create_branch_result = try {
-      @executor.run_git(ctx.repo, ["checkout", "-b", branch_name])
-    } catch {
-      e => raise WorkflowError("Failed to create branch: " + e.to_string())
-    }
-    if not(create_branch_result.is_success()) {
-      raise WorkflowError(
-        "Failed to create branch: " + create_branch_result.stderr,
-      )
     }
   }
 
@@ -156,6 +144,11 @@ pub async fn run_release_pr(
   }
 
   // Push (force push to update)
+  // Using --force-with-lease instead of --force for safety:
+  // it will fail if someone else pushed to the branch since our last fetch
+  if ctx.verbose {
+    println("Pushing with --force-with-lease (safe force push)...")
+  }
   let push_result = try {
     @executor.run_git(ctx.repo, ["push", "-u", "--force-with-lease", "origin", branch_name])
   } catch {
@@ -262,17 +255,17 @@ async fn find_existing_release_pr(
   None
 }
 
-/// Check if branch exists
-async fn check_branch_exists(
+/// Check if branch exists on remote
+async fn check_remote_branch_exists(
   repo : @git.Repository,
   branch_name : String
 ) -> Bool {
   let result = try {
-    @executor.run_git(repo, ["rev-parse", "--verify", branch_name])
+    @executor.run_git(repo, ["ls-remote", "--heads", "origin", branch_name])
   } catch {
     _ => return false
   }
-  result.is_success()
+  result.is_success() && not(result.stdout.trim().is_empty())
 }
 
 /// release command: create tag and release
@@ -1025,42 +1018,38 @@ async fn restore_branch(
 }
 
 /// Load package_data.json from target/doc
+/// Uses @fs.walk for cross-platform compatibility (no external find command)
 async fn load_package_apis(doc_dir : String) -> @semver_check.PackageApi raise WorkflowError {
-  // Find package_data.json with find command
-  let find_result = try {
-    @executor.run_command(
-      ["find", doc_dir, "-name", "package_data.json", "-type", "f"],
-    )
-  } catch {
-    e => raise WorkflowError("Failed to find package_data.json files: " + e.to_string())
-  }
-
-  if not(find_result.is_success()) {
-    raise WorkflowError("Failed to find package_data.json files")
-  }
-
-  let files : Array[String] = find_result.stdout
-    .split("\n")
-    .filter(fn(sv) { not(sv.to_string().trim().is_empty()) })
-    .map(fn(sv) { sv.to_string() })
-    .collect()
-
   let all_apis : Array[@semver_check.PackageApi] = []
 
-  for file in files {
-    let content = try {
-      @fs.read_file(file).text()
-    } catch {
-      _ => continue
-    }
+  // Walk directory tree to find all package_data.json files
+  try {
+    @fs.walk(
+      doc_dir,
+      async fn(dir_path, files) {
+        for file in files {
+          if file == "package_data.json" {
+            let file_path = dir_path + "/" + file
+            let content = try {
+              @fs.read_file(file_path).text()
+            } catch {
+              _ => continue
+            }
 
-    let api = try {
-      @semver_check.parse_package_data(content)
-    } catch {
-      _ => continue
-    }
+            let api = try {
+              @semver_check.parse_package_data(content)
+            } catch {
+              _ => continue
+            }
 
-    all_apis.push(api)
+            all_apis.push(api)
+          }
+        }
+      },
+      max_concurrency=1, // Sequential for deterministic results
+    )
+  } catch {
+    e => raise WorkflowError("Failed to scan for package_data.json files: " + e.to_string())
   }
 
   @semver_check.merge_package_apis(all_apis)
