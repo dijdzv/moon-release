@@ -43,11 +43,11 @@ pub async fn run_release_pr(
     println("Running release-pr workflow...")
   }
 
-  let branch_name = ctx.config.release_branch_prefix + "v\{ctx.new_version.to_string()}"
+  let branch_name = ctx.config.pr_branch_prefix + "v\{ctx.new_version.to_string()}"
   let base_branch = ctx.config.base_branch
 
   // 既存のリリース PR をチェック
-  let existing_pr = find_existing_release_pr(github, ctx.config.release_branch_prefix)
+  let existing_pr = find_existing_release_pr(github, ctx.config.pr_branch_prefix)
 
   if ctx.dry_run {
     match existing_pr {
@@ -281,8 +281,10 @@ pub async fn run_release(
   )
 
   if ctx.dry_run {
-    println("[dry-run] Would create tag: " + tag_name)
-    if ctx.config.github_release {
+    if ctx.config.git_tag_enable {
+      println("[dry-run] Would create tag: " + tag_name)
+    }
+    if ctx.config.git_release_enable {
       println("[dry-run] Would create GitHub release: " + release_title)
     }
     if ctx.config.publish {
@@ -291,33 +293,41 @@ pub async fn run_release(
     return
   }
 
-  // タグを作成
-  let tag_msg = release_title
-  let tag_result = try {
-    @executor.run_git(ctx.repo, ["tag", "-a", tag_name, "-m", tag_msg])
-  } catch {
-    e => raise WorkflowError("Failed to create tag: " + e.to_string())
-  }
-  if not(tag_result.is_success()) {
-    raise WorkflowError("Failed to create tag: " + tag_result.stderr)
-  }
+  // タグを作成（git_tag_enable が true の場合のみ）
+  if ctx.config.git_tag_enable {
+    let tag_msg = release_title
+    let tag_result = try {
+      @executor.run_git(ctx.repo, ["tag", "-a", tag_name, "-m", tag_msg])
+    } catch {
+      e => raise WorkflowError("Failed to create tag: " + e.to_string())
+    }
+    if not(tag_result.is_success()) {
+      raise WorkflowError("Failed to create tag: " + tag_result.stderr)
+    }
 
-  // タグを Push
-  let push_result = try {
-    @executor.run_git(ctx.repo, ["push", "origin", tag_name])
-  } catch {
-    e => raise WorkflowError("Failed to push tag: " + e.to_string())
-  }
-  if not(push_result.is_success()) {
-    raise WorkflowError("Failed to push tag: " + push_result.stderr)
-  }
+    // タグを Push
+    let push_result = try {
+      @executor.run_git(ctx.repo, ["push", "origin", tag_name])
+    } catch {
+      e => raise WorkflowError("Failed to push tag: " + e.to_string())
+    }
+    if not(push_result.is_success()) {
+      raise WorkflowError("Failed to push tag: " + push_result.stderr)
+    }
 
-  println("Created and pushed tag: " + tag_name)
+    println("Created and pushed tag: " + tag_name)
+  }
 
   // GitHub Release を作成
-  if ctx.config.github_release {
-    // リリースノートはコミットサマリーから生成
-    let release_notes = generate_release_notes(ctx.commits)
+  if ctx.config.git_release_enable {
+    // リリースノート: カスタムテンプレートがあればそれを使用、なければ自動生成
+    let release_notes = match ctx.config.git_release_body {
+      Some(template) =>
+        template
+        .replace(old="{{ version }}", new=ctx.new_version.to_string())
+        .replace(old="{{ changelog }}", new=generate_release_notes(ctx.commits))
+      None => generate_release_notes(ctx.commits)
+    }
     let release_cmd = github.create_release_command(
       tag_name,
       release_title,
@@ -357,13 +367,52 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     println("Publishing to mooncakes.io...")
   }
 
+  // semver_check が有効な場合は API 互換性チェックを実行
+  if ctx.config.semver_check {
+    if ctx.verbose {
+      println("Running API compatibility check...")
+    }
+
+    let check_result = try {
+      run_semver_check(ctx.repo, ctx.verbose)
+    } catch {
+      e => {
+        println("Warning: Semver check failed: " + e.to_string())
+        println("Continuing with publish...")
+        @semver_check.CheckResult::new(@semver_check.ApiDiff::empty())
+      }
+    }
+
+    if check_result.diff.has_breaking {
+      println("")
+      println("WARNING: Breaking API changes detected!")
+      println(@semver_check.format_summary(check_result))
+      println("")
+      println("Consider:")
+      println("  1. Bumping the major version")
+      println("  2. Using BREAKING CHANGE: in your commit messages")
+      println("")
+    } else if ctx.verbose {
+      println("Semver check passed: " + @semver_check.format_summary(check_result))
+    }
+  }
+
+  // publish コマンドを構築
+  let publish_cmd : Array[String] = if ctx.config.publish_frozen {
+    ["moon", "publish", "--frozen"]
+  } else {
+    ["moon", "publish"]
+  }
+
   if ctx.dry_run {
-    println("[dry-run] Would run: moon publish")
+    println("[dry-run] Would run: " + publish_cmd.iter().fold(init="", fn(acc, s) {
+      if acc.is_empty() { s } else { acc + " " + s }
+    }))
     return
   }
 
   let publish_result = try {
-    @executor.run_command(["moon", "publish"])
+    @executor.run_command(publish_cmd)
   } catch {
     e => raise WorkflowError("Failed to publish: " + e.to_string())
   }
@@ -752,4 +801,170 @@ fn generate_release_notes(
   }
 
   lines.iter().fold(init="", fn(acc, line) { acc + line + "\n" })
+}
+
+/// semver チェックを実行
+pub async fn run_semver_check(
+  repo : @git.Repository,
+  verbose : Bool
+) -> @semver_check.CheckResult raise WorkflowError {
+  if verbose {
+    println("Running semver check...")
+  }
+
+  // 1. 最新タグを取得
+  let tag_result = try {
+    @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
+  } catch {
+    _ =>
+      raise WorkflowError(
+        "No tags found. Cannot perform semver check without a previous version.",
+      )
+  }
+
+  if not(tag_result.is_success()) {
+    raise WorkflowError(
+      "No tags found. Cannot perform semver check without a previous version.",
+    )
+  }
+
+  let latest_tag = tag_result.stdout_trimmed()
+  if verbose {
+    println("  Comparing against tag: " + latest_tag)
+  }
+
+  // 2. 現在のブランチ名を保存
+  let branch_result = try {
+    @executor.run_git(repo, ["rev-parse", "--abbrev-ref", "HEAD"])
+  } catch {
+    e => raise WorkflowError("Failed to get current branch: " + e.to_string())
+  }
+  let current_branch = branch_result.stdout_trimmed()
+
+  // 3. 現在のコードで moon doc を実行
+  if verbose {
+    println("  Generating docs for current code...")
+  }
+  let doc_result = try {
+    @executor.run_command(["moon", "doc"])
+  } catch {
+    e => raise WorkflowError("Failed to run moon doc: " + e.to_string())
+  }
+  if not(doc_result.is_success()) {
+    raise WorkflowError("Failed to generate docs: " + doc_result.stderr)
+  }
+
+  // 4. 現在の package_data.json を読み込む
+  let current_apis = try {
+    load_package_apis("target/doc")
+  } catch {
+    e => raise WorkflowError("Failed to load current API: " + e.to_string())
+  }
+
+  // 5. タグをチェックアウト
+  if verbose {
+    println("  Checking out tag: " + latest_tag)
+  }
+  let checkout_result = try {
+    @executor.run_git(repo, ["checkout", latest_tag])
+  } catch {
+    e => raise WorkflowError("Failed to checkout tag: " + e.to_string())
+  }
+  if not(checkout_result.is_success()) {
+    raise WorkflowError("Failed to checkout tag: " + checkout_result.stderr)
+  }
+
+  // 6. タグのコードで moon doc を実行
+  if verbose {
+    println("  Generating docs for previous version...")
+  }
+  let old_doc_result = try {
+    @executor.run_command(["moon", "doc"])
+  } catch {
+    e => {
+      // エラーが発生しても元のブランチに戻る
+      let _ = try {
+        @executor.run_git(repo, ["checkout", current_branch])
+      } catch {
+        _ => @executor.CommandResult::failed("")
+      }
+      raise WorkflowError("Failed to run moon doc on tag: " + e.to_string())
+    }
+  }
+
+  // 7. タグの package_data.json を読み込む
+  let old_apis = if old_doc_result.is_success() {
+    try {
+      load_package_apis("target/doc")
+    } catch {
+      _ => @semver_check.PackageApi::empty()
+    }
+  } else {
+    @semver_check.PackageApi::empty()
+  }
+
+  // 8. 元のブランチに戻る
+  if verbose {
+    println("  Restoring original branch...")
+  }
+  let _ = try {
+    @executor.run_git(repo, ["checkout", current_branch])
+  } catch {
+    e => raise WorkflowError("Failed to restore branch: " + e.to_string())
+  }
+
+  // 9. API を比較
+  if verbose {
+    println("  Comparing APIs...")
+  }
+  let diff = @semver_check.diff_api(old_apis, current_apis)
+  let result = @semver_check.CheckResult::new(diff)
+
+  if verbose {
+    println(result.format())
+  }
+
+  result
+}
+
+/// target/doc から package_data.json を読み込む
+async fn load_package_apis(doc_dir : String) -> @semver_check.PackageApi raise WorkflowError {
+  // find コマンドで package_data.json を探す
+  let find_result = try {
+    @executor.run_command(
+      ["find", doc_dir, "-name", "package_data.json", "-type", "f"],
+    )
+  } catch {
+    e => raise WorkflowError("Failed to find package_data.json files: " + e.to_string())
+  }
+
+  if not(find_result.is_success()) {
+    raise WorkflowError("Failed to find package_data.json files")
+  }
+
+  let files : Array[String] = find_result.stdout
+    .split("\n")
+    .filter(fn(sv) { not(sv.to_string().trim().is_empty()) })
+    .map(fn(sv) { sv.to_string() })
+    .collect()
+
+  let all_apis : Array[@semver_check.PackageApi] = []
+
+  for file in files {
+    let content = try {
+      @fs.read_file(file).text()
+    } catch {
+      _ => continue
+    }
+
+    let api = try {
+      @semver_check.parse_package_data(content)
+    } catch {
+      _ => continue
+    }
+
+    all_apis.push(api)
+  }
+
+  @semver_check.merge_package_apis(all_apis)
 }

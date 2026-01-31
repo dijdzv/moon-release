@@ -1,9 +1,9 @@
 test "default config" {
   let config = Config::default()
   assert_eq(config.pr_title, "chore: release v{{ version }}")
-  assert_eq(config.changelog_include.length(), 4)
   assert_eq(config.allow_prerelease, false)
-  assert_eq(config.github_release, true)
+  assert_eq(config.git_tag_enable, true)
+  assert_eq(config.git_release_enable, true)
   assert_eq(config.publish, true)
 }
 
@@ -20,30 +20,39 @@ test "parse config with pr_title" {
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
   assert_eq(config.pr_title, "release: v{{ version }}")
   // Other fields use defaults
-  assert_eq(config.github_release, true)
+  assert_eq(config.git_release_enable, true)
 }
 
-test "parse config with changelog_include" {
+test "parse config with git_tag_enable" {
   let content =
     #|{
-    #|  "changelog_include": ["feat", "fix"]
+    #|  "git_tag_enable": false
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
-  assert_eq(config.changelog_include.length(), 2)
-  assert_eq(config.changelog_include[0], "feat")
-  assert_eq(config.changelog_include[1], "fix")
+  assert_eq(config.git_tag_enable, false)
+}
+
+test "parse config with git_release_body" {
+  let content =
+    #|{
+    #|  "git_release_body": "Custom body {{ version }}"
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.git_release_body, Some("Custom body {{ version }}"))
 }
 
 test "parse config with booleans" {
   let content =
     #|{
     #|  "allow_prerelease": true,
-    #|  "github_release": false,
+    #|  "git_tag_enable": false,
+    #|  "git_release_enable": false,
     #|  "publish": false
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
   assert_eq(config.allow_prerelease, true)
-  assert_eq(config.github_release, false)
+  assert_eq(config.git_tag_enable, false)
+  assert_eq(config.git_release_enable, false)
   assert_eq(config.publish, false)
 }
 

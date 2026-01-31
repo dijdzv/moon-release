@@ -548,9 +548,12 @@ async fn cmd_init(
   println("Created release.json with defaults:")
   println("  pr_title: " + config.pr_title)
   println("  allow_prerelease: " + config.allow_prerelease.to_string())
-  println("  github_release: " + config.github_release.to_string())
+  println("  git_tag_enable: " + config.git_tag_enable.to_string())
+  println("  git_release_enable: " + config.git_release_enable.to_string())
   println("  publish: " + config.publish.to_string())
-  println("  release_branch_prefix: " + config.release_branch_prefix)
+  println("  publish_frozen: " + config.publish_frozen.to_string())
+  println("  semver_check: " + config.semver_check.to_string())
+  println("  pr_branch_prefix: " + config.pr_branch_prefix)
   println("  base_branch: " + config.base_branch)
 }
 
@@ -563,12 +566,15 @@ fn generate_default_config_json() -> String {
     #|  "pr_labels": [],
     #|  "pr_body": "## Release v{{ version }}\n\n---\n*This PR was automatically created by moon-release.*",
     #|  "allow_prerelease": false,
-    #|  "github_release": true,
+    #|  "git_tag_enable": true,
+    #|  "git_tag_name": "v{{ version }}",
+    #|  "git_release_enable": true,
     #|  "git_release_draft": false,
     #|  "git_release_name": "Release v{{ version }}",
-    #|  "git_tag_name": "v{{ version }}",
     #|  "publish": true,
-    #|  "release_branch_prefix": "release/",
+    #|  "publish_frozen": false,
+    #|  "semver_check": false,
+    #|  "pr_branch_prefix": "release/",
     #|  "base_branch": "main",
     #|  "registry_check": false,
     #|  "allow_dirty": false,

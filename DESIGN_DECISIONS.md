@@ -30,25 +30,38 @@ moon-release は release-plz を参考に設計されていますが、MoonBit �
 
 ### 3. 依存関係の更新: 機能なし
 
-**release-plz**: `cargo update` による依存関係更新オプション
+**release-plz**: `cargo update` による依存関係更新オプション（ロックファイル更新）
 
 **moon-release**: 依存関係更新機能なし
 
 **理由**:
-- MoonBit のパッケージ管理は `moon update` で個別に行う
-- リリース時に依存関係を自動更新するのはスコープ外
-- 依存関係の更新はユーザーの判断に委ねる
+- MoonBit は Go と同様の **minimal version selection** を採用
+- `moon.mod.json` に直接バージョンを記載（ロックファイル不要）
+- Cargo の `cargo update` に相当する機能が MoonBit のアーキテクチャ上不要
 
-### 4. API 互換性チェック: 機能なし
+### 4. API 互換性チェック: 自前実装
 
 **release-plz**: `cargo semver-checks` による API 破壊的変更の検出
 
-**moon-release**: API 互換性チェック機能なし
+**moon-release**: `semver_check` オプションで自前の API 互換性チェックを実行
 
-**理由**:
-- MoonBit には semver-checks 相当のツールが未整備
-- Conventional Commits の Breaking Change マーカーで対応
-- 将来的に MoonBit 用ツールが登場すれば統合を検討
+**仕組み**:
+- `moon doc` が生成する `package_data.json` を利用
+- 最新タグと現在のコードの API を比較
+- 以下の破壊的変更を検出:
+  - pub 型/関数/メソッドの削除
+  - シグネチャの変更
+  - 構造体フィールドの削除/変更
+
+**検出可能な変更**:
+| 変更の種類 | 検出 | 影響 |
+|-----------|------|------|
+| pub 関数の削除 | ✅ | Breaking |
+| pub 型の削除 | ✅ | Breaking |
+| 関数シグネチャの変更 | ✅ | Breaking |
+| 構造体フィールドの削除/変更 | ✅ | Breaking |
+| pub 関数の追加 | ✅ | Minor |
+| pub 型の追加 | ✅ | Minor |
 
 ### 5. 設定ファイル形式
 
@@ -95,8 +108,11 @@ moon-release は release-plz を参考に設計されていますが、MoonBit �
 | `pr_draft` | ドラフト PR 作成 |
 | `pr_labels` | PR ラベル付与 |
 | `pr_body` テンプレート | `{{ version }}` プレースホルダー |
+| `git_tag_enable` | タグ作成の有効/無効 |
+| `git_release_enable` | GitHub Release 作成の有効/無効 |
 | `git_release_draft` | ドラフトリリース作成 |
 | `git_tag_name` / `git_release_name` | タグ/リリース名テンプレート |
+| `git_release_body` | リリースボディテンプレート（`{{ version }}`, `{{ changelog }}`） |
 | `allow_dirty` | 未コミット変更の許可 |
 | `version_group` | モノレポでのバージョン同期 |
 | `custom_major/minor_increment_regex` | カスタムバンプルール |
@@ -104,6 +120,8 @@ moon-release は release-plz を参考に設計されていますが、MoonBit �
 | `--dry-run` | プレビューモード |
 | `set-version` コマンド | 手動バージョン設定 |
 | `registry_check` | 公開前のバージョン確認 |
+| `publish_frozen` | `moon publish --frozen` オプション |
+| `semver_check` | 自前実装の API 互換性チェック |
 
 ## moon-release 独自機能
 

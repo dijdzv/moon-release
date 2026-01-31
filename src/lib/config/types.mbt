@@ -5,12 +5,16 @@ pub struct Config {
   pr_labels : Array[String]
   pr_body : String
   allow_prerelease : Bool
-  github_release : Bool
+  git_tag_enable : Bool
+  git_tag_name : String
+  git_release_enable : Bool
   git_release_draft : Bool
   git_release_name : String
-  git_tag_name : String
+  git_release_body : String?
   publish : Bool
-  release_branch_prefix : String
+  publish_frozen : Bool
+  semver_check : Bool
+  pr_branch_prefix : String
   base_branch : String
   packages : Array[PackageConfig]
   registry_check : Bool
@@ -47,12 +51,16 @@ pub fn Config::default() -> Config {
     pr_labels: [],
     pr_body: "## Release v{{ version }}\n\n---\n*This PR was automatically created by moon-release.*",
     allow_prerelease: false,
-    github_release: true,
+    git_tag_enable: true,
+    git_tag_name: "v{{ version }}",
+    git_release_enable: true,
     git_release_draft: false,
     git_release_name: "Release v{{ version }}",
-    git_tag_name: "v{{ version }}",
+    git_release_body: None,
     publish: true,
-    release_branch_prefix: "release/",
+    publish_frozen: false,
+    semver_check: false,
+    pr_branch_prefix: "release/",
     base_branch: "main",
     packages: [],
     registry_check: false,
@@ -133,11 +141,24 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     None => default.allow_prerelease
   }
 
-  let github_release = match obj.get("github_release") {
+  let git_tag_enable = match obj.get("git_tag_enable") {
     Some(True) => true
     Some(False) => false
-    Some(_) => raise ConfigError("'github_release' must be a boolean")
-    None => default.github_release
+    Some(_) => raise ConfigError("'git_tag_enable' must be a boolean")
+    None => default.git_tag_enable
+  }
+
+  let git_tag_name = match obj.get("git_tag_name") {
+    Some(String(s)) => s
+    Some(_) => raise ConfigError("'git_tag_name' must be a string")
+    None => default.git_tag_name
+  }
+
+  let git_release_enable = match obj.get("git_release_enable") {
+    Some(True) => true
+    Some(False) => false
+    Some(_) => raise ConfigError("'git_release_enable' must be a boolean")
+    None => default.git_release_enable
   }
 
   let git_release_draft = match obj.get("git_release_draft") {
@@ -153,10 +174,11 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     None => default.git_release_name
   }
 
-  let git_tag_name = match obj.get("git_tag_name") {
-    Some(String(s)) => s
-    Some(_) => raise ConfigError("'git_tag_name' must be a string")
-    None => default.git_tag_name
+  let git_release_body : String? = match obj.get("git_release_body") {
+    Some(String(s)) => Some(s)
+    Some(Null) => None
+    Some(_) => raise ConfigError("'git_release_body' must be a string")
+    None => default.git_release_body
   }
 
   let publish = match obj.get("publish") {
@@ -166,10 +188,24 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     None => default.publish
   }
 
-  let release_branch_prefix = match obj.get("release_branch_prefix") {
+  let publish_frozen = match obj.get("publish_frozen") {
+    Some(True) => true
+    Some(False) => false
+    Some(_) => raise ConfigError("'publish_frozen' must be a boolean")
+    None => default.publish_frozen
+  }
+
+  let semver_check = match obj.get("semver_check") {
+    Some(True) => true
+    Some(False) => false
+    Some(_) => raise ConfigError("'semver_check' must be a boolean")
+    None => default.semver_check
+  }
+
+  let pr_branch_prefix = match obj.get("pr_branch_prefix") {
     Some(String(s)) => s
-    Some(_) => raise ConfigError("'release_branch_prefix' must be a string")
-    None => default.release_branch_prefix
+    Some(_) => raise ConfigError("'pr_branch_prefix' must be a string")
+    None => default.pr_branch_prefix
   }
 
   let base_branch = match obj.get("base_branch") {
@@ -222,12 +258,16 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     pr_labels,
     pr_body,
     allow_prerelease,
-    github_release,
+    git_tag_enable,
+    git_tag_name,
+    git_release_enable,
     git_release_draft,
     git_release_name,
-    git_tag_name,
+    git_release_body,
     publish,
-    release_branch_prefix,
+    publish_frozen,
+    semver_check,
+    pr_branch_prefix,
     base_branch,
     packages,
     registry_check,
