@@ -215,3 +215,23 @@ test "validate_prerelease - invalid space" {
 test "validate_prerelease - invalid plus" {
   assert_false(validate_prerelease("alpha+1"))
 }
+
+// Integer overflow protection tests
+test "parse version - large but valid numbers" {
+  // 9桁以内の数値は許可 (max 999,999,999)
+  let result = Version::parse("999999999.0.0")
+  match result {
+    Some(v) => assert_eq(v.major, 999999999)
+    None => fail("Should parse valid large number")
+  }
+}
+
+test "parse version - number too large (10 digits)" {
+  // 10桁以上は拒否（オーバーフロー防止）
+  assert_eq(Version::parse("1234567890.0.0"), None)
+}
+
+test "parse version - overflow protection" {
+  // 10桁は常に拒否
+  assert_eq(Version::parse("9999999999.0.0"), None)
+}

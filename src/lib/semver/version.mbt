@@ -86,8 +86,14 @@ fn substr_chars(chars : Array[Char], start : Int, end : Int) -> String {
 }
 
 /// 文字列を UInt にパース
+/// オーバーフロー防止のため、9桁を超える場合は拒否
 fn parse_uint(s : String) -> UInt? {
   if s.is_empty() {
+    return None
+  }
+  // 9桁を超えるとオーバーフローの可能性があるため拒否
+  // 999,999,999 < UInt max (4,294,967,295) なので安全
+  if s.length() > 9 {
     return None
   }
   let mut result : UInt = 0
