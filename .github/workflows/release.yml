@@ -39,9 +39,55 @@ jobs:
           fi
           ./target/native/release/build/main/main release-pr $DRY_RUN_FLAG --verbose
 
-  release:
-    runs-on: ubuntu-latest
+  # Build binaries for multiple platforms
+  build:
     if: github.event_name == 'push' && contains(github.event.head_commit.message, 'chore: release')
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+            artifact: moon-release-linux-x86_64
+          - os: macos-14  # Apple Silicon runner
+            target: macos-arm64
+            artifact: moon-release-macos-arm64
+          - os: windows-latest
+            target: windows-x86_64
+            artifact: moon-release-windows-x86_64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MoonBit
+        uses: aspect-build/setup-moonbit@v1
+
+      - name: Build
+        run: moon build --target native
+
+      - name: Rename binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp ./target/native/release/build/main/main ./${{ matrix.artifact }}
+          chmod +x ./${{ matrix.artifact }}
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          copy .\target\native\release\build\main\main.exe .\${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  # Create release and attach binaries
+  release:
+    needs: build
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,7 +100,29 @@ jobs:
       - name: Build moon-release
         run: moon build --target native
 
-      - name: Run moon-release (release)
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -exec mv {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Get version from moon.mod.json
+        id: version
+        run: |
+          VERSION=$(grep '"version"' moon.mod.json | sed 's/.*: *"\([^"]*\)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create release with binaries
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./target/native/release/build/main/main release --verbose
+        run: |
+          # Run moon-release to create tag and release
+          ./target/native/release/build/main/main release --verbose
+
+          # Upload binaries to the release
+          gh release upload "v${{ steps.version.outputs.version }}" release-assets/* --clobber
