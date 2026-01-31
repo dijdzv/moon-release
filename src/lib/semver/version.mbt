@@ -225,3 +225,61 @@ fn compare_string(a : String, b : String) -> Int {
     0
   }
 }
+
+/// prerelease 文字列のバリデーション（SemVer 2.0.0 準拠）
+/// - ASCII 英数字とハイフンのみ [0-9A-Za-z-]
+/// - ドットで区切られた識別子
+/// - 数値のみの識別子は先頭ゼロ禁止
+/// - 空文字列は禁止
+pub fn validate_prerelease(prerelease : String) -> Bool {
+  if prerelease.is_empty() {
+    return false
+  }
+
+  let identifiers : Array[String] = prerelease
+    .split(".")
+    .map(fn(sv) { sv.to_string() })
+    .collect()
+
+  for id in identifiers {
+    if not(validate_prerelease_identifier(id)) {
+      return false
+    }
+  }
+
+  true
+}
+
+/// 単一の prerelease 識別子をバリデーション
+fn validate_prerelease_identifier(id : String) -> Bool {
+  if id.is_empty() {
+    return false
+  }
+
+  let chars : Array[Char] = id.to_array()
+  let mut is_numeric = true
+
+  for c in chars {
+    if not(is_alphanumeric_or_hyphen(c)) {
+      return false
+    }
+    if not(c >= '0' && c <= '9') {
+      is_numeric = false
+    }
+  }
+
+  // 数値のみの識別子は先頭ゼロ禁止（"0" は許可）
+  if is_numeric && chars.length() > 1 && chars[0] == '0' {
+    return false
+  }
+
+  true
+}
+
+/// ASCII 英数字またはハイフンかどうかをチェック
+fn is_alphanumeric_or_hyphen(c : Char) -> Bool {
+  (c >= '0' && c <= '9') ||
+  (c >= 'A' && c <= 'Z') ||
+  (c >= 'a' && c <= 'z') ||
+  c == '-'
+}

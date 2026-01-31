@@ -83,10 +83,14 @@ pub async fn run_release_pr(
     }
 
     // リモートから最新を取得
-    let _ = try {
+    let pull_result = try {
       @executor.run_git(ctx.repo, ["pull", "origin", branch_name])
     } catch {
-      _ => @executor.CommandResult::failed("")
+      _ => @executor.CommandResult::failed("pull command failed")
+    }
+    if not(pull_result.is_success()) && ctx.verbose {
+      println("[WARN] Failed to pull from remote: " + pull_result.stderr)
+      println("[WARN] Continuing with local branch state...")
     }
   } else {
     // 新しいブランチを作成
@@ -762,7 +766,7 @@ pub async fn should_release(
 }
 
 /// BumpType の優先度を返す（Major > Minor > Patch）
-fn bump_priority(bump : @semver.BumpType) -> Int {
+pub fn bump_priority(bump : @semver.BumpType) -> Int {
   match bump {
     Major => 3
     Minor => 2
@@ -771,12 +775,12 @@ fn bump_priority(bump : @semver.BumpType) -> Int {
 }
 
 /// PR の body を構築（テンプレート適用）
-fn build_pr_body(ctx : ReleaseContext) -> String {
+pub fn build_pr_body(ctx : ReleaseContext) -> String {
   ctx.config.pr_body.replace(old="{{ version }}", new=ctx.new_version.to_string())
 }
 
 /// リリースノートを生成（コミットサマリーから）
-fn generate_release_notes(
+pub fn generate_release_notes(
   commits : Array[(@conventional.ConventionalCommit, String)]
 ) -> String {
   if commits.is_empty() {

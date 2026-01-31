@@ -154,3 +154,64 @@ test "version compare build metadata ignored" {
 
   assert_true(v1.compare(v2) == 0)
 }
+
+// prerelease validation tests
+test "validate_prerelease - valid alpha" {
+  assert_true(validate_prerelease("alpha"))
+}
+
+test "validate_prerelease - valid alpha.1" {
+  assert_true(validate_prerelease("alpha.1"))
+}
+
+test "validate_prerelease - valid rc.1" {
+  assert_true(validate_prerelease("rc.1"))
+}
+
+test "validate_prerelease - valid beta.2.3" {
+  assert_true(validate_prerelease("beta.2.3"))
+}
+
+test "validate_prerelease - valid with hyphen" {
+  assert_true(validate_prerelease("pre-release"))
+}
+
+test "validate_prerelease - valid numeric 0" {
+  assert_true(validate_prerelease("0"))
+}
+
+test "validate_prerelease - valid numeric 123" {
+  assert_true(validate_prerelease("123"))
+}
+
+test "validate_prerelease - invalid empty" {
+  assert_false(validate_prerelease(""))
+}
+
+test "validate_prerelease - invalid leading zero" {
+  assert_false(validate_prerelease("01"))
+}
+
+test "validate_prerelease - invalid empty identifier" {
+  assert_false(validate_prerelease("alpha..beta"))
+}
+
+test "validate_prerelease - invalid trailing dot" {
+  assert_false(validate_prerelease("alpha."))
+}
+
+test "validate_prerelease - invalid leading dot" {
+  assert_false(validate_prerelease(".alpha"))
+}
+
+test "validate_prerelease - invalid underscore" {
+  assert_false(validate_prerelease("alpha_1"))
+}
+
+test "validate_prerelease - invalid space" {
+  assert_false(validate_prerelease("alpha 1"))
+}
+
+test "validate_prerelease - invalid plus" {
+  assert_false(validate_prerelease("alpha+1"))
+}
