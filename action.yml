@@ -1,0 +1,71 @@
+name: 'Moon Release'
+description: 'Automated release management for MoonBit projects'
+author: 'dijdzv'
+
+branding:
+  icon: 'package'
+  color: 'purple'
+
+inputs:
+  command:
+    description: 'Command to run: release-pr or release'
+    required: true
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+  config-file:
+    description: 'Path to configuration file'
+    required: false
+    default: 'release.json'
+  dry-run:
+    description: 'Show what would be done without making changes'
+    required: false
+    default: 'false'
+  verbose:
+    description: 'Enable verbose output'
+    required: false
+    default: 'false'
+
+outputs:
+  version:
+    description: 'The new version number'
+    value: ${{ steps.release.outputs.version }}
+  tag:
+    description: 'The created tag name'
+    value: ${{ steps.release.outputs.tag }}
+  pr-url:
+    description: 'The URL of the created pull request (for release-pr command)'
+    value: ${{ steps.release.outputs.pr-url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup MoonBit
+      uses: aspect-build/setup-moonbit@v1
+
+    - name: Build moon-release
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}
+        moon build --target native
+
+    - name: Run moon-release
+      id: release
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        DRY_RUN_FLAG=""
+        VERBOSE_FLAG=""
+        if [ "${{ inputs.dry-run }}" = "true" ]; then
+          DRY_RUN_FLAG="--dry-run"
+        fi
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          VERBOSE_FLAG="--verbose"
+        fi
+
+        ${{ github.action_path }}/target/native/release/build/main/main \
+          ${{ inputs.command }} \
+          --config "${{ inputs.config-file }}" \
+          $DRY_RUN_FLAG \
+          $VERBOSE_FLAG

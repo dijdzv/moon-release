@@ -1,8 +1,0 @@
-{
-  "is-main": false,
-  "import": [
-    "moon-release/src/lib/conventional",
-    "moon-release/src/lib/semver",
-    "moonbitlang/core/hashmap"
-  ]
-}

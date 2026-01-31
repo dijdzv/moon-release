@@ -1,0 +1,12 @@
+{
+  "import": [
+    "moon-release/src/lib/git",
+    "moonbitlang/async",
+    "moonbitlang/async/process",
+    "moonbitlang/async/io"
+  ],
+  "targets": {
+    "runner.mbt": ["native"],
+    "stub.mbt": ["wasm", "wasm-gc", "js"]
+  }
+}

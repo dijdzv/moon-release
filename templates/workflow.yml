@@ -1,0 +1,75 @@
+# Moon Release Workflow Template
+# Copy this file to .github/workflows/release.yml in your MoonBit project
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Dry run (no actual changes)'
+        type: boolean
+        default: false
+      command:
+        description: 'Command to run'
+        type: choice
+        options:
+          - release-pr
+          - release
+          - check
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.command == 'release-pr'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run moon-release
+        uses: dijdzv/moon-release@main
+        with:
+          command: release-pr
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          dry-run: ${{ github.event.inputs.dry-run || 'false' }}
+          verbose: 'true'
+
+  release:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.command == 'release' || (github.event_name == 'push' && contains(github.event.head_commit.message, 'chore: release'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run moon-release
+        uses: dijdzv/moon-release@main
+        with:
+          command: release
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          verbose: 'true'
+
+  check:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.command == 'check'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run moon-release
+        uses: dijdzv/moon-release@main
+        with:
+          command: check
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          verbose: 'true'

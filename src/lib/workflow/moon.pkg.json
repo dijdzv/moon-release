@@ -1,5 +1,4 @@
 {
-  "is-main": true,
   "import": [
     "moon-release/src/lib/config",
     "moon-release/src/lib/conventional",
@@ -8,18 +7,12 @@
     "moon-release/src/lib/github",
     "moon-release/src/lib/moon_mod",
     "moon-release/src/lib/executor",
-    "moon-release/src/lib/workflow",
-    "TheWaWaR/clap",
-    "moonbitlang/async",
     "moonbitlang/async/fs",
-    "moonbitlang/async/process",
-    "moonbitlang/async/stdio",
-    "moonbitlang/async/io",
-    "moonbitlang/core/json",
-    "moonbitlang/core/env"
+    "moonbitlang/core/hashmap"
   ],
   "targets": {
-    "main.mbt": ["native"],
+    "context.mbt": ["native"],
+    "release.mbt": ["native"],
     "stub.mbt": ["wasm", "wasm-gc", "js"]
   }
 }

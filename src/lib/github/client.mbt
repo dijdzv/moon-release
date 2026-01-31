@@ -99,7 +99,8 @@ pub fn GitHubClient::create_pull_request_command(
   body : String,
   head : String,
   base : String,
-  draft~ : Bool = false
+  draft~ : Bool = false,
+  labels~ : Array[String] = []
 ) -> Array[String] {
   let cmd : Array[String] = [
     "gh",
@@ -118,6 +119,10 @@ pub fn GitHubClient::create_pull_request_command(
   ]
   if draft {
     cmd.push("--draft")
+  }
+  for label in labels {
+    cmd.push("--label")
+    cmd.push(label)
   }
   cmd
 }

@@ -10,6 +10,13 @@ pub suberror ParseError {
   ParseError(String)
 }
 
+/// ParseError を文字列に変換
+pub fn ParseError::to_string(self : ParseError) -> String {
+  match self {
+    ParseError(msg) => msg
+  }
+}
+
 /// moon.mod.json をパース
 pub fn parse(content : String) -> MoonMod raise ParseError {
   let json = try {
