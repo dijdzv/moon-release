@@ -32,9 +32,13 @@ fn create_parser() -> @clap.Parser {
       "update": @clap.SubCommand::new(
         help="Update version locally (no commit/push)",
         args={
+          "dry-run": @clap.Arg::flag(
+            short='n',
+            help="Show what would be done without making changes",
+          ),
           "bump": @clap.Arg::named(
             short='b',
-            nargs=@clap.One,
+            nargs=@clap.AtMost(1),
             help="Force a specific version bump (major, minor, patch)",
           ),
           "packages": @clap.Arg::flag(
@@ -46,9 +50,13 @@ fn create_parser() -> @clap.Parser {
       "release-pr": @clap.SubCommand::new(
         help="Create a release pull request",
         args={
+          "dry-run": @clap.Arg::flag(
+            short='n',
+            help="Show what would be done without making changes",
+          ),
           "bump": @clap.Arg::named(
             short='b',
-            nargs=@clap.One,
+            nargs=@clap.AtMost(1),
             help="Force a specific version bump (major, minor, patch)",
           ),
         },
@@ -56,14 +64,18 @@ fn create_parser() -> @clap.Parser {
       "release": @clap.SubCommand::new(
         help="Create a release (tag and GitHub release)",
         args={
+          "dry-run": @clap.Arg::flag(
+            short='n',
+            help="Show what would be done without making changes",
+          ),
           "bump": @clap.Arg::named(
             short='b',
-            nargs=@clap.One,
+            nargs=@clap.AtMost(1),
             help="Force a specific version bump (major, minor, patch)",
           ),
           "prerelease": @clap.Arg::named(
             short='p',
-            nargs=@clap.One,
+            nargs=@clap.AtMost(1),
             help="Create a prerelease with the given identifier (e.g., alpha, beta, rc)",
           ),
         },
@@ -80,16 +92,14 @@ fn create_parser() -> @clap.Parser {
       "version": @clap.SubCommand::new(help="Show version information"),
       "check": @clap.SubCommand::new(
         help="Check the current state without making changes",
-        args={
-          "from": @clap.Arg::named(
-            nargs=@clap.One,
-            help="Start from a specific tag or commit",
-          ),
-        },
       ),
       "set-version": @clap.SubCommand::new(
         help="Set the package version manually",
         args={
+          "dry-run": @clap.Arg::flag(
+            short='n',
+            help="Show what would be done without making changes",
+          ),
           "version": @clap.Arg::positional(
             nargs=@clap.One,
             help="The version to set (e.g., 1.2.3)",
@@ -170,10 +180,17 @@ async fn main {
 /// update コマンド
 async fn cmd_update(
   subcmd : @clap.SimpleValue,
-  dry_run : Bool,
+  global_dry_run : Bool,
   verbose : Bool,
   config_path : String
 ) -> Unit {
+  // サブコマンドのフラグも確認
+  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
+    Some(v) => v
+    None => false
+  }
+  let dry_run = global_dry_run || subcmd_dry_run
+
   if verbose {
     println("Running update command...")
     println("  Config: " + config_path)
@@ -306,10 +323,17 @@ async fn cmd_update(
 /// release-pr コマンド
 async fn cmd_release_pr(
   subcmd : @clap.SimpleValue,
-  dry_run : Bool,
+  global_dry_run : Bool,
   verbose : Bool,
   config_path : String
 ) -> Unit {
+  // サブコマンドのフラグも確認
+  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
+    Some(v) => v
+    None => false
+  }
+  let dry_run = global_dry_run || subcmd_dry_run
+
   if verbose {
     println("Running release-pr command...")
     println("  Config: " + config_path)
@@ -415,10 +439,17 @@ async fn cmd_release_pr(
 /// release コマンド
 async fn cmd_release(
   subcmd : @clap.SimpleValue,
-  dry_run : Bool,
+  global_dry_run : Bool,
   verbose : Bool,
   config_path : String
 ) -> Unit {
+  // サブコマンドのフラグも確認
+  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
+    Some(v) => v
+    None => false
+  }
+  let dry_run = global_dry_run || subcmd_dry_run
+
   if verbose {
     println("Running release command...")
     println("  Config: " + config_path)
@@ -627,17 +658,23 @@ fn cmd_version() -> Unit {
 /// set-version コマンド
 async fn cmd_set_version(
   subcmd : @clap.SimpleValue,
-  dry_run : Bool,
+  global_dry_run : Bool,
   verbose : Bool
 ) -> Unit {
-  // バージョン引数を取得
-  let version_str : String = match subcmd.args.get("version") {
-    Some(arr) if arr.length() > 0 => arr[0]
-    _ => {
-      println("Error: Version argument is required")
-      println("Usage: moon-release set-version <version>")
-      return
-    }
+  // サブコマンドのフラグも確認
+  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
+    Some(v) => v
+    None => false
+  }
+  let dry_run = global_dry_run || subcmd_dry_run
+
+  // バージョン引数を取得（positional 引数）
+  let version_str : String = if subcmd.positional_args.length() > 0 {
+    subcmd.positional_args[0]
+  } else {
+    println("Error: Version argument is required")
+    println("Usage: moon-release set-version <version>")
+    return
   }
 
   // バージョンをパース

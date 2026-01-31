@@ -913,7 +913,7 @@ async fn get_old_apis_with_safe_checkout(
     @executor.run_command(["moon", "doc"])
   } catch {
     e => {
-      restore_branch(repo, original_branch, verbose)
+      let _ = try { restore_branch(repo, original_branch, verbose) } catch { _ => () }
       raise WorkflowError("Failed to run moon doc on tag: " + e.to_string())
     }
   }
@@ -930,7 +930,7 @@ async fn get_old_apis_with_safe_checkout(
   }
 
   // 元のブランチに戻る
-  restore_branch(repo, original_branch, verbose)
+  let _ = try { restore_branch(repo, original_branch, verbose) } catch { _ => () }
 
   old_apis
 }
