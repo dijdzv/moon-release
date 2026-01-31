@@ -9,6 +9,7 @@
     "moon-release/src/lib/moon_mod",
     "moon-release/src/lib/executor",
     "moon-release/src/lib/workflow",
+    "moon-release/src/lib/util",
     "TheWaWaR/clap",
     "moonbitlang/async",
     "moonbitlang/async/fs",

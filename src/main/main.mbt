@@ -1002,43 +1002,19 @@ fn commit_type_to_string(typ : @conventional.CommitType) -> String {
   }
 }
 
-/// JSON 文字列をエスケープ
+/// JSON 文字列をエスケープ (util モジュールのラッパー)
 fn escape_json_string(s : String) -> String {
-  let result = StringBuilder::new()
-  for c in s {
-    match c {
-      '"' => result.write_string("\\\"")
-      '\\' => result.write_string("\\\\")
-      '\n' => result.write_string("\\n")
-      '\r' => result.write_string("\\r")
-      '\t' => result.write_string("\\t")
-      _ => result.write_char(c)
-    }
-  }
-  result.to_string()
+  @util.escape_json_string(s)
 }
 
 /// JSON 文字列リテラルを作成（クォート付き）
 fn json_string(s : String) -> String {
-  "\"" + escape_json_string(s) + "\""
+  @util.json_string(s)
 }
 
 /// JSON オブジェクトを構築
 fn build_json_object(pairs : Array[(String, String)]) -> String {
-  let result = StringBuilder::new()
-  result.write_string("{")
-  for i = 0; i < pairs.length(); i = i + 1 {
-    let (key, value) = pairs[i]
-    if i > 0 {
-      result.write_string(",")
-    }
-    result.write_string("\"")
-    result.write_string(key)
-    result.write_string("\":")
-    result.write_string(value)
-  }
-  result.write_string("}")
-  result.to_string()
+  @util.build_json_object(pairs)
 }
 
 // ======== Helper functions ========
