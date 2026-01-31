@@ -120,3 +120,79 @@ test "bump_with_prerelease None clears prerelease" {
   assert_eq(result.prerelease, None)
   assert_eq(result.build_metadata, None)
 }
+
+// determine_bump_with_custom tests
+
+test "determine_bump_with_custom - custom major pattern" {
+  let commit = @conventional.parse("fix: BREAKING fix something")
+  match commit {
+    Some(c) => {
+      let commits = [c]
+      let result = determine_bump_with_custom(commits, Some("BREAKING"), None)
+      assert_eq(result, Some(Major))
+    }
+    None => fail("parse failed")
+  }
+}
+
+test "determine_bump_with_custom - custom minor pattern" {
+  let commit = @conventional.parse("chore: add NEW feature")
+  match commit {
+    Some(c) => {
+      let commits = [c]
+      let result = determine_bump_with_custom(commits, None, Some("NEW"))
+      assert_eq(result, Some(Minor))
+    }
+    None => fail("parse failed")
+  }
+}
+
+test "determine_bump_with_custom - both patterns None falls back to standard" {
+  let commit = @conventional.parse("feat: add feature")
+  match commit {
+    Some(c) => {
+      let commits = [c]
+      let result = determine_bump_with_custom(commits, None, None)
+      assert_eq(result, Some(Minor))
+    }
+    None => fail("parse failed")
+  }
+}
+
+test "determine_bump_with_custom - breaking takes priority over custom major" {
+  let commit = @conventional.parse("feat!: breaking change")
+  match commit {
+    Some(c) => {
+      let commits = [c]
+      // Even without custom patterns, breaking should return Major
+      let result = determine_bump_with_custom(commits, None, None)
+      assert_eq(result, Some(Major))
+    }
+    None => fail("parse failed")
+  }
+}
+
+test "determine_bump_with_custom - custom major priority over custom minor" {
+  let commit = @conventional.parse("chore: MAJOR and MINOR keywords")
+  match commit {
+    Some(c) => {
+      let commits = [c]
+      let result = determine_bump_with_custom(commits, Some("MAJOR"), Some("MINOR"))
+      // Major pattern should match first and return immediately
+      assert_eq(result, Some(Major))
+    }
+    None => fail("parse failed")
+  }
+}
+
+test "determine_bump_with_custom - no match returns None" {
+  let commit = @conventional.parse("docs: update readme")
+  match commit {
+    Some(c) => {
+      let commits = [c]
+      let result = determine_bump_with_custom(commits, Some("BREAKING"), Some("NEW"))
+      assert_eq(result, None)
+    }
+    None => fail("parse failed")
+  }
+}

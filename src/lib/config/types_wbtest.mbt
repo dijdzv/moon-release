@@ -266,3 +266,16 @@ test "parse config with all new options" {
   assert_eq(config.allow_dirty, true)
   assert_eq(config.registry_check, true)
 }
+
+test "PackageConfig::default" {
+  let pkg = PackageConfig::default("my-package", "packages/my-package")
+  assert_eq(pkg.name, "my-package")
+  assert_eq(pkg.path, "packages/my-package")
+  assert_eq(pkg.publish, true)
+  assert_eq(pkg.version_group, None)
+}
+
+test "ConfigError::to_string" {
+  let err = ConfigError("Something went wrong")
+  assert_eq(err.to_string(), "Something went wrong")
+}
