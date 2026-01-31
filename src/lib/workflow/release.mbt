@@ -46,7 +46,14 @@ pub async fn run_release_pr(
   let branch_name = ctx.config.pr_branch_prefix + "v\{ctx.new_version.to_string()}"
   let base_branch = ctx.config.base_branch
 
-  // 既存のリリース PR をチェック
+  // Validate branch name
+  match validate_git_ref_name(branch_name) {
+    Some(reason) =>
+      raise WorkflowError("Invalid branch name '\{branch_name}': \{reason}")
+    None => ()
+  }
+
+  // Find existing release PR
   let existing_pr = find_existing_release_pr(github, ctx.config.pr_branch_prefix)
 
   if ctx.dry_run {
@@ -277,7 +284,7 @@ pub async fn run_release(
     println("Running release workflow...")
   }
 
-  // テンプレートからタグ名とリリース名を生成
+  // Generate tag name and release title from templates
   let tag_name = ctx.config.git_tag_name.replace(
     old="{{ version }}",
     new=ctx.new_version.to_string(),
@@ -286,6 +293,15 @@ pub async fn run_release(
     old="{{ version }}",
     new=ctx.new_version.to_string(),
   )
+
+  // Validate tag name
+  if ctx.config.git_tag_enable {
+    match validate_git_ref_name(tag_name) {
+      Some(reason) =>
+        raise WorkflowError("Invalid tag name '\{tag_name}': \{reason}")
+      None => ()
+    }
+  }
 
   if ctx.dry_run {
     if ctx.config.git_tag_enable {

@@ -133,19 +133,45 @@ test "parse config with pr_labels" {
 test "parse config with custom_major_increment_regex" {
   let content =
     #|{
-    #|  "custom_major_increment_regex": "^break:"
+    #|  "custom_major_increment_regex": "BREAKING"
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
-  assert_eq(config.custom_major_increment_regex, Some("^break:"))
+  assert_eq(config.custom_major_increment_regex, Some("BREAKING"))
 }
 
 test "parse config with custom_minor_increment_regex" {
   let content =
     #|{
-    #|  "custom_minor_increment_regex": "^add:"
+    #|  "custom_minor_increment_regex": "NEW FEATURE"
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
-  assert_eq(config.custom_minor_increment_regex, Some("^add:"))
+  assert_eq(config.custom_minor_increment_regex, Some("NEW FEATURE"))
+}
+
+test "parse config with invalid pattern - regex metacharacter" {
+  let content =
+    #|{
+    #|  "custom_major_increment_regex": "^break:"
+    #|}
+  let result : Config? = try {
+    Some(Config::parse(content))
+  } catch {
+    _ => None
+  }
+  assert_true(result is None)
+}
+
+test "parse config with invalid pattern - empty string" {
+  let content =
+    #|{
+    #|  "custom_minor_increment_regex": ""
+    #|}
+  let result : Config? = try {
+    Some(Config::parse(content))
+  } catch {
+    _ => None
+  }
+  assert_true(result is None)
 }
 
 test "parse invalid publish_timeout - negative" {

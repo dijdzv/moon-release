@@ -121,3 +121,131 @@ test "build_pr_body - replaces version template" {
     _ => fail("parse failed")
   }
 }
+
+// Git ref name validation tests
+
+test "validate_git_ref_name - valid simple name" {
+  assert_true(validate_git_ref_name("v1.0.0") is None)
+}
+
+test "validate_git_ref_name - valid branch with prefix" {
+  assert_true(validate_git_ref_name("release/v1.0.0") is None)
+}
+
+test "validate_git_ref_name - valid name with hyphen" {
+  assert_true(validate_git_ref_name("v1.0.0-alpha.1") is None)
+}
+
+test "validate_git_ref_name - empty name is invalid" {
+  assert_true(validate_git_ref_name("") is Some(_))
+}
+
+test "validate_git_ref_name - name starting with slash is invalid" {
+  assert_true(validate_git_ref_name("/refs/heads/main") is Some(_))
+}
+
+test "validate_git_ref_name - name starting with dot is invalid" {
+  assert_true(validate_git_ref_name(".hidden") is Some(_))
+}
+
+test "validate_git_ref_name - name ending with slash is invalid" {
+  assert_true(validate_git_ref_name("release/") is Some(_))
+}
+
+test "validate_git_ref_name - name ending with dot is invalid" {
+  assert_true(validate_git_ref_name("version.") is Some(_))
+}
+
+test "validate_git_ref_name - name ending with .lock is invalid" {
+  assert_true(validate_git_ref_name("main.lock") is Some(_))
+}
+
+test "validate_git_ref_name - name with space is invalid" {
+  assert_true(validate_git_ref_name("my branch") is Some(_))
+}
+
+test "validate_git_ref_name - name with tilde is invalid" {
+  assert_true(validate_git_ref_name("v1~2") is Some(_))
+}
+
+test "validate_git_ref_name - name with caret is invalid" {
+  assert_true(validate_git_ref_name("v1^2") is Some(_))
+}
+
+test "validate_git_ref_name - name with colon is invalid" {
+  assert_true(validate_git_ref_name("v1:2") is Some(_))
+}
+
+test "validate_git_ref_name - name with backslash is invalid" {
+  assert_true(validate_git_ref_name("v1\\2") is Some(_))
+}
+
+test "validate_git_ref_name - name with question mark is invalid" {
+  assert_true(validate_git_ref_name("v1?") is Some(_))
+}
+
+test "validate_git_ref_name - name with asterisk is invalid" {
+  assert_true(validate_git_ref_name("v*") is Some(_))
+}
+
+test "validate_git_ref_name - name with bracket is invalid" {
+  assert_true(validate_git_ref_name("v[1]") is Some(_))
+}
+
+test "validate_git_ref_name - name with double dots is invalid" {
+  assert_true(validate_git_ref_name("v1..v2") is Some(_))
+}
+
+test "validate_git_ref_name - name with double slashes is invalid" {
+  assert_true(validate_git_ref_name("release//v1") is Some(_))
+}
+
+test "validate_git_ref_name - name with @{ is invalid" {
+  assert_true(validate_git_ref_name("v1@{0}") is Some(_))
+}
+
+// Prerelease identifier validation tests
+
+test "validate_prerelease_identifier - valid alpha" {
+  assert_true(validate_prerelease_identifier("alpha") is None)
+}
+
+test "validate_prerelease_identifier - valid beta with number" {
+  assert_true(validate_prerelease_identifier("beta.1") is None)
+}
+
+test "validate_prerelease_identifier - valid rc with hyphen" {
+  assert_true(validate_prerelease_identifier("rc-1") is None)
+}
+
+test "validate_prerelease_identifier - valid complex" {
+  assert_true(validate_prerelease_identifier("alpha.1.beta-2") is None)
+}
+
+test "validate_prerelease_identifier - empty is invalid" {
+  assert_true(validate_prerelease_identifier("") is Some(_))
+}
+
+test "validate_prerelease_identifier - special chars invalid" {
+  assert_true(validate_prerelease_identifier("alpha!") is Some(_))
+}
+
+test "validate_prerelease_identifier - space invalid" {
+  assert_true(validate_prerelease_identifier("alpha beta") is Some(_))
+}
+
+test "validate_prerelease_identifier - starting with dot invalid" {
+  assert_true(validate_prerelease_identifier(".alpha") is Some(_))
+}
+
+test "validate_prerelease_identifier - starting with hyphen invalid" {
+  assert_true(validate_prerelease_identifier("-alpha") is Some(_))
+}
+
+test "validate_prerelease_identifier - ending with dot invalid" {
+  assert_true(validate_prerelease_identifier("alpha.") is Some(_))
+}
+
+test "validate_prerelease_identifier - ending with hyphen invalid" {
+  assert_true(validate_prerelease_identifier("alpha-") is Some(_))
+}

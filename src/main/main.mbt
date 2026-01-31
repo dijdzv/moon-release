@@ -1,8 +1,18 @@
 /// moon-release CLI
-/// リリース自動化ツール
+/// Automated release tool
 
-/// バージョン
+/// Version
 let version : String = "0.1.0"
+
+/// Exit with status code (FFI to libc)
+extern "C" fn c_exit(status : Int) -> Unit = "exit"
+
+/// Exit with error (non-zero status code)
+/// Uses panic() to satisfy type checker since exit never returns
+fn[T] exit_error() -> T {
+  c_exit(1)
+  panic()
+}
 
 /// CLI パーサーを作成
 fn create_parser() -> @clap.Parser {
@@ -154,11 +164,11 @@ async fn main {
   } catch {
     e => {
       println("Error: " + e.to_string())
-      return
+      exit_error()
     }
   }
 
-  // ヘルプメッセージが返された場合は表示して終了
+  // Display help message if returned and exit
   match help_message {
     Some(msg) => {
       println(msg)
@@ -235,12 +245,12 @@ async fn cmd_update(
   let config = load_config(config_path)
   let repo = @git.Repository::current()
 
-  // dirty チェック
+  // dirty check
   if should_abort_dirty(config, repo, verbose) {
     if json_output {
       println("{\"error\": \"uncommitted changes in working directory\"}")
     }
-    return
+    exit_error()
   }
 
   // モノレポモードかチェック
@@ -260,12 +270,13 @@ async fn cmd_update(
         } else {
           println("Error: " + e.to_string())
         }
+        exit_error()
       }
     }
     return
   }
 
-  // 現在のバージョンを取得
+  // Get current version
   let moon_mod = try {
     load_moon_mod("moon.mod.json")
   } catch {
@@ -275,7 +286,7 @@ async fn cmd_update(
       } else {
         println("Error: " + e.to_string())
       }
-      return
+      exit_error()
     }
   }
 
@@ -288,11 +299,11 @@ async fn cmd_update(
         println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
         println("Hint: Version should follow semver format (e.g., 1.2.3 or 1.2.3-alpha)")
       }
-      return
+      exit_error()
     }
   }
 
-  // コミットを解析
+  // Parse commits
   let commits = try {
     get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
   } catch {
@@ -303,7 +314,7 @@ async fn cmd_update(
         println("Error getting commits: " + e.to_string())
         println("Hint: Make sure you are in a git repository with at least one commit")
       }
-      return
+      exit_error()
     }
   }
 
@@ -314,10 +325,10 @@ async fn cmd_update(
       println("No commits found since last tag. Nothing to release.")
       println("Hint: Create new commits or use 'moon-release set-version' to set version manually")
     }
-    return
+    exit_error()
   }
 
-  // バンプタイプを決定
+  // Determine bump type
   let forced_bump = get_bump_type(subcmd)
   let bump_type = match forced_bump {
     Some(t) => t
@@ -335,15 +346,15 @@ async fn cmd_update(
             println("No releasable commits found (no feat, fix, or breaking changes)")
             println("Hint: Use Conventional Commits (feat:, fix:) or --bump to force a version bump")
           }
-          return
+          exit_error()
         }
       }
   }
 
-  // 新しいバージョンを計算
+  // Calculate new version
   let new_version = @semver.bump(current_version, bump_type)
 
-  // レジストリチェック（有効な場合）
+  // Registry check (if enabled)
   if config.registry_check {
     let should_rel = try {
       @workflow.should_release(new_version, moon_mod.name, verbose)
@@ -352,7 +363,7 @@ async fn cmd_update(
         if verbose && not(json_output) {
           println("Warning: Registry check failed: " + e.to_string())
         }
-        true // エラーの場合はリリースを続行
+        true // Continue release on error
       }
     }
 
@@ -364,7 +375,7 @@ async fn cmd_update(
           "Version \{new_version.to_string()} is not newer than registry version. Nothing to update.",
         )
       }
-      return
+      exit_error()
     }
   }
 
@@ -410,14 +421,14 @@ async fn cmd_update(
   }
 }
 
-/// release-pr コマンド
+/// release-pr command
 async fn cmd_release_pr(
   subcmd : @clap.SimpleValue,
   global_dry_run : Bool,
   verbose : Bool,
   config_path : String
 ) -> Unit {
-  // サブコマンドのフラグも確認
+  // Check subcommand flags
   let subcmd_dry_run = match subcmd.get_flag("dry-run") {
     Some(v) => v
     None => false
@@ -430,22 +441,22 @@ async fn cmd_release_pr(
     println("  Dry run: " + dry_run.to_string())
   }
 
-  // 設定を読み込む
+  // Load config
   let config = load_config(config_path)
   let repo = @git.Repository::current()
 
-  // dirty チェック
+  // dirty check
   if should_abort_dirty(config, repo, verbose) {
-    return
+    exit_error()
   }
 
-  // 現在のバージョンを取得
+  // Get current version
   let moon_mod = try {
     load_moon_mod("moon.mod.json")
   } catch {
     e => {
       println("Error: " + e.to_string())
-      return
+      exit_error()
     }
   }
 
@@ -454,27 +465,27 @@ async fn cmd_release_pr(
     None => {
       println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
       println("Hint: Version should follow semver format (e.g., 1.2.3)")
-      return
+      exit_error()
     }
   }
 
-  // コミットを解析
+  // Parse commits
   let commits = try {
     get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
   } catch {
     e => {
       println("Error getting commits: " + e.to_string())
       println("Hint: Make sure you are in a git repository with at least one commit")
-      return
+      exit_error()
     }
   }
 
   if commits.is_empty() {
     println("No commits found since last tag. Nothing to release.")
-    return
+    exit_error()
   }
 
-  // バンプタイプを決定
+  // Determine bump type
   let forced_bump = get_bump_type(subcmd)
   let bump_type = match forced_bump {
     Some(t) => t
@@ -488,15 +499,15 @@ async fn cmd_release_pr(
         None => {
           println("No releasable commits found")
           println("Hint: Use Conventional Commits or --bump to force a version bump")
-          return
+          exit_error()
         }
       }
   }
 
-  // 新しいバージョンを計算
+  // Calculate new version
   let new_version = @semver.bump(current_version, bump_type)
 
-  // コンテキストを作成
+  // Create context
   let ctx = @workflow.ReleaseContext::new(
     config,
     repo,
@@ -507,33 +518,36 @@ async fn cmd_release_pr(
     verbose~,
   )
 
-  // GitHub クライアントを取得
+  // Get GitHub client
   let github = try {
     get_github_client()
   } catch {
     e => {
       println("Error: " + e.to_string())
       println("Hint: Make sure gh CLI is installed and you're logged in (gh auth login)")
-      return
+      exit_error()
     }
   }
 
-  // ワークフローを実行
+  // Run workflow
   try {
     @workflow.run_release_pr(ctx, github)
   } catch {
-    e => println("Error: " + e.to_string())
+    e => {
+      println("Error: " + e.to_string())
+      exit_error()
+    }
   }
 }
 
-/// release コマンド
+/// release command
 async fn cmd_release(
   subcmd : @clap.SimpleValue,
   global_dry_run : Bool,
   verbose : Bool,
   config_path : String
 ) -> Unit {
-  // サブコマンドのフラグも確認
+  // Check subcommand flags
   let subcmd_dry_run = match subcmd.get_flag("dry-run") {
     Some(v) => v
     None => false
@@ -546,22 +560,22 @@ async fn cmd_release(
     println("  Dry run: " + dry_run.to_string())
   }
 
-  // 設定を読み込む
+  // Load config
   let config = load_config(config_path)
   let repo = @git.Repository::current()
 
-  // dirty チェック
+  // dirty check
   if should_abort_dirty(config, repo, verbose) {
-    return
+    exit_error()
   }
 
-  // 現在のバージョンを取得
+  // Get current version
   let moon_mod = try {
     load_moon_mod("moon.mod.json")
   } catch {
     e => {
       println("Error: " + e.to_string())
-      return
+      exit_error()
     }
   }
 
@@ -570,22 +584,22 @@ async fn cmd_release(
     None => {
       println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
       println("Hint: Version should follow semver format (e.g., 1.2.3)")
-      return
+      exit_error()
     }
   }
 
-  // コミットを解析
+  // Parse commits
   let commits = try {
     get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
   } catch {
     e => {
       println("Error getting commits: " + e.to_string())
       println("Hint: Make sure you are in a git repository")
-      return
+      exit_error()
     }
   }
 
-  // バンプタイプを決定
+  // Determine bump type
   let forced_bump = get_bump_type(subcmd)
   let bump_type = match forced_bump {
     Some(t) => t
@@ -596,25 +610,39 @@ async fn cmd_release(
         config.custom_minor_increment_regex,
       ) {
         Some(t) => t
-        None => @semver.Patch // デフォルトは patch
+        None => @semver.Patch // default to patch
       }
   }
 
-  // prerelease 識別子を取得
+  // Get prerelease identifier
   let prerelease : String? = try {
     Some(subcmd.get_one("prerelease"))
   } catch {
     _ => None
   }
 
-  // prerelease が指定されているが、config で許可されていない場合はエラー
+  // Validate prerelease identifier format
+  match prerelease {
+    Some(id) =>
+      match @workflow.validate_prerelease_identifier(id) {
+        Some(reason) => {
+          println("Error: Invalid prerelease identifier '\{id}': \{reason}")
+          println("Hint: Use alphanumeric characters, hyphens, and dots (e.g., alpha, beta.1, rc-1)")
+          exit_error()
+        }
+        None => ()
+      }
+    None => ()
+  }
+
+  // Check if prerelease is allowed in config
   if prerelease is Some(_) && not(config.allow_prerelease) {
     println("Error: Prerelease is not allowed in configuration.")
     println("Hint: Set 'allow_prerelease: true' in release.json to enable prereleases")
-    return
+    exit_error()
   }
 
-  // 新しいバージョンを計算
+  // Calculate new version
   let new_version = @semver.bump_with_prerelease(current_version, bump_type, prerelease)
 
   // コンテキストを作成
@@ -628,26 +656,29 @@ async fn cmd_release(
     verbose~,
   )
 
-  // GitHub クライアントを取得
+  // Get GitHub client
   let github = try {
     get_github_client()
   } catch {
     e => {
       println("Error: " + e.to_string())
       println("Hint: Make sure gh CLI is installed and you're logged in (gh auth login)")
-      return
+      exit_error()
     }
   }
 
-  // ワークフローを実行
+  // Run workflow
   try {
     @workflow.run_release(ctx, github)
   } catch {
-    e => println("Error: " + e.to_string())
+    e => {
+      println("Error: " + e.to_string())
+      exit_error()
+    }
   }
 }
 
-/// init コマンド
+/// init command
 async fn cmd_init(
   subcmd : @clap.SimpleValue,
   dry_run : Bool,
@@ -660,7 +691,7 @@ async fn cmd_init(
 
   println("Initializing release configuration...")
 
-  // ファイルが既に存在するかチェック
+  // Check if file already exists
   let file_exists = try {
     let _ = @fs.read_file("release.json")
     true
@@ -670,7 +701,7 @@ async fn cmd_init(
 
   if file_exists && not(force) {
     println("release.json already exists. Use --force to overwrite.")
-    return
+    exit_error()
   }
 
   if dry_run {
@@ -678,7 +709,7 @@ async fn cmd_init(
     return
   }
 
-  // デフォルト設定を JSON として書き込む
+  // Write default config as JSON
   let config_json = generate_default_config_json()
 
   try {
@@ -686,7 +717,7 @@ async fn cmd_init(
   } catch {
     e => {
       println("Error: Failed to write release.json: " + e.to_string())
-      return
+      exit_error()
     }
   }
 
@@ -758,22 +789,22 @@ async fn cmd_set_version(
   }
   let dry_run = global_dry_run || subcmd_dry_run
 
-  // バージョン引数を取得（positional 引数）
+  // Get version argument (positional argument)
   let version_str : String = if subcmd.positional_args.length() > 0 {
     subcmd.positional_args[0]
   } else {
     println("Error: Version argument is required")
     println("Usage: moon-release set-version <version>")
-    return
+    exit_error()
   }
 
-  // バージョンをパース
+  // Parse version
   let new_version = match @semver.Version::parse(version_str) {
     Some(v) => v
     None => {
       println("Error: Invalid version format: " + version_str)
       println("Expected format: major.minor.patch (e.g., 1.2.3)")
-      return
+      exit_error()
     }
   }
 
@@ -781,23 +812,23 @@ async fn cmd_set_version(
     println("Setting version to: " + new_version.to_string())
   }
 
-  // 現在の moon.mod.json を読み込む
+  // Read current moon.mod.json
   let moon_mod_content = try {
     @fs.read_file("moon.mod.json").text()
   } catch {
     e => {
       println("Error: Failed to read moon.mod.json: " + e.to_string())
-      return
+      exit_error()
     }
   }
 
-  // 現在のバージョンを取得
+  // Get current version
   let moon_mod = try {
     @moon_mod.parse(moon_mod_content)
   } catch {
     e => {
       println("Error: Failed to parse moon.mod.json: " + e.to_string())
-      return
+      exit_error()
     }
   }
 
@@ -808,13 +839,13 @@ async fn cmd_set_version(
     return
   }
 
-  // バージョンを更新
+  // Update version
   let updated_content = try {
     @moon_mod.update_version(moon_mod_content, new_version)
   } catch {
     e => {
       println("Error: Failed to update version: " + e.to_string())
-      return
+      exit_error()
     }
   }
 
@@ -823,7 +854,7 @@ async fn cmd_set_version(
   } catch {
     e => {
       println("Error: Failed to write moon.mod.json: " + e.to_string())
-      return
+      exit_error()
     }
   }
 
@@ -875,7 +906,7 @@ async fn cmd_check(
     }
   }
 
-  // コミットを取得
+  // Get commits
   let commits = try {
     get_commits_since_last_tag(repo)
   } catch {
@@ -885,11 +916,11 @@ async fn cmd_check(
       } else {
         println("Error getting commits: " + e.to_string())
       }
-      return
+      exit_error()
     }
   }
 
-  // バンプタイプを決定
+  // Determine bump type
   let bump_type = if commits.length() > 0 {
     @semver.determine_bump(commits.map(fn(c) { c.0 }))
   } else {
@@ -1218,7 +1249,7 @@ fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
     println("Error: shell argument is required")
     println("Usage: moon-release generate-completions <shell>")
     println("Supported shells: bash, zsh, fish")
-    return
+    exit_error()
   }
 
   match shell {
@@ -1228,6 +1259,7 @@ fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
     _ => {
       println("Error: unsupported shell: " + shell)
       println("Supported shells: bash, zsh, fish")
+      exit_error()
     }
   }
 }

@@ -133,15 +133,13 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     packages,
     registry_check: parse_bool(obj, "registry_check", d.registry_check),
     allow_dirty: parse_bool(obj, "allow_dirty", d.allow_dirty),
-    custom_major_increment_regex: parse_optional_string(
-      obj,
+    custom_major_increment_regex: validate_pattern(
+      parse_optional_string(obj, "custom_major_increment_regex", d.custom_major_increment_regex),
       "custom_major_increment_regex",
-      d.custom_major_increment_regex,
     ),
-    custom_minor_increment_regex: parse_optional_string(
-      obj,
+    custom_minor_increment_regex: validate_pattern(
+      parse_optional_string(obj, "custom_minor_increment_regex", d.custom_minor_increment_regex),
       "custom_minor_increment_regex",
-      d.custom_minor_increment_regex,
     ),
     max_analyze_commits: parse_optional_uint(
       obj,
@@ -171,10 +169,42 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
 }
 
 // ============================================================================
-// JSON パースヘルパー関数
+// JSON parse helper functions
 // ============================================================================
 
-/// 文字列フィールドをパース
+/// Validate custom pattern (used for increment patterns)
+/// Note: These patterns use substring matching (contains), not regex
+fn validate_pattern(
+  pattern : String?,
+  field_name : String
+) -> String? raise ConfigError {
+  match pattern {
+    Some(p) => {
+      // Empty patterns are not useful
+      if p.is_empty() {
+        raise ConfigError(
+          "'\{field_name}' cannot be empty (use null to disable)",
+        )
+      }
+      // Warn about regex metacharacters that won't work as expected
+      // Since we use substring matching, not actual regex
+      let chars = p.to_array()
+      for i = 0; i < chars.length(); i = i + 1 {
+        let c = chars[i]
+        // Check for common regex metacharacters
+        if c == '^' || c == '$' || c == '*' || c == '+' || c == '?' || c == '|' || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' || c == '\\' {
+          raise ConfigError(
+            "'\{field_name}' contains regex metacharacter '\{c}'. Note: This field uses simple substring matching, not regex. The pattern '\{p}' will be matched literally.",
+          )
+        }
+      }
+      Some(p)
+    }
+    None => None
+  }
+}
+
+/// Parse string field
 fn parse_string(
   obj : Map[String, Json],
   key : String,
