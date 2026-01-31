@@ -1,0 +1,14 @@
+# MoonBit
+.mooncakes/
+_build/
+target
+
+# Nix/devenv
+.devenv/
+.devenv.flake.nix
+.direnv/
+devenv.lock
+result
+
+# OS
+.DS_Store

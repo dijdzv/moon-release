@@ -1,0 +1,18 @@
+{
+  "name": "moon-release",
+  "version": "0.1.0",
+  "deps": {
+    "moonbitlang/async": "0.16.4",
+    "TheWaWaR/clap": "0.2.6"
+  },
+  "readme": "README.md",
+  "repository": "https://github.com/dijdzv/moon-release",
+  "license": "MIT",
+  "keywords": [
+    "release",
+    "changelog",
+    "semver",
+    "conventional-commits"
+  ],
+  "description": "Automated release management tool for MoonBit"
+}

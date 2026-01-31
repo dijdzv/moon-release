@@ -1,0 +1,13 @@
+{
+  "is-main": true,
+  "import": [
+    "moon-release/src/lib/config",
+    "moon-release/src/lib/conventional",
+    "moon-release/src/lib/semver",
+    "moon-release/src/lib/changelog",
+    "moon-release/src/lib/git",
+    "moon-release/src/lib/github",
+    "moon-release/src/lib/moon_mod",
+    "TheWaWaR/clap"
+  ]
+}

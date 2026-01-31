@@ -1,0 +1,111 @@
+test "parse simple version" {
+  let result = Version::parse("1.2.3")
+  match result {
+    Some(v) => {
+      assert_eq(v.major, 1)
+      assert_eq(v.minor, 2)
+      assert_eq(v.patch, 3)
+      assert_eq(v.prerelease, None)
+      assert_eq(v.build_metadata, None)
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "parse version with prerelease" {
+  let result = Version::parse("1.2.3-alpha.1")
+  match result {
+    Some(v) => {
+      assert_eq(v.major, 1)
+      assert_eq(v.minor, 2)
+      assert_eq(v.patch, 3)
+      assert_eq(v.prerelease, Some("alpha.1"))
+      assert_eq(v.build_metadata, None)
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "parse version with build metadata" {
+  let result = Version::parse("1.2.3+build.123")
+  match result {
+    Some(v) => {
+      assert_eq(v.major, 1)
+      assert_eq(v.minor, 2)
+      assert_eq(v.patch, 3)
+      assert_eq(v.prerelease, None)
+      assert_eq(v.build_metadata, Some("build.123"))
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "parse version with prerelease and build metadata" {
+  let result = Version::parse("1.2.3-beta.2+build.456")
+  match result {
+    Some(v) => {
+      assert_eq(v.major, 1)
+      assert_eq(v.minor, 2)
+      assert_eq(v.patch, 3)
+      assert_eq(v.prerelease, Some("beta.2"))
+      assert_eq(v.build_metadata, Some("build.456"))
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "parse version 0.0.1" {
+  let result = Version::parse("0.0.1")
+  match result {
+    Some(v) => {
+      assert_eq(v.major, 0)
+      assert_eq(v.minor, 0)
+      assert_eq(v.patch, 1)
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "parse invalid - empty" {
+  assert_eq(Version::parse(""), None)
+}
+
+test "parse invalid - only major" {
+  assert_eq(Version::parse("1"), None)
+}
+
+test "parse invalid - only major.minor" {
+  assert_eq(Version::parse("1.2"), None)
+}
+
+test "parse invalid - non-numeric" {
+  assert_eq(Version::parse("1.2.x"), None)
+}
+
+test "version to_string" {
+  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: None, build_metadata: None }
+  assert_eq(v.to_string(), "1.2.3")
+}
+
+test "version to_string with prerelease" {
+  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: Some("alpha"), build_metadata: None }
+  assert_eq(v.to_string(), "1.2.3-alpha")
+}
+
+test "version to_string with build metadata" {
+  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: None, build_metadata: Some("build") }
+  assert_eq(v.to_string(), "1.2.3+build")
+}
+
+test "version compare" {
+  let v1 = Version::{ major: 1, minor: 0, patch: 0, prerelease: None, build_metadata: None }
+  let v2 = Version::{ major: 2, minor: 0, patch: 0, prerelease: None, build_metadata: None }
+  let v3 = Version::{ major: 1, minor: 1, patch: 0, prerelease: None, build_metadata: None }
+  let v4 = Version::{ major: 1, minor: 0, patch: 1, prerelease: None, build_metadata: None }
+
+  assert_true(v1.compare(v2) < 0)
+  assert_true(v2.compare(v1) > 0)
+  assert_true(v1.compare(v3) < 0)
+  assert_true(v1.compare(v4) < 0)
+  assert_true(v1.compare(v1) == 0)
+}
