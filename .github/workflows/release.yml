@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: aspect-build/setup-moonbit@v1
+        uses: moonbit-community/setup-moonbit@v0
 
       - name: Build moon-release
         run: moon build --target native
@@ -64,7 +64,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: aspect-build/setup-moonbit@v1
+        uses: moonbit-community/setup-moonbit@v0
 
       - name: Build
         run: moon build --target native
@@ -97,7 +97,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: aspect-build/setup-moonbit@v1
+        uses: moonbit-community/setup-moonbit@v0
 
       - name: Build moon-release
         run: moon build --target native
