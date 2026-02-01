@@ -47,7 +47,7 @@ runs:
   using: 'composite'
   steps:
     - name: Setup MoonBit
-      uses: aspect-build/setup-moonbit@v1
+      uses: hustcer/setup-moonbit@v1
 
     - name: Setup mooncakes.io credentials
       if: inputs.mooncakes-token != '' && inputs.mooncakes-username != ''

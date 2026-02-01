@@ -73,10 +73,38 @@ jobs:
       - name: Setup MoonBit
         uses: hustcer/setup-moonbit@v1
 
-      - name: Build
+      - name: Patch moonbitlang/async for Windows (temporary fix)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           moon update
+          # Find thread_pool.c in .mooncakes or registry
+          $file = Get-ChildItem -Recurse -Filter "thread_pool.c" -Path ".mooncakes" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $file) {
+            $file = Get-ChildItem -Recurse -Filter "thread_pool.c" -Path "$env:USERPROFILE/.moon/registry" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if ($file) {
+            $content = Get-Content $file.FullName -Raw
+            # Patch 1: startup_info.cb -> startup_info.StartupInfo.cb
+            $content = $content -replace 'startup_info\.cb = sizeof\(STARTUPINFOEXW\);', 'startup_info.StartupInfo.cb = sizeof(STARTUPINFOEXW);'
+            # Patch 2: Replace all 'attrs' with 'startup_info.lpAttributeList'
+            $content = $content -replace 'free\(attrs\)', 'free(startup_info.lpAttributeList)'
+            $content = $content -replace 'UpdateProcThreadAttributeList\(\s*attrs,', 'UpdateProcThreadAttribute(startup_info.lpAttributeList,'
+            # Patch 3: UpdateProcThreadAttributeList -> UpdateProcThreadAttribute (remaining)
+            $content = $content -replace 'UpdateProcThreadAttributeList\(', 'UpdateProcThreadAttribute('
+            Set-Content $file.FullName $content -NoNewline
+            Write-Host "Patched thread_pool.c: $($file.FullName)"
+          } else {
+            Write-Host "WARNING: thread_pool.c not found, skipping patch"
+          }
+
+      - name: Build
+        run: |
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            moon update
+          fi
           moon build --target native
+        shell: bash
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
