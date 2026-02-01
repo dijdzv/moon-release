@@ -249,3 +249,119 @@ test "validate_prerelease_identifier - ending with dot invalid" {
 test "validate_prerelease_identifier - ending with hyphen invalid" {
   assert_true(validate_prerelease_identifier("alpha-") is Some(_))
 }
+
+// Monorepo PR body tests
+
+test "build_pr_body_monorepo - empty packages" {
+  let packages : Array[PackageReleaseInfo] = []
+  let result = build_pr_body_monorepo(packages)
+  assert_eq(result, "No packages to release.")
+}
+
+test "build_pr_body_monorepo - single package" {
+  let feat = @conventional.parse("feat: add new feature")
+  match feat {
+    Some(c) => {
+      let old_ver = @semver.Version::parse("0.0.4")
+      let new_ver = @semver.Version::parse("0.0.5")
+      match (old_ver, new_ver) {
+        (Some(old), Some(new)) => {
+          let packages = [
+            PackageReleaseInfo::{
+              name: "my-package",
+              old_version: old,
+              new_version: new,
+              commits: [(c, "abc1234")],
+            },
+          ]
+          let result = build_pr_body_monorepo(packages)
+          // Check header
+          assert_true(result.contains("## 🤖 New release"))
+          // Check version list
+          assert_true(result.contains("* `my-package`: 0.0.4 -> 0.0.5"))
+          // Check collapsible changelog
+          assert_true(result.contains("<details>"))
+          assert_true(result.contains("<summary><i><b>Changelog</b></i></summary>"))
+          assert_true(result.contains("## `my-package`"))
+          assert_true(result.contains("### Features"))
+          assert_true(result.contains("add new feature"))
+        }
+        _ => fail("version parse failed")
+      }
+    }
+    None => fail("commit parse failed")
+  }
+}
+
+test "build_pr_body_monorepo - multiple packages" {
+  let feat = @conventional.parse("feat: add feature")
+  let fix = @conventional.parse("fix: fix bug")
+  match (feat, fix) {
+    (Some(f), Some(x)) => {
+      let old1 = @semver.Version::parse("1.0.0")
+      let new1 = @semver.Version::parse("1.1.0")
+      let old2 = @semver.Version::parse("2.0.0")
+      let new2 = @semver.Version::parse("2.0.1")
+      match (old1, new1, old2, new2) {
+        (Some(o1), Some(n1), Some(o2), Some(n2)) => {
+          let packages = [
+            PackageReleaseInfo::{
+              name: "pkg-a",
+              old_version: o1,
+              new_version: n1,
+              commits: [(f, "1111111")],
+            },
+            PackageReleaseInfo::{
+              name: "pkg-b",
+              old_version: o2,
+              new_version: n2,
+              commits: [(x, "2222222")],
+            },
+          ]
+          let result = build_pr_body_monorepo(packages)
+          // Check both packages in version list
+          assert_true(result.contains("* `pkg-a`: 1.0.0 -> 1.1.0"))
+          assert_true(result.contains("* `pkg-b`: 2.0.0 -> 2.0.1"))
+          // Check both package changelogs
+          assert_true(result.contains("## `pkg-a`"))
+          assert_true(result.contains("## `pkg-b`"))
+          assert_true(result.contains("add feature"))
+          assert_true(result.contains("fix bug"))
+        }
+        _ => fail("version parse failed")
+      }
+    }
+    _ => fail("commit parse failed")
+  }
+}
+
+test "build_pr_body_monorepo - groups commits by type" {
+  let feat = @conventional.parse("feat: feature one")
+  let fix = @conventional.parse("fix: bug fix")
+  let docs = @conventional.parse("docs: update readme")
+  match (feat, fix, docs) {
+    (Some(f), Some(x), Some(d)) => {
+      let old_ver = @semver.Version::parse("1.0.0")
+      let new_ver = @semver.Version::parse("1.1.0")
+      match (old_ver, new_ver) {
+        (Some(old), Some(new)) => {
+          let packages = [
+            PackageReleaseInfo::{
+              name: "test-pkg",
+              old_version: old,
+              new_version: new,
+              commits: [(f, "1111111"), (x, "2222222"), (d, "3333333")],
+            },
+          ]
+          let result = build_pr_body_monorepo(packages)
+          // Check sections are present
+          assert_true(result.contains("### Features"))
+          assert_true(result.contains("### Bug Fixes"))
+          assert_true(result.contains("### Other Changes"))
+        }
+        _ => fail("version parse failed")
+      }
+    }
+    _ => fail("commit parse failed")
+  }
+}

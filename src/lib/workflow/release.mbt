@@ -471,6 +471,122 @@ priv struct PackageUpdateInfo {
   bump_type : @semver.BumpType
 }
 
+/// Package release info (for PR body generation)
+pub struct PackageReleaseInfo {
+  name : String
+  old_version : @semver.Version
+  new_version : @semver.Version
+  commits : Array[(@conventional.ConventionalCommit, String)]
+}
+
+/// Build PR body for monorepo (release-plz style)
+pub fn build_pr_body_monorepo(
+  packages : Array[PackageReleaseInfo]
+) -> String {
+  if packages.is_empty() {
+    return "No packages to release."
+  }
+
+  let sb = StringBuilder::new()
+
+  // Header
+  sb.write_string("## 🤖 New release\n\n")
+
+  // Package version list
+  for pkg in packages {
+    sb.write_string("* `\{pkg.name}`: \{pkg.old_version.to_string()} -> \{pkg.new_version.to_string()}\n")
+  }
+
+  // Collapsible changelog
+  sb.write_string("\n<details><summary><i><b>Changelog</b></i></summary><p>\n\n")
+
+  for pkg in packages {
+    if not(pkg.commits.is_empty()) {
+      sb.write_string("## `\{pkg.name}`\n\n")
+      sb.write_string("<blockquote>\n\n")
+      sb.write_string(generate_package_changelog(pkg.commits))
+      sb.write_string("</blockquote>\n\n")
+    }
+  }
+
+  sb.write_string("</p></details>\n\n")
+  sb.write_string("---\n")
+  sb.write_string("*This PR was automatically created by moon-release.*\n")
+
+  sb.to_string()
+}
+
+/// Generate changelog for a single package
+fn generate_package_changelog(
+  commits : Array[(@conventional.ConventionalCommit, String)]
+) -> String {
+  if commits.is_empty() {
+    return "No changes.\n"
+  }
+
+  // Group commits by type
+  let features : Array[String] = []
+  let fixes : Array[String] = []
+  let others : Array[String] = []
+
+  for i = 0; i < commits.length(); i = i + 1 {
+    let (commit, hash) = commits[i]
+    let short_hash = if hash.length() >= 7 {
+      let chars = hash.to_array()
+      let sb = StringBuilder::new()
+      for k = 0; k < 7; k = k + 1 {
+        sb.write_char(chars[k])
+      }
+      sb.to_string()
+    } else {
+      hash
+    }
+
+    let scope_str = match commit.scope {
+      Some(s) => "**\{s}**: "
+      None => ""
+    }
+    let line = "- \{scope_str}\{commit.description} (\{short_hash})"
+
+    match commit.typ {
+      Feat => features.push(line)
+      Fix => fixes.push(line)
+      _ => others.push(line)
+    }
+  }
+
+  let sb = StringBuilder::new()
+
+  if not(features.is_empty()) {
+    sb.write_string("### Features\n\n")
+    for line in features {
+      sb.write_string(line)
+      sb.write_string("\n")
+    }
+    sb.write_string("\n")
+  }
+
+  if not(fixes.is_empty()) {
+    sb.write_string("### Bug Fixes\n\n")
+    for line in fixes {
+      sb.write_string(line)
+      sb.write_string("\n")
+    }
+    sb.write_string("\n")
+  }
+
+  if not(others.is_empty()) {
+    sb.write_string("### Other Changes\n\n")
+    for line in others {
+      sb.write_string(line)
+      sb.write_string("\n")
+    }
+    sb.write_string("\n")
+  }
+
+  sb.to_string()
+}
+
 /// Monorepo: update multiple packages
 // Suppress: WorkflowError declared for API consistency. Errors are handled internally
 // with warnings printed to stdout, allowing partial success in monorepo scenarios.
