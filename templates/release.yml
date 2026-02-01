@@ -1,5 +1,15 @@
 # Moon Release Workflow Template
 # Copy this file to .github/workflows/ in your MoonBit project
+#
+# Required repository settings:
+# 1. Settings → Actions → General → Workflow permissions
+#    - Select "Read and write permissions"
+#    - Check "Allow GitHub Actions to create and approve pull requests"
+#
+# Optional (for mooncakes.io publishing):
+# 2. Settings → Secrets and variables → Actions
+#    - MOONCAKES_TOKEN: from ~/.moon/credentials.json
+#    - MOONCAKES_USERNAME: from ~/.moon/credentials.json
 
 name: Release
 
@@ -12,70 +22,83 @@ on:
         description: 'Dry run (no actual changes)'
         type: boolean
         default: false
-      command:
-        description: 'Command to run'
-        type: choice
-        options:
-          - release-pr
-          - release
-          - check
 
 permissions:
   contents: write
   pull-requests: write
 
+env:
+  MOON_RELEASE_VERSION: latest  # or specific version like "v0.1.0"
+
 jobs:
+  # Create or update release PR on every push to main
   release-pr:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.inputs.command == 'release-pr'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Run moon-release
-        uses: dijdzv/moon-release@main
-        with:
-          command: release-pr
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          dry-run: ${{ github.event.inputs.dry-run || 'false' }}
-          verbose: 'true'
+      - name: Setup MoonBit
+        uses: hustcer/setup-moonbit@v1
 
+      - name: Download moon-release
+        run: |
+          if [ "${{ env.MOON_RELEASE_VERSION }}" = "latest" ]; then
+            curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
+          else
+            curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/download/${{ env.MOON_RELEASE_VERSION }}/moon-release-linux-x86_64
+          fi
+          chmod +x moon-release
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create Release PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DRY_RUN_FLAG=""
+          if [ "${{ github.event.inputs.dry-run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          ./moon-release release-pr $DRY_RUN_FLAG --verbose
+
+  # Create release when release PR is merged
+  # Triggered by commit message starting with "chore:" and containing "release v"
   release:
     runs-on: ubuntu-latest
-    if: github.event.inputs.command == 'release' || (github.event_name == 'push' && contains(github.event.head_commit.message, 'chore: release'))
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Run moon-release
-        uses: dijdzv/moon-release@main
-        with:
-          command: release
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          # mooncakes.io への自動 publish を有効にする場合は以下を設定
-          # 1. ローカルで `moon login` を実行
-          # 2. ~/.moon/credentials.json の token と username を取得
-          # 3. GitHub Secrets に MOONCAKES_TOKEN と MOONCAKES_USERNAME を設定
-          mooncakes-token: ${{ secrets.MOONCAKES_TOKEN }}
-          mooncakes-username: ${{ secrets.MOONCAKES_USERNAME }}
-          verbose: 'true'
+      - name: Setup MoonBit
+        uses: hustcer/setup-moonbit@v1
 
-  check:
-    runs-on: ubuntu-latest
-    if: github.event.inputs.command == 'check'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      # Configure mooncakes credentials (only if publishing to mooncakes.io)
+      # Remove this step if "publish": false in release.json
+      - name: Configure mooncakes credentials
+        if: ${{ secrets.MOONCAKES_TOKEN != '' }}
+        run: |
+          mkdir -p ~/.moon
+          echo '{"token": "${{ secrets.MOONCAKES_TOKEN }}", "username": "${{ secrets.MOONCAKES_USERNAME }}"}' > ~/.moon/credentials.json
 
-      - name: Run moon-release
-        uses: dijdzv/moon-release@main
-        with:
-          command: check
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          verbose: 'true'
+      - name: Download moon-release
+        run: |
+          if [ "${{ env.MOON_RELEASE_VERSION }}" = "latest" ]; then
+            curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
+          else
+            curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/download/${{ env.MOON_RELEASE_VERSION }}/moon-release-linux-x86_64
+          fi
+          chmod +x moon-release
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./moon-release release --verbose

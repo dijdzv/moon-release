@@ -264,7 +264,22 @@ Example: If `core` has a breaking change and `utils` has a feat, both will recei
 
 ## GitHub Actions
 
-### Basic Usage
+### Required Setup
+
+Before using moon-release in GitHub Actions, you need to configure the following:
+
+#### 1. Repository Permissions
+
+Go to **Settings → Actions → General → Workflow permissions**:
+
+- Select **"Read and write permissions"**
+- Check **"Allow GitHub Actions to create and approve pull requests"**
+
+> Without these settings, moon-release cannot create release PRs.
+
+#### 2. Workflow File Setup
+
+Create `.github/workflows/release.yml`:
 
 ```yaml
 name: Release
@@ -272,6 +287,7 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -281,21 +297,41 @@ jobs:
   release-pr:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: dijdzv/moon-release@main
-        with:
-          command: release-pr
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup MoonBit
+        uses: hustcer/setup-moonbit@v1
+
+      - name: Download moon-release
+        run: |
+          curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
+          chmod +x moon-release
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create Release PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./moon-release release-pr --verbose
 ```
 
-### Auto-publish to mooncakes.io
+**Key points:**
+- `fetch-depth: 0` - Required to analyze commit history
+- `hustcer/setup-moonbit@v1` - Sets up MoonBit toolchain
+- Git config - Required for committing version changes
+- `GITHUB_TOKEN` - Automatically provided by GitHub Actions
 
-To automatically publish to mooncakes.io, you need to configure authentication.
+### Publishing to mooncakes.io (Optional)
 
-#### 1. Get Token
+To automatically publish to mooncakes.io, additional configuration is required.
+
+#### 1. Get mooncakes Token
 
 ```bash
 # Authenticate locally
@@ -308,20 +344,45 @@ cat ~/.moon/credentials.json
 
 #### 2. Configure GitHub Secrets
 
-In your repository's Settings → Secrets and variables → Actions, set:
+Go to **Settings → Secrets and variables → Actions → New repository secret**:
 
-- `MOONCAKES_TOKEN`: The `token` value from credentials.json
-- `MOONCAKES_USERNAME`: The `username` value from credentials.json
+| Secret Name | Value |
+|-------------|-------|
+| `MOONCAKES_TOKEN` | The `token` value from credentials.json |
+| `MOONCAKES_USERNAME` | The `username` value from credentials.json |
 
-#### 3. Configure Workflow
+#### 3. Add to Workflow
+
+Add the release job that runs when a release PR is merged:
 
 ```yaml
-- uses: dijdzv/moon-release@main
-  with:
-    command: release
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    mooncakes-token: ${{ secrets.MOONCAKES_TOKEN }}
-    mooncakes-username: ${{ secrets.MOONCAKES_USERNAME }}
+  release:
+    runs-on: ubuntu-latest
+    # Run only when release PR is merged
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MoonBit
+        uses: hustcer/setup-moonbit@v1
+
+      - name: Configure mooncakes credentials
+        run: |
+          mkdir -p ~/.moon
+          echo '{"token": "${{ secrets.MOONCAKES_TOKEN }}", "username": "${{ secrets.MOONCAKES_USERNAME }}"}' > ~/.moon/credentials.json
+
+      - name: Download moon-release
+        run: |
+          curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
+          chmod +x moon-release
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./moon-release release --verbose
 ```
 
 > **⚠️ Security Notice**
@@ -330,9 +391,19 @@ In your repository's Settings → Secrets and variables → Actions, set:
 > The token in `~/.moon/credentials.json` may have full account permissions.
 > Use at your own risk with this understanding.
 
+### Configuration Summary
+
+| Setting | Required | Where to Configure |
+|---------|----------|-------------------|
+| Repository write permissions | Yes | Settings → Actions → General |
+| Allow PR creation | Yes | Settings → Actions → General |
+| `GITHUB_TOKEN` | Yes (auto) | Automatically provided |
+| `MOONCAKES_TOKEN` | For publish | Settings → Secrets |
+| `MOONCAKES_USERNAME` | For publish | Settings → Secrets |
+
 ### Workflow Template
 
-Copy [templates/release.yml](./templates/release.yml) to your repository.
+See [templates/release.yml](./templates/release.yml) for a complete example.
 
 ## Differences from release-plz
 
