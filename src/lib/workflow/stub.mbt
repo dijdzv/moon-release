@@ -133,8 +133,9 @@ pub struct PackageReleaseInfo {
   commits : Array[(@conventional.ConventionalCommit, String)]
 }
 
-/// Build PR body for monorepo (release-plz style)
-pub fn build_pr_body_monorepo(
+/// Build PR body (release-plz style)
+/// Works for both single package and monorepo
+pub fn build_pr_body_unified(
   packages : Array[PackageReleaseInfo]
 ) -> String {
   if packages.is_empty() {
@@ -142,6 +143,7 @@ pub fn build_pr_body_monorepo(
   }
 
   let sb = StringBuilder::new()
+  let is_single_package = packages.length() == 1
 
   // Header
   sb.write_string("## 🤖 New release\n\n")
@@ -156,10 +158,15 @@ pub fn build_pr_body_monorepo(
 
   for pkg in packages {
     if not(pkg.commits.is_empty()) {
-      sb.write_string("## `\{pkg.name}`\n\n")
-      sb.write_string("<blockquote>\n\n")
+      // Only show package name header if multiple packages (like release-plz)
+      if not(is_single_package) {
+        sb.write_string("## `\{pkg.name}`\n\n")
+        sb.write_string("<blockquote>\n\n")
+      }
       sb.write_string(generate_package_changelog(pkg.commits))
-      sb.write_string("</blockquote>\n\n")
+      if not(is_single_package) {
+        sb.write_string("</blockquote>\n\n")
+      }
     }
   }
 
@@ -168,6 +175,13 @@ pub fn build_pr_body_monorepo(
   sb.write_string("*This PR was automatically created by moon-release.*\n")
 
   sb.to_string()
+}
+
+/// Build PR body for monorepo (release-plz style) - alias for build_pr_body_unified
+pub fn build_pr_body_monorepo(
+  packages : Array[PackageReleaseInfo]
+) -> String {
+  build_pr_body_unified(packages)
 }
 
 /// Generate changelog for a single package

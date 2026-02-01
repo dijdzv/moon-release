@@ -1,3 +1,17 @@
+/// Get package name from moon.mod.json
+async fn get_package_name() -> String {
+  // Try to read package name from moon.mod.json
+  let content = try @fs.read_file("moon.mod.json").text() catch {
+    _ => return "this-package"
+  } noraise { c => c }
+
+  let moon_mod = try @moon_mod.parse(content) catch {
+    _ => return "this-package"
+  } noraise { m => m }
+
+  moon_mod.name
+}
+
 /// update command: local update only
 pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   if ctx.verbose {
@@ -172,22 +186,46 @@ pub async fn run_release_pr(
     println("[WARN] You may need to manually checkout: git checkout " + base_branch)
   }
 
-  // Generate PR body (auto-detect monorepo mode)
+  // Get package name for single-package mode (with error fallback)
+  let pkg_name = try get_package_name() catch {
+    _ => "this-package"
+  } noraise { n => n }
+
+  // Generate PR body (unified release-plz style format)
   let pr_body = if not(ctx.config.packages.is_empty()) {
-    // Monorepo mode: use release-plz style format
+    // Monorepo mode: collect info for each package
     if ctx.verbose {
-      println("Generating monorepo-style PR body...")
+      println("Generating PR body for monorepo...")
     }
     let pkg_info = collect_package_release_info(ctx.config, ctx.repo, ctx.verbose)
     if pkg_info.is_empty() {
-      // Fallback to single-package mode if no packages have changes
-      build_pr_body(ctx)
+      // Fallback: create single package info from context
+      let single_pkg = [
+        PackageReleaseInfo::{
+          name: pkg_name,
+          old_version: ctx.current_version,
+          new_version: ctx.new_version,
+          commits: ctx.commits,
+        },
+      ]
+      build_pr_body_unified(single_pkg)
     } else {
-      build_pr_body_monorepo(pkg_info)
+      build_pr_body_unified(pkg_info)
     }
   } else {
-    // Single-package mode
-    build_pr_body(ctx)
+    // Single-package mode: create PackageReleaseInfo from context
+    if ctx.verbose {
+      println("Generating PR body for single package...")
+    }
+    let single_pkg = [
+      PackageReleaseInfo::{
+        name: pkg_name,
+        old_version: ctx.current_version,
+        new_version: ctx.new_version,
+        commits: ctx.commits,
+      },
+    ]
+    build_pr_body_unified(single_pkg)
   }
 
   match existing_pr {
@@ -495,8 +533,9 @@ pub struct PackageReleaseInfo {
   commits : Array[(@conventional.ConventionalCommit, String)]
 }
 
-/// Build PR body for monorepo (release-plz style)
-pub fn build_pr_body_monorepo(
+/// Build PR body (release-plz style)
+/// Works for both single package and monorepo
+pub fn build_pr_body_unified(
   packages : Array[PackageReleaseInfo]
 ) -> String {
   if packages.is_empty() {
@@ -504,6 +543,7 @@ pub fn build_pr_body_monorepo(
   }
 
   let sb = StringBuilder::new()
+  let is_single_package = packages.length() == 1
 
   // Header
   sb.write_string("## 🤖 New release\n\n")
@@ -518,10 +558,15 @@ pub fn build_pr_body_monorepo(
 
   for pkg in packages {
     if not(pkg.commits.is_empty()) {
-      sb.write_string("## `\{pkg.name}`\n\n")
-      sb.write_string("<blockquote>\n\n")
+      // Only show package name header if multiple packages (like release-plz)
+      if not(is_single_package) {
+        sb.write_string("## `\{pkg.name}`\n\n")
+        sb.write_string("<blockquote>\n\n")
+      }
       sb.write_string(generate_package_changelog(pkg.commits))
-      sb.write_string("</blockquote>\n\n")
+      if not(is_single_package) {
+        sb.write_string("</blockquote>\n\n")
+      }
     }
   }
 
@@ -530,6 +575,13 @@ pub fn build_pr_body_monorepo(
   sb.write_string("*This PR was automatically created by moon-release.*\n")
 
   sb.to_string()
+}
+
+/// Build PR body for monorepo (release-plz style) - alias for build_pr_body_unified
+pub fn build_pr_body_monorepo(
+  packages : Array[PackageReleaseInfo]
+) -> String {
+  build_pr_body_unified(packages)
 }
 
 /// Generate changelog for a single package

@@ -282,7 +282,8 @@ test "build_pr_body_monorepo - single package" {
           // Check collapsible changelog
           assert_true(result.contains("<details>"))
           assert_true(result.contains("<summary><i><b>Changelog</b></i></summary>"))
-          assert_true(result.contains("## `my-package`"))
+          // Single package: no package name header in changelog (like release-plz)
+          assert_false(result.contains("## `my-package`"))
           assert_true(result.contains("### Features"))
           assert_true(result.contains("add new feature"))
         }
