@@ -1,6 +1,6 @@
 {
   "name": "moon-release",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "--moonbit-unstable-prebuild": "scripts/prebuild.py",
   "deps": {
     "moonbitlang/async": "0.16.4",
