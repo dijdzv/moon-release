@@ -20,6 +20,7 @@ permissions:
 
 jobs:
   release-pr:
+    if: github.event.inputs.build-only != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -77,11 +78,17 @@ jobs:
       - name: Setup MoonBit
         uses: hustcer/setup-moonbit@v1
 
+      - name: Fetch dependencies
+        run: moon update
+
+      - name: Trigger source download (Windows)
+        if: runner.os == 'Windows'
+        run: moon build --target native 2>&1 || true
+
       - name: Patch moonbitlang/async for Windows (temporary fix)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          moon update
           # Find thread_pool.c in .mooncakes or registry
           $file = Get-ChildItem -Recurse -Filter "thread_pool.c" -Path ".mooncakes" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $file) {
@@ -103,12 +110,7 @@ jobs:
           }
 
       - name: Build
-        run: |
-          if [ "$RUNNER_OS" != "Windows" ]; then
-            moon update
-          fi
-          moon build --target native
-        shell: bash
+        run: moon build --target native
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
