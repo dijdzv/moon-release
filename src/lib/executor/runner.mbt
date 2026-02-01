@@ -1,3 +1,7 @@
+/// Maximum timeout in seconds (~24 days) to prevent Int overflow when converting to milliseconds
+/// 2147483 * 1000 = 2147483000 < Int.MAX (2147483647)
+let max_timeout_seconds : UInt = 2147483U
+
 /// Command execution result
 pub struct CommandResult {
   exit_code : Int
@@ -132,6 +136,15 @@ pub fn CommandResult::check(
 
 /// Run command with timeout (in seconds)
 /// Returns None if timed out, Some(result) otherwise
+///
+/// On timeout:
+/// - Returns None immediately
+/// - The child process receives a termination signal (SIGTERM on Unix)
+/// - The process is cancelled via @async.with_timeout_opt which handles cleanup
+///
+/// Note: If the process ignores the termination signal, it may continue running
+/// as an orphan process. For critical cleanup needs, consider using
+/// @process.graceful_cancel or @process.hard_cancel directly.
 pub async fn run_command_with_timeout(
   cmd : Array[String],
   timeout_seconds : UInt
@@ -144,9 +157,9 @@ pub async fn run_command_with_timeout(
     if acc.is_empty() { s } else { acc + " " + s }
   })
 
-  // Cap timeout at ~24 days (2147483 seconds) to prevent Int overflow when converting to ms
-  let safe_timeout_seconds = if timeout_seconds > 2147483U {
-    2147483U
+  // Cap timeout to prevent Int overflow when converting to milliseconds
+  let safe_timeout_seconds = if timeout_seconds > max_timeout_seconds {
+    max_timeout_seconds
   } else {
     timeout_seconds
   }

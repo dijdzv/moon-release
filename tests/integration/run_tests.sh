@@ -1,12 +1,12 @@
 #!/bin/bash
-# 統合テストランナー
+# Integration test runner
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BINARY="$PROJECT_ROOT/target/native/release/build/src/main/main.exe"
 
-# 色付き出力
+# Colored output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -35,7 +35,7 @@ log_skip() {
   skipped=$((skipped + 1))
 }
 
-# バイナリをビルド
+# Build the binary
 build_binary() {
   log_info "Building moon-release..."
   cd "$PROJECT_ROOT"
@@ -48,18 +48,18 @@ build_binary() {
   fi
 }
 
-# テスト用の一時ディレクトリを作成
+# Create temporary directory for testing
 create_test_repo() {
   local tmp_dir
   tmp_dir=$(mktemp -d)
   cd "$tmp_dir"
 
-  # Git リポジトリを初期化
+  # Initialize git repository
   git init -q
   git config user.email "test@example.com"
   git config user.name "Test User"
 
-  # moon.mod.json を作成
+  # Create moon.mod.json
   cat > moon.mod.json << 'EOF'
 {
   "name": "test/package",
@@ -68,14 +68,14 @@ create_test_repo() {
 }
 EOF
 
-  # 初期コミット
+  # Initial commit
   git add .
   git commit -q -m "chore: initial commit"
 
   echo "$tmp_dir"
 }
 
-# クリーンアップ
+# Cleanup
 cleanup() {
   if [[ -n "$TEST_DIR" && -d "$TEST_DIR" ]]; then
     rm -rf "$TEST_DIR"
@@ -84,7 +84,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-# ===== テスト関数 =====
+# ===== Test functions =====
 
 test_version_command() {
   log_info "Testing: version command"
@@ -98,7 +98,7 @@ test_version_command() {
 
 test_help_command() {
   log_info "Testing: help command"
-  # --help はクラッシュするため、サブコマンドなしで代替テスト
+  # --help crashes, so test without subcommand as alternative
   if $BINARY 2>&1 | grep -q "moon-release"; then
     log_pass "help command (no args)"
   else
@@ -112,7 +112,7 @@ test_init_command() {
   TEST_DIR=$(create_test_repo)
   cd "$TEST_DIR"
 
-  # init を実行
+  # Run init
   if $BINARY init 2>/dev/null; then
     if [[ -f "release.json" ]]; then
       log_pass "init command creates release.json"
@@ -123,7 +123,7 @@ test_init_command() {
     log_fail "init command failed"
   fi
 
-  # 再度 init（--force なし）
+  # Run init again (without --force)
   if $BINARY init 2>&1 | grep -q "already exists"; then
     log_pass "init command detects existing file"
   else
@@ -146,20 +146,20 @@ test_check_command() {
   TEST_DIR=$(create_test_repo)
   cd "$TEST_DIR"
 
-  # タグなしで check
+  # Check without tags
   if $BINARY check 2>&1 | grep -q "No tags found"; then
     log_pass "check command (no tags)"
   else
     log_fail "check command (no tags)"
   fi
 
-  # タグを作成
+  # Create tag
   git tag v0.1.0
 
-  # 新しいコミットを追加
+  # Add a new commit
   git commit -q --allow-empty -m "feat: add new feature"
 
-  # check を実行
+  # Run check
   output=$($BINARY check 2>&1)
   if echo "$output" | grep -q "Commits since last tag: 1"; then
     log_pass "check command (with commits)"
@@ -189,7 +189,7 @@ test_set_version_command() {
     log_fail "set-version --dry-run"
   fi
 
-  # 実行
+  # Execute
   if $BINARY set-version 1.0.0 2>/dev/null; then
     if grep -q '"version": "1.0.0"' moon.mod.json; then
       log_pass "set-version updates version"
@@ -200,7 +200,7 @@ test_set_version_command() {
     log_fail "set-version command failed"
   fi
 
-  # 不正なバージョン
+  # Invalid version
   if $BINARY set-version invalid 2>&1 | grep -q "Invalid version"; then
     log_pass "set-version rejects invalid version"
   else
@@ -216,10 +216,10 @@ test_update_command() {
   TEST_DIR=$(create_test_repo)
   cd "$TEST_DIR"
 
-  # タグを作成
+  # Create tag
   git tag v0.1.0
 
-  # feat コミットを追加
+  # Add feat commit
   git commit -q --allow-empty -m "feat: add new feature"
 
   # dry-run
@@ -229,14 +229,14 @@ test_update_command() {
     log_fail "update --dry-run"
   fi
 
-  # バージョンがまだ変わっていないことを確認
+  # Verify version is not changed yet
   if grep -q '"version": "0.1.0"' moon.mod.json; then
     log_pass "update --dry-run does not change version"
   else
     log_fail "update --dry-run should not change version"
   fi
 
-  # 実際に更新
+  # Actually update
   if $BINARY update 2>/dev/null; then
     if grep -q '"version": "0.2.0"' moon.mod.json; then
       log_pass "update bumps minor version for feat"
@@ -303,7 +303,7 @@ test_update_force_bump() {
   git tag v0.1.0
   git commit -q --allow-empty -m "chore: some changes"
 
-  # chore は通常バンプしないが、--bump で強制
+  # chore normally doesn't bump, but force with --bump
   if $BINARY update --bump major 2>/dev/null; then
     if grep -q '"version": "1.0.0"' moon.mod.json; then
       log_pass "update --bump major forces major bump"
@@ -326,10 +326,10 @@ test_dirty_check() {
   git tag v0.1.0
   git commit -q --allow-empty -m "feat: new feature"
 
-  # 未コミットの変更を作成
+  # Create uncommitted changes
   echo "dirty" >> moon.mod.json
 
-  # update は失敗するはず
+  # update should fail
   if $BINARY update 2>&1 | grep -q "uncommitted changes"; then
     log_pass "update detects dirty working directory"
   else
@@ -345,7 +345,7 @@ test_prerelease() {
   TEST_DIR=$(create_test_repo)
   cd "$TEST_DIR"
 
-  # allow_prerelease: true の設定を作成
+  # Create config with allow_prerelease: true
   cat > release.json << 'EOF'
 {
   "allow_prerelease": true
@@ -357,8 +357,8 @@ EOF
   git tag v0.1.0
   git commit -q --allow-empty -m "feat: new feature"
 
-  # prerelease オプションは release コマンドでのみ有効
-  # ここでは set-version で prerelease バージョンをテスト
+  # prerelease option is only valid for release command
+  # Here we test prerelease version with set-version
   if $BINARY set-version 0.2.0-alpha.1 2>/dev/null; then
     if grep -q '"version": "0.2.0-alpha.1"' moon.mod.json; then
       log_pass "set-version supports prerelease version"
@@ -381,17 +381,17 @@ test_check_json_output() {
   git tag v0.1.0
   git commit -q --allow-empty -m "feat: add new feature"
 
-  # JSON 出力
+  # JSON output
   output=$($BINARY check -o json 2>&1)
 
-  # 有効な JSON かチェック（開始と終了の括弧）
+  # Check if valid JSON (opening and closing braces)
   if echo "$output" | grep -q '^{' && echo "$output" | grep -q '}$'; then
     log_pass "check -o json outputs valid JSON structure"
   else
     log_fail "check -o json should output valid JSON"
   fi
 
-  # 必要なフィールドが含まれているか
+  # Check if required fields are present
   if echo "$output" | grep -q '"latest_tag"' && \
      echo "$output" | grep -q '"commits_count"' && \
      echo "$output" | grep -q '"suggested_bump"'; then
@@ -412,10 +412,10 @@ test_update_json_output() {
   git tag v0.1.0
   git commit -q --allow-empty -m "feat: add new feature"
 
-  # JSON 出力 (dry-run)
+  # JSON output (dry-run)
   output=$($BINARY update --dry-run -o json 2>&1)
 
-  # 有効な JSON かチェック
+  # Check if valid JSON
   if echo "$output" | grep -q '"old_version"' && \
      echo "$output" | grep -q '"new_version"' && \
      echo "$output" | grep -q '"bump_type"'; then
@@ -424,7 +424,7 @@ test_update_json_output() {
     log_fail "update -o json missing version info"
   fi
 
-  # バージョンの値が正しいか
+  # Check if version values are correct
   if echo "$output" | grep -q '"old_version":"0.1.0"' && \
      echo "$output" | grep -q '"new_version":"0.2.0"'; then
     log_pass "update -o json shows correct versions"
@@ -476,7 +476,7 @@ test_generate_schema() {
 
   output=$($BINARY generate-schema 2>&1)
 
-  # JSON Schema の基本構造
+  # JSON Schema basic structure
   if echo "$output" | grep -q '"\$schema"' && \
      echo "$output" | grep -q '"properties"'; then
     log_pass "generate-schema outputs valid JSON Schema structure"
@@ -484,7 +484,7 @@ test_generate_schema() {
     log_fail "generate-schema should output JSON Schema"
   fi
 
-  # 主要なプロパティが含まれているか
+  # Check if main properties are present
   if echo "$output" | grep -q '"pr_title"' && \
      echo "$output" | grep -q '"git_release_enable"' && \
      echo "$output" | grep -q '"publish"'; then
@@ -493,7 +493,7 @@ test_generate_schema() {
     log_fail "generate-schema missing config properties"
   fi
 
-  # 新しく追加したプロパティ
+  # Newly added properties
   if echo "$output" | grep -q '"git_release_latest"' && \
      echo "$output" | grep -q '"publish_timeout"' && \
      echo "$output" | grep -q '"max_analyze_commits"'; then
@@ -511,12 +511,12 @@ test_max_analyze_commits() {
 
   git tag v0.1.0
 
-  # 複数のコミットを追加
+  # Add multiple commits
   for i in 1 2 3 4 5; do
     git commit -q --allow-empty -m "feat: feature $i"
   done
 
-  # max_analyze_commits: 2 の設定を作成
+  # Create config with max_analyze_commits: 2
   cat > release.json << 'EOF'
 {
   "max_analyze_commits": 2
@@ -526,10 +526,9 @@ EOF
   git add release.json
   git commit -q -m "chore: add config"
 
-  # check コマンドで確認（2件のみ表示されるはず）
+  # Verify with check command (full verification is difficult, so just confirm it runs without error)
   output=$($BINARY check 2>&1)
 
-  # コミット数が制限されているか（完全な検証は難しいので、エラーなく実行できることを確認）
   if echo "$output" | grep -q "Commits since last tag"; then
     log_pass "max_analyze_commits config is accepted"
   else
@@ -539,7 +538,7 @@ EOF
   rm -rf "$TEST_DIR"
 }
 
-# ===== メイン =====
+# ===== Main =====
 
 main() {
   echo "================================"
@@ -547,13 +546,13 @@ main() {
   echo "================================"
   echo ""
 
-  # ビルド
+  # Build
   if ! build_binary; then
     echo "Build failed. Exiting."
     exit 1
   fi
 
-  # バイナリの存在確認
+  # Check binary exists
   if [[ ! -x "$BINARY" ]]; then
     echo "Binary not found: $BINARY"
     exit 1
@@ -563,7 +562,7 @@ main() {
   echo "Running tests..."
   echo ""
 
-  # テスト実行
+  # Run tests
   test_version_command
   test_help_command
   test_init_command

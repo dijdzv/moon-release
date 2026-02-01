@@ -235,3 +235,58 @@ test "parse version - overflow protection" {
   // 10 digits always rejected
   assert_eq(Version::parse("9999999999.0.0"), None)
 }
+
+test "parse version - 8 digit boundary" {
+  // 8 digits are valid
+  let result = Version::parse("12345678.0.0")
+  match result {
+    Some(v) => assert_eq(v.major, 12345678)
+    None => fail("Should parse valid 8-digit number")
+  }
+}
+
+test "parse version - exactly 9 digits" {
+  // 9 digits is the maximum allowed
+  let result = Version::parse("100000000.0.0")
+  match result {
+    Some(v) => assert_eq(v.major, 100000000)
+    None => fail("Should parse valid 9-digit number")
+  }
+}
+
+test "parse version - all components at boundary" {
+  // Test all components with large values
+  let result = Version::parse("999999999.999999999.999999999")
+  match result {
+    Some(v) => {
+      assert_eq(v.major, 999999999)
+      assert_eq(v.minor, 999999999)
+      assert_eq(v.patch, 999999999)
+    }
+    None => fail("Should parse valid large version")
+  }
+}
+
+test "parse version - leading zeros in version" {
+  // Note: Current implementation allows leading zeros in version numbers
+  // This is different from strict SemVer which forbids leading zeros
+  // Testing current behavior (implementation detail, may change)
+  let result = Version::parse("01.0.0")
+  match result {
+    Some(v) => assert_eq(v.major, 1)  // Leading zero is ignored
+    None => ()  // Also acceptable if strict parsing is added later
+  }
+}
+
+test "parse version - valid zeros" {
+  // Single zeros are valid
+  let result = Version::parse("0.0.0")
+  match result {
+    Some(v) => {
+      assert_eq(v.major, 0)
+      assert_eq(v.minor, 0)
+      assert_eq(v.patch, 0)
+    }
+    None => fail("Should parse 0.0.0")
+  }
+}

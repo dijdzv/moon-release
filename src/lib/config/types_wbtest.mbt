@@ -305,3 +305,69 @@ test "ConfigError::to_string" {
   let err = ConfigError("Something went wrong")
   assert_eq(err.to_string(), "Something went wrong")
 }
+
+// UInt overflow boundary tests
+
+test "parse config with publish_timeout - large valid value" {
+  // Large but valid value (within safe Double range for integer precision)
+  let content =
+    #|{
+    #|  "publish_timeout": 1000000000
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.publish_timeout, 1000000000U)
+}
+
+test "parse config with publish_timeout - overflow rejected" {
+  // 4294967296 exceeds UInt max, should be rejected
+  let content =
+    #|{
+    #|  "publish_timeout": 4294967296
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for overflow value")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("too large"))
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse config with publish_timeout - float rejected" {
+  // Non-integer values should be rejected
+  let content =
+    #|{
+    #|  "publish_timeout": 300.5
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for float value")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("integer"))
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse config with max_analyze_commits - large valid value" {
+  // Large but valid value (within safe Double range for integer precision)
+  let content =
+    #|{
+    #|  "max_analyze_commits": 1000000000
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.max_analyze_commits, Some(1000000000U))
+}
+
+test "parse config with max_analyze_commits - overflow rejected" {
+  let content =
+    #|{
+    #|  "max_analyze_commits": 4294967296
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for overflow value")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("too large"))
+    _ => fail("Wrong error type")
+  }
+}
