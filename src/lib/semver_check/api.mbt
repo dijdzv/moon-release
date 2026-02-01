@@ -66,13 +66,11 @@ fn strip_html_tags(s : String) -> String {
   result.to_string()
 }
 
-/// Parse package_data.json
+/// Parse package_data.json with try-catch-noraise pattern
 pub fn parse_package_data(content : String) -> PackageApi raise ParseError {
-  let json = try {
-    @json.parse(content)
-  } catch {
+  let json = try @json.parse(content) catch {
     e => raise ParseError("JSON parse error: " + e.to_string())
-  }
+  } noraise { r => r }
 
   let obj = match json {
     Object(o) => o

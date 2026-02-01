@@ -17,13 +17,11 @@ pub fn ParseError::to_string(self : ParseError) -> String {
   }
 }
 
-/// Parse moon.mod.json
+/// Parse moon.mod.json with try-catch-noraise pattern
 pub fn parse(content : String) -> MoonMod raise ParseError {
-  let json = try {
-    @json.parse(content)
-  } catch {
+  let json = try @json.parse(content) catch {
     e => raise ParseError("JSON parse error: " + e.to_string())
-  }
+  } noraise { r => r }
 
   let obj = match json {
     Object(o) => o

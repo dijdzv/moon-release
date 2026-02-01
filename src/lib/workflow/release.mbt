@@ -12,24 +12,18 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
     return
   }
 
-  // Update moon.mod.json
-  let moon_mod_content = try {
-    @fs.read_file("moon.mod.json").text()
-  } catch {
-    _ => raise WorkflowError("Failed to read moon.mod.json")
-  }
+  // Update moon.mod.json with try-catch-noraise pattern
+  let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
+    e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string() + ". Make sure the file exists and is readable.")
+  } noraise { c => c }
 
-  let updated_content = try {
-    @moon_mod.update_version(moon_mod_content, ctx.new_version)
-  } catch {
-    e => raise WorkflowError("Failed to update version: " + e.to_string())
-  }
+  let updated_content = try @moon_mod.update_version(moon_mod_content, ctx.new_version) catch {
+    e => raise WorkflowError("Failed to update version in moon.mod.json: " + e.to_string())
+  } noraise { c => c }
 
-  try {
-    @fs.write_file("moon.mod.json", updated_content, create=0o644)
-  } catch {
-    _ => raise WorkflowError("Failed to write moon.mod.json")
-  }
+  try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
+    e => raise WorkflowError("Failed to write moon.mod.json: " + e.to_string() + ". Check file permissions.")
+  } noraise { _ => () }
 
   println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
 }
@@ -53,8 +47,10 @@ pub async fn run_release_pr(
     None => ()
   }
 
-  // Find existing release PR
-  let existing_pr = find_existing_release_pr(github, ctx.config.pr_branch_prefix)
+  // Find existing release PR (errors are suppressed to None)
+  let existing_pr = try find_existing_release_pr(github, ctx.config.pr_branch_prefix) catch {
+    _ => None
+  } noraise { r => r }
 
   if ctx.dry_run {
     match existing_pr {
@@ -71,30 +67,23 @@ pub async fn run_release_pr(
     return
   }
 
-  // Check if branch exists on remote (for pull later)
-  let remote_branch_exists = try {
-    check_remote_branch_exists(ctx.repo, branch_name)
-  } catch {
-    _ => false
-  }
+  // Check if branch exists on remote with try? + unwrap_or pattern
+  let remote_branch_exists = (try? check_remote_branch_exists(ctx.repo, branch_name))
+    .unwrap_or(false)
 
   // Use checkout -B for atomic create-or-reset (avoids race condition)
-  let checkout_result = try {
-    @executor.run_git(ctx.repo, ["checkout", "-B", branch_name])
-  } catch {
-    e => raise WorkflowError("Failed to checkout branch: " + e.to_string())
-  }
+  let checkout_result = try @executor.run_git(ctx.repo, ["checkout", "-B", branch_name]) catch {
+    e => raise WorkflowError("Failed to create/checkout branch '" + branch_name + "': " + e.to_string())
+  } noraise { r => r }
   if not(checkout_result.is_success()) {
-    raise WorkflowError("Failed to checkout branch: " + checkout_result.stderr)
+    raise WorkflowError("Failed to create/checkout branch '" + branch_name + "': " + checkout_result.stderr)
   }
 
   // Pull from remote if branch exists there
   if remote_branch_exists {
-    let pull_result = try {
-      @executor.run_git(ctx.repo, ["pull", "origin", branch_name])
-    } catch {
-      _ => @executor.CommandResult::failed("pull command failed")
-    }
+    // Use try? + unwrap_or pattern for default value
+    let pull_result = (try? @executor.run_git(ctx.repo, ["pull", "origin", branch_name]))
+      .unwrap_or(@executor.CommandResult::failed("pull command failed"))
     if not(pull_result.is_success()) && ctx.verbose {
       println("[WARN] Failed to pull from remote: " + pull_result.stderr)
       println("[WARN] Continuing with local branch state...")
@@ -104,41 +93,47 @@ pub async fn run_release_pr(
   // Run update (file updates)
   run_update(ctx)
 
-  // Stage changes
-  let stage_result = try {
-    @executor.run_git(ctx.repo, ["add", "moon.mod.json"])
-  } catch {
+  // Stage changes with try-catch-noraise pattern
+  let stage_result = try @executor.run_git(ctx.repo, ["add", "moon.mod.json"]) catch {
     e => raise WorkflowError("Failed to stage files: " + e.to_string())
-  }
+  } noraise { r => r }
   if not(stage_result.is_success()) {
     raise WorkflowError("Failed to stage files: " + stage_result.stderr)
   }
 
-  // Check if there are changes
-  let diff_result = try {
-    @executor.run_git(ctx.repo, ["diff", "--cached", "--quiet"])
-  } catch {
-    _ => @executor.CommandResult::failed("")
-  }
+  // Check if there are changes with try-catch-noraise pattern
+  let diff_result = try @executor.run_git(ctx.repo, ["diff", "--cached", "--quiet"]) catch {
+    e => {
+      if ctx.verbose {
+        println("[WARN] Failed to check staged changes: " + e.to_string())
+      }
+      @executor.CommandResult::failed("diff check failed: " + e.to_string())
+    }
+  } noraise { r => r }
 
   if diff_result.is_success() {
     println("No changes to commit. Release PR is up to date.")
-    // Return to original branch
-    let _ = try {
-      @executor.run_git(ctx.repo, ["checkout", base_branch])
-    } catch {
-      _ => @executor.CommandResult::failed("")
+    // Return to original branch with try-catch-noraise pattern
+    let checkout_back_result = try @executor.run_git(ctx.repo, ["checkout", base_branch]) catch {
+      e => {
+        if ctx.verbose {
+          println("[WARN] Failed to return to base branch: " + e.to_string())
+        }
+        @executor.CommandResult::failed("checkout failed: " + e.to_string())
+      }
+    } noraise { r => r }
+    if not(checkout_back_result.is_success()) && ctx.verbose {
+      println("[WARN] Could not checkout " + base_branch + ": " + checkout_back_result.stderr)
+      println("[WARN] You may need to manually checkout: git checkout " + base_branch)
     }
     return
   }
 
-  // Commit
+  // Commit with try-catch-noraise pattern
   let commit_msg = ctx.config.apply_version_template(ctx.new_version.to_string())
-  let commit_result = try {
-    @executor.run_git(ctx.repo, ["commit", "-m", commit_msg])
-  } catch {
+  let commit_result = try @executor.run_git(ctx.repo, ["commit", "-m", commit_msg]) catch {
     e => raise WorkflowError("Failed to commit: " + e.to_string())
-  }
+  } noraise { r => r }
   if not(commit_result.is_success()) {
     raise WorkflowError("Failed to commit: " + commit_result.stderr)
   }
@@ -149,31 +144,41 @@ pub async fn run_release_pr(
   if ctx.verbose {
     println("Pushing with --force-with-lease (safe force push)...")
   }
-  let push_result = try {
-    @executor.run_git(ctx.repo, ["push", "-u", "--force-with-lease", "origin", branch_name])
-  } catch {
-    e => raise WorkflowError("Failed to push: " + e.to_string())
-  }
+  let push_result = try @executor.run_git(ctx.repo, ["push", "-u", "--force-with-lease", "origin", branch_name]) catch {
+    e => raise WorkflowError("Failed to push branch '" + branch_name + "' to origin: " + e.to_string())
+  } noraise { r => r }
   if not(push_result.is_success()) {
-    raise WorkflowError("Failed to push: " + push_result.stderr)
+    let hint = if push_result.stderr.contains("permission") || push_result.stderr.contains("denied") {
+      " Check your GitHub permissions for this repository."
+    } else if push_result.stderr.contains("force-with-lease") {
+      " The remote branch has been updated since last fetch. Pull and resolve conflicts first."
+    } else {
+      ""
+    }
+    raise WorkflowError("Failed to push branch '" + branch_name + "' to origin: " + push_result.stderr + hint)
   }
 
-  // Return to original branch
-  let _ = try {
-    @executor.run_git(ctx.repo, ["checkout", base_branch])
-  } catch {
-    _ => @executor.CommandResult::failed("")
+  // Return to original branch with try-catch-noraise pattern
+  let return_result = try @executor.run_git(ctx.repo, ["checkout", base_branch]) catch {
+    e => {
+      if ctx.verbose {
+        println("[WARN] Failed to return to base branch: " + e.to_string())
+      }
+      @executor.CommandResult::failed("checkout failed: " + e.to_string())
+    }
+  } noraise { r => r }
+  if not(return_result.is_success()) && ctx.verbose {
+    println("[WARN] Could not checkout " + base_branch + ": " + return_result.stderr)
+    println("[WARN] You may need to manually checkout: git checkout " + base_branch)
   }
 
   match existing_pr {
     Some((pr_num, _)) => {
-      // Update existing PR
+      // Update existing PR with try-catch-noraise pattern
       let pr_body = build_pr_body(ctx)
-      let update_result = try {
-        @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body])
-      } catch {
+      let update_result = try @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body]) catch {
         e => raise WorkflowError("Failed to update PR: " + e.to_string())
-      }
+      } noraise { r => r }
       if not(update_result.is_success()) {
         println("Warning: Failed to update PR body: " + update_result.stderr)
       }
@@ -198,13 +203,21 @@ pub async fn run_release_pr(
         gh_args.push(pr_cmd[i])
       }
 
-      let pr_result = try {
-        @executor.run_gh(gh_args)
-      } catch {
-        e => raise WorkflowError("Failed to create PR: " + e.to_string())
-      }
+      // Create PR with try-catch-noraise pattern
+      let pr_result = try @executor.run_gh(gh_args) catch {
+        e => raise WorkflowError("Failed to create pull request: " + e.to_string())
+      } noraise { r => r }
       if not(pr_result.is_success()) {
-        raise WorkflowError("Failed to create PR: " + pr_result.stderr)
+        let hint = if pr_result.stderr.contains("already exists") {
+          " A pull request for this branch may already exist."
+        } else if pr_result.stderr.contains("permission") || pr_result.stderr.contains("denied") {
+          " Check your GitHub permissions for this repository."
+        } else if pr_result.stderr.contains("authentication") {
+          " Run 'gh auth login' to authenticate with GitHub."
+        } else {
+          ""
+        }
+        raise WorkflowError("Failed to create pull request: " + pr_result.stderr + hint)
       }
 
       println("Created pull request: " + pr_result.stdout_trimmed())
@@ -213,13 +226,13 @@ pub async fn run_release_pr(
 }
 
 /// Find existing release PR
-// Suppress: WorkflowError declared for API consistency with other workflow functions.
-// Errors are caught internally and returned as None.
+/// Note: Returns None on any error (error suppression for optional lookup)
+/// Suppress: Error type is declared but all errors are caught and converted to None
 #warnings("-unused_error_type")
 async fn find_existing_release_pr(
   github : @github.GitHubClient,
   branch_prefix : String
-) -> (UInt, String)? raise WorkflowError {
+) -> (UInt, String)? raise Error {
   let list_cmd = github.list_pull_requests_command(state="open")
 
   // Extract gh command arguments
@@ -228,22 +241,19 @@ async fn find_existing_release_pr(
     gh_args.push(list_cmd[i])
   }
 
-  let result = try {
-    @executor.run_gh(gh_args)
-  } catch {
+  // Run gh command with try-catch-noraise pattern
+  let result = try @executor.run_gh(gh_args) catch {
     _ => return None
-  }
+  } noraise { r => r }
 
   if not(result.is_success()) {
     return None
   }
 
-  // Parse PR list
-  let prs = try {
-    @github.parse_pull_request_list_json(result.stdout)
-  } catch {
+  // Parse PR list with try-catch-noraise pattern
+  let prs = try @github.parse_pull_request_list_json(result.stdout) catch {
     _ => return None
-  }
+  } noraise { p => p }
 
   // Find PR with branch starting with release/
   for pr in prs {
@@ -260,11 +270,9 @@ async fn check_remote_branch_exists(
   repo : @git.Repository,
   branch_name : String
 ) -> Bool {
-  let result = try {
-    @executor.run_git(repo, ["ls-remote", "--heads", "origin", branch_name])
-  } catch {
-    _ => return false
-  }
+  // try? converts to Result, unwrap_or provides default on error
+  let result = (try? @executor.run_git(repo, ["ls-remote", "--heads", "origin", branch_name]))
+    .unwrap_or(@executor.CommandResult::failed("git ls-remote failed"))
   result.is_success() && not(result.stdout.trim().is_empty())
 }
 
@@ -312,21 +320,18 @@ pub async fn run_release(
   // Create tag (only if git_tag_enable is true)
   if ctx.config.git_tag_enable {
     let tag_msg = release_title
-    let tag_result = try {
-      @executor.run_git(ctx.repo, ["tag", "-a", tag_name, "-m", tag_msg])
-    } catch {
+    // Create tag with try-catch-noraise pattern
+    let tag_result = try @executor.run_git(ctx.repo, ["tag", "-a", tag_name, "-m", tag_msg]) catch {
       e => raise WorkflowError("Failed to create tag: " + e.to_string())
-    }
+    } noraise { r => r }
     if not(tag_result.is_success()) {
       raise WorkflowError("Failed to create tag: " + tag_result.stderr)
     }
 
-    // Push tag
-    let push_result = try {
-      @executor.run_git(ctx.repo, ["push", "origin", tag_name])
-    } catch {
+    // Push tag with try-catch-noraise pattern
+    let push_result = try @executor.run_git(ctx.repo, ["push", "origin", tag_name]) catch {
       e => raise WorkflowError("Failed to push tag: " + e.to_string())
-    }
+    } noraise { r => r }
     if not(push_result.is_success()) {
       raise WorkflowError("Failed to push tag: " + push_result.stderr)
     }
@@ -358,11 +363,10 @@ pub async fn run_release(
       gh_args.push(release_cmd[i])
     }
 
-    let release_result = try {
-      @executor.run_gh(gh_args)
-    } catch {
+    // Create release with try-catch-noraise pattern
+    let release_result = try @executor.run_gh(gh_args) catch {
       e => raise WorkflowError("Failed to create release: " + e.to_string())
-    }
+    } noraise { r => r }
     if not(release_result.is_success()) {
       raise WorkflowError(
         "Failed to create release: " + release_result.stderr,
@@ -390,15 +394,14 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
       println("Running API compatibility check...")
     }
 
-    let check_result = try {
-      run_semver_check(ctx.repo, ctx.verbose)
-    } catch {
+    // Run semver check with try-catch-noraise pattern
+    let check_result = try run_semver_check(ctx.repo, ctx.verbose) catch {
       e => {
         println("Warning: Semver check failed: " + e.to_string())
         println("Continuing with publish...")
         @semver_check.CheckResult::new(@semver_check.ApiDiff::empty())
       }
-    }
+    } noraise { r => r }
 
     if check_result.diff.has_breaking {
       println("")
@@ -434,11 +437,10 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     println("  Timeout: \{timeout} seconds")
   }
 
-  let publish_result = try {
-    @executor.run_command_with_timeout(publish_cmd, timeout)
-  } catch {
+  // Run publish with try-catch-noraise pattern
+  let publish_result = try @executor.run_command_with_timeout(publish_cmd, timeout) catch {
     e => raise WorkflowError("Failed to publish: " + e.to_string())
-  }
+  } noraise { r => r }
 
   match publish_result {
     None => {
@@ -507,24 +509,21 @@ pub async fn run_update_packages(
     let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
     let moon_mod_path = pkg_path + "moon.mod.json"
 
-    // Read moon.mod.json
-    let moon_mod_content = try {
-      @fs.read_file(moon_mod_path).text()
-    } catch {
+    // Read moon.mod.json with try-catch-noraise pattern
+    let moon_mod_content = try @fs.read_file(moon_mod_path).text() catch {
       _ => {
         println("  Warning: Could not read " + moon_mod_path)
         continue
       }
-    }
+    } noraise { c => c }
 
-    let moon_mod = try {
-      @moon_mod.parse(moon_mod_content)
-    } catch {
+    // Parse with try-catch-noraise pattern
+    let moon_mod = try @moon_mod.parse(moon_mod_content) catch {
       e => {
         println("  Warning: Could not parse " + moon_mod_path + ": " + e.to_string())
         continue
       }
-    }
+    } noraise { m => m }
 
     let current_version = match @semver.Version::parse(moon_mod.version) {
       Some(v) => v
@@ -534,15 +533,13 @@ pub async fn run_update_packages(
       }
     }
 
-    // Get commits for the package (with path filter)
-    let commits = try {
-      get_package_commits(repo, pkg.path)
-    } catch {
+    // Get commits with try-catch-noraise pattern
+    let commits = try get_package_commits(repo, pkg.path) catch {
       e => {
         println("  Warning: Could not get commits for " + pkg.name + ": " + e.to_string())
         continue
       }
-    }
+    } noraise { c => c }
 
     if commits.is_empty() {
       if verbose {
@@ -616,23 +613,21 @@ pub async fn run_update_packages(
     }
 
     // Update version
-    let updated_content = try {
-      @moon_mod.update_version(update.moon_mod_content, new_version)
-    } catch {
+    // Update version with try-catch-noraise pattern
+    let updated_content = try @moon_mod.update_version(update.moon_mod_content, new_version) catch {
       e => {
         println("  Warning: Could not update version: " + e.to_string())
         continue
       }
-    }
+    } noraise { c => c }
 
-    try {
-      @fs.write_file(update.moon_mod_path, updated_content, create=0o644)
-    } catch {
+    // Write file with try-catch-noraise pattern
+    try @fs.write_file(update.moon_mod_path, updated_content, create=0o644) catch {
       _ => {
         println("  Warning: Could not write " + update.moon_mod_path)
         continue
       }
-    }
+    } noraise { _ => () }
 
     let group_info = match update.pkg.version_group {
       Some(g) => " (group: " + g + ")"
@@ -647,12 +642,10 @@ async fn get_package_commits(
   repo : @git.Repository,
   path : String
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
-  // Get latest tag
-  let tag_result = try {
-    @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
-  } catch {
-    _ => @executor.CommandResult::failed("")
-  }
+  // Get latest tag with try-catch-noraise (failure is expected if no tags exist yet)
+  let tag_result = try @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"]) catch {
+    e => @executor.CommandResult::failed("no tags found: " + e.to_string())
+  } noraise { r => r }
 
   let log_cmd = if tag_result.is_success() {
     let tag = tag_result.stdout_trimmed()
@@ -661,11 +654,10 @@ async fn get_package_commits(
     ["log", "--pretty=format:%H|%s|%an|%aI", "--", path]
   }
 
-  let log_result = try {
-    @executor.run_git(repo, log_cmd)
-  } catch {
+  // Get log with try-catch-noraise pattern
+  let log_result = try @executor.run_git(repo, log_cmd) catch {
     e => raise WorkflowError("Failed to get commits: " + e.to_string())
-  }
+  } noraise { r => r }
 
   let git_commits = @git.parse_commit_log(log_result.stdout)
   @git.parse_conventional_commits(git_commits)
@@ -710,24 +702,21 @@ pub async fn run_publish_packages(
       println("Publishing " + pkg.name + "...")
     }
 
+    // Publish with try-catch-noraise pattern
     let publish_result = if pkg.path == "." {
-      try {
-        @executor.run_command(["moon", "publish"])
-      } catch {
+      try @executor.run_command(["moon", "publish"]) catch {
         e => {
           println("  Warning: Failed to publish " + pkg.name + ": " + e.to_string())
           continue
         }
-      }
+      } noraise { r => r }
     } else {
-      try {
-        @executor.run_command(["moon", "publish", "-C", pkg.path])
-      } catch {
+      try @executor.run_command(["moon", "publish", "-C", pkg.path]) catch {
         e => {
           println("  Warning: Failed to publish " + pkg.name + ": " + e.to_string())
           continue
         }
-      }
+      } noraise { r => r }
     }
 
     if not(publish_result.is_success()) {
@@ -746,12 +735,9 @@ pub async fn run_publish_packages(
 pub async fn get_registry_version(
   package_name : String
 ) -> @semver.Version? raise WorkflowError {
-  // Get package info with moon info command
-  let result = try {
-    @executor.run_command(["moon", "info", package_name])
-  } catch {
-    _ => return None
-  }
+  // Get package info with try? + unwrap_or pattern
+  let result = (try? @executor.run_command(["moon", "info", package_name]))
+    .unwrap_or(@executor.CommandResult::failed("moon info command failed"))
 
   if not(result.is_success()) {
     return None
@@ -773,6 +759,7 @@ pub async fn get_registry_version(
         .collect()
       if version_str.length() >= 2 {
         let ver = version_str[1].trim().to_string()
+        // parse returns Option directly, no error handling needed
         return @semver.Version::parse(ver)
       }
     }
@@ -871,14 +858,13 @@ pub async fn run_semver_check(
   }
 
   // 1. Get latest tag
-  let tag_result = try {
-    @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
-  } catch {
+  // Get tag with try-catch-noraise pattern
+  let tag_result = try @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"]) catch {
     _ =>
       raise WorkflowError(
         "No tags found. Cannot perform semver check without a previous version.",
       )
-  }
+  } noraise { r => r }
 
   if not(tag_result.is_success()) {
     raise WorkflowError(
@@ -891,33 +877,28 @@ pub async fn run_semver_check(
     println("  Comparing against tag: " + latest_tag)
   }
 
-  // 2. Save current branch name
-  let branch_result = try {
-    @executor.run_git(repo, ["rev-parse", "--abbrev-ref", "HEAD"])
-  } catch {
+  // 2. Save current branch name with try-catch-noraise pattern
+  let branch_result = try @executor.run_git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]) catch {
     e => raise WorkflowError("Failed to get current branch: " + e.to_string())
-  }
+  } noraise { r => r }
   let current_branch = branch_result.stdout_trimmed()
 
   // 3. Run moon doc on current code
   if verbose {
     println("  Generating docs for current code...")
   }
-  let doc_result = try {
-    @executor.run_command(["moon", "doc"])
-  } catch {
+  // Run moon doc with try-catch-noraise pattern
+  let doc_result = try @executor.run_command(["moon", "doc"]) catch {
     e => raise WorkflowError("Failed to run moon doc: " + e.to_string())
-  }
+  } noraise { r => r }
   if not(doc_result.is_success()) {
     raise WorkflowError("Failed to generate docs: " + doc_result.stderr)
   }
 
-  // 4. Load current package_data.json
-  let current_apis = try {
-    load_package_apis("target/doc")
-  } catch {
+  // 4. Load current package_data.json with try-catch-noraise pattern
+  let current_apis = try load_package_apis("target/doc") catch {
     e => raise WorkflowError("Failed to load current API: " + e.to_string())
-  }
+  } noraise { r => r }
 
   // 5. Checkout tag and get old API (ensure safe branch restoration)
   let old_apis = get_old_apis_with_safe_checkout(
@@ -948,47 +929,51 @@ async fn get_old_apis_with_safe_checkout(
   original_branch : String,
   verbose : Bool
 ) -> @semver_check.PackageApi raise WorkflowError {
-  // Checkout tag
+  // Checkout tag with try-catch-noraise pattern
   if verbose {
     println("  Checking out tag: " + tag)
   }
-  let checkout_result = try {
-    @executor.run_git(repo, ["checkout", tag])
-  } catch {
+  let checkout_result = try @executor.run_git(repo, ["checkout", tag]) catch {
     e => raise WorkflowError("Failed to checkout tag: " + e.to_string())
-  }
+  } noraise { r => r }
   if not(checkout_result.is_success()) {
     raise WorkflowError("Failed to checkout tag: " + checkout_result.stderr)
   }
 
   // From this point, we must return to the original branch
 
-  // Run moon doc on tagged code
+  // Run moon doc on tagged code with try-catch-noraise pattern
   if verbose {
     println("  Generating docs for previous version...")
   }
-  let old_doc_result = try {
-    @executor.run_command(["moon", "doc"])
-  } catch {
+  let old_doc_result = try @executor.run_command(["moon", "doc"]) catch {
     e => {
-      let _ = try { restore_branch(repo, original_branch, verbose) } catch { _ => () }
+      let _ = try? restore_branch(repo, original_branch, verbose)
       raise WorkflowError("Failed to run moon doc on tag: " + e.to_string())
     }
-  }
+  } noraise { r => r }
 
-  // Load package_data.json
+  // Load package_data.json with try-catch-noraise pattern
   let old_apis = if old_doc_result.is_success() {
-    try {
-      load_package_apis("target/doc")
-    } catch {
-      _ => @semver_check.PackageApi::empty()
-    }
+    try load_package_apis("target/doc") catch {
+      e => {
+        if verbose {
+          println("[WARN] Failed to load API from previous version: " + e.to_string())
+          println("[WARN] Continuing with empty API baseline...")
+        }
+        @semver_check.PackageApi::empty()
+      }
+    } noraise { r => r }
   } else {
+    if verbose {
+      println("[WARN] Failed to generate docs for previous version: " + old_doc_result.stderr)
+      println("[WARN] Continuing with empty API baseline...")
+    }
     @semver_check.PackageApi::empty()
   }
 
   // Return to original branch
-  let _ = try { restore_branch(repo, original_branch, verbose) } catch { _ => () }
+  let _ = try? restore_branch(repo, original_branch, verbose)
 
   old_apis
 }
@@ -1002,15 +987,14 @@ async fn restore_branch(
   if verbose {
     println("  Restoring original branch...")
   }
-  let result = try {
-    @executor.run_git(repo, ["checkout", branch])
-  } catch {
+  // Checkout with try-catch-noraise pattern
+  let result = try @executor.run_git(repo, ["checkout", branch]) catch {
     e => {
       println("Warning: Failed to restore branch: " + e.to_string())
       println("You may need to manually checkout: git checkout " + branch)
       return
     }
-  }
+  } noraise { r => r }
   if not(result.is_success()) {
     println("Warning: Failed to restore branch: " + result.stderr)
     println("You may need to manually checkout: git checkout " + branch)
@@ -1022,35 +1006,31 @@ async fn restore_branch(
 async fn load_package_apis(doc_dir : String) -> @semver_check.PackageApi raise WorkflowError {
   let all_apis : Array[@semver_check.PackageApi] = []
 
-  // Walk directory tree to find all package_data.json files
-  try {
-    @fs.walk(
-      doc_dir,
-      async fn(dir_path, files) {
-        for file in files {
-          if file == "package_data.json" {
-            let file_path = dir_path + "/" + file
-            let content = try {
-              @fs.read_file(file_path).text()
-            } catch {
-              _ => continue
-            }
+  // Walk directory tree to find all package_data.json files with try-catch-noraise pattern
+  try @fs.walk(
+    doc_dir,
+    async fn(dir_path, files) {
+      for file in files {
+        if file == "package_data.json" {
+          let file_path = dir_path + "/" + file
+          // Read file with try-catch-noraise pattern
+          let content = try @fs.read_file(file_path).text() catch {
+            _ => continue
+          } noraise { c => c }
 
-            let api = try {
-              @semver_check.parse_package_data(content)
-            } catch {
-              _ => continue
-            }
+          // Parse with try-catch-noraise pattern
+          let api = try @semver_check.parse_package_data(content) catch {
+            _ => continue
+          } noraise { a => a }
 
-            all_apis.push(api)
-          }
+          all_apis.push(api)
         }
-      },
-      max_concurrency=1, // Sequential for deterministic results
-    )
-  } catch {
+      }
+    },
+    max_concurrency=1, // Sequential for deterministic results
+  ) catch {
     e => raise WorkflowError("Failed to scan for package_data.json files: " + e.to_string())
-  }
+  } noraise { _ => () }
 
   @semver_check.merge_package_apis(all_apis)
 }

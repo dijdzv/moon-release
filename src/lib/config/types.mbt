@@ -94,21 +94,20 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     return d
   }
 
-  let json = try {
-    @json.parse(content)
-  } catch {
-    e => raise ConfigError("JSON parse error: " + e.to_string())
-  }
+  // Parse JSON with try-catch-noraise pattern
+  let json = try @json.parse(content) catch {
+    e => raise ConfigError("Invalid JSON in config file: " + e.to_string())
+  } noraise { r => r }
 
   let obj = match json {
     Object(o) => o
-    _ => raise ConfigError("Expected JSON object")
+    _ => raise ConfigError("Config file must contain a JSON object at the root level")
   }
 
   // packages needs special handling
   let packages = match obj.get("packages") {
     Some(Array(arr)) => parse_packages(arr)
-    Some(_) => raise ConfigError("'packages' must be an array")
+    Some(_) => raise ConfigError("'packages' must be an array of package objects")
     None => d.packages
   }
 
@@ -156,13 +155,22 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
   for i = 0; i < arr.length(); i = i + 1 {
     match arr[i] {
       Object(pkg_obj) => {
-        let name = parse_pkg_required_string(pkg_obj, "name")
-        let path = parse_pkg_string(pkg_obj, "path", ".")
-        let publish = parse_pkg_bool(pkg_obj, "publish", true)
-        let version_group = parse_pkg_optional_string(pkg_obj, "version_group", None)
+        // Parse package fields with try-catch-noraise pattern
+        let name = try parse_pkg_required_string(pkg_obj, "name") catch {
+          e => raise ConfigError("packages[" + i.to_string() + "]: " + e.to_string())
+        } noraise { r => r }
+        let path = try parse_pkg_string(pkg_obj, "path", ".") catch {
+          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
+        } noraise { r => r }
+        let publish = try parse_pkg_bool(pkg_obj, "publish", true) catch {
+          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
+        } noraise { r => r }
+        let version_group = try parse_pkg_optional_string(pkg_obj, "version_group", None) catch {
+          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
+        } noraise { r => r }
         result.push(PackageConfig::{ name, path, publish, version_group })
       }
-      _ => raise ConfigError("package must be an object")
+      _ => raise ConfigError("packages[" + i.to_string() + "]: must be an object, got " + arr[i].stringify())
     }
   }
   result
@@ -284,7 +292,10 @@ fn parse_bool(
   }
 }
 
-/// Parse optional number field
+/// Maximum value for safe UInt conversion from Double
+let uint_max_as_double : Double = 4294967295.0
+
+/// Parse optional number field with overflow protection
 fn parse_optional_uint(
   obj : Map[String, Json],
   key : String,
@@ -292,8 +303,10 @@ fn parse_optional_uint(
 ) -> UInt? raise ConfigError {
   match obj.get(key) {
     Some(Number(n, ..)) =>
-      if n >= 0.0 && n == n.to_int().to_double() {
+      if n >= 0.0 && n <= uint_max_as_double && n == n.to_int().to_double() {
         Some(n.to_uint())
+      } else if n > uint_max_as_double {
+        raise ConfigError("'" + key + "' value is too large (max: 4294967295)")
       } else {
         raise ConfigError("'" + key + "' must be a positive integer")
       }
@@ -303,7 +316,7 @@ fn parse_optional_uint(
   }
 }
 
-/// Parse number field
+/// Parse number field with overflow protection
 fn parse_uint(
   obj : Map[String, Json],
   key : String,
@@ -311,8 +324,10 @@ fn parse_uint(
 ) -> UInt raise ConfigError {
   match obj.get(key) {
     Some(Number(n, ..)) =>
-      if n >= 0.0 && n == n.to_int().to_double() {
+      if n >= 0.0 && n <= uint_max_as_double && n == n.to_int().to_double() {
         n.to_uint()
+      } else if n > uint_max_as_double {
+        raise ConfigError("'" + key + "' value is too large (max: 4294967295)")
       } else {
         raise ConfigError("'" + key + "' must be a positive integer")
       }

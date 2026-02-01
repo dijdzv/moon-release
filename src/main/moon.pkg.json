@@ -17,8 +17,17 @@
     "moonbitlang/core/json",
     "moonbitlang/core/env"
   ],
+  "pre-build": [
+    {
+      "input": "../../moon.mod.json",
+      "output": "version_info.mbt",
+      "command": ":embed -i $input -o $output --name embedded_moon_mod_json"
+    }
+  ],
   "targets": {
     "main.mbt": ["native"],
+    "completions.mbt": ["native"],
+    "version_info.mbt": ["native"],
     "stub.mbt": ["wasm", "wasm-gc", "js"]
   }
 }

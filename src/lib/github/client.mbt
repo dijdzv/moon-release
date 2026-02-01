@@ -171,13 +171,11 @@ pub fn GitHubClient::list_pull_requests_command(
   ]
 }
 
-/// Parse release response
+/// Parse release response with try-catch-noraise pattern
 pub fn parse_release_json(output : String) -> Release raise GitHubError {
-  let json = try {
-    @json.parse(output)
-  } catch {
+  let json = try @json.parse(output) catch {
     e => raise GitHubError("Failed to parse release JSON: " + e.to_string())
-  }
+  } noraise { r => r }
 
   let obj = match json {
     Object(o) => o
@@ -214,16 +212,14 @@ pub fn parse_release_json(output : String) -> Release raise GitHubError {
   Release::{ tag_name, name, body, draft, prerelease }
 }
 
-/// Parse release list response
+/// Parse release list response with try-catch-noraise pattern
 pub fn parse_release_list_json(
   output : String
 ) -> Array[Release] raise GitHubError {
-  let json = try {
-    @json.parse(output)
-  } catch {
+  let json = try @json.parse(output) catch {
     e =>
       raise GitHubError("Failed to parse release list JSON: " + e.to_string())
-  }
+  } noraise { r => r }
 
   let arr = match json {
     Array(a) => a
@@ -261,12 +257,11 @@ pub fn parse_release_list_json(
 }
 
 /// Parse PR response
+/// Parse PR response with try-catch-noraise pattern
 pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError {
-  let json = try {
-    @json.parse(output)
-  } catch {
+  let json = try @json.parse(output) catch {
     e => raise GitHubError("Failed to parse PR JSON: " + e.to_string())
-  }
+  } noraise { r => r }
 
   let obj = match json {
     Object(o) => o
@@ -275,8 +270,8 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
 
   let number = match obj.get("number") {
     Some(Number(n, ..)) =>
-      // Treat negative or non-integer values as 0
-      if n < 0.0 || n != n.to_int().to_double() {
+      // Treat negative, non-integer, or overflow values as 0
+      if n < 0.0 || n > 4294967295.0 || n != n.to_int().to_double() {
         0U
       } else {
         n.to_uint()
@@ -308,15 +303,13 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
   PullRequest::{ number, title, body, head, base }
 }
 
-/// Parse PR list response
+/// Parse PR list response with try-catch-noraise pattern
 pub fn parse_pull_request_list_json(
   output : String
 ) -> Array[PullRequest] raise GitHubError {
-  let json = try {
-    @json.parse(output)
-  } catch {
+  let json = try @json.parse(output) catch {
     e => raise GitHubError("Failed to parse PR list JSON: " + e.to_string())
-  }
+  } noraise { r => r }
 
   let arr = match json {
     Array(a) => a
@@ -328,7 +321,9 @@ pub fn parse_pull_request_list_json(
     match arr[i] {
       Object(obj) => {
         let number = match obj.get("number") {
-          Some(Number(n, ..)) => n.to_uint()
+          Some(Number(n, ..)) =>
+            // Bounds check for UInt overflow
+            if n >= 0.0 && n <= 4294967295.0 { n.to_uint() } else { 0U }
           _ => 0U
         }
         let title = match obj.get("title") {

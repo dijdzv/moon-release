@@ -3,6 +3,9 @@
 _build/
 target
 
+# Generated files (pre-build)
+src/main/version_info.mbt
+
 # Nix/devenv
 .devenv/
 .devenv.flake.nix

@@ -1,8 +1,21 @@
 /// moon-release CLI
 /// Automated release tool
 
-/// Version
-let version : String = "0.1.0"
+/// Version extracted from embedded moon.mod.json (generated at build time)
+let version : String = extract_version(embedded_moon_mod_json)
+
+/// Extract version from embedded moon.mod.json content
+fn extract_version(json_str : String) -> String {
+  // Use try? + to_option for consistent error handling
+  match (try? @json.parse(json_str)).to_option() {
+    Some(Object(obj)) =>
+      match obj.get("version") {
+        Some(String(v)) => v
+        _ => "unknown"
+      }
+    _ => "unknown"
+  }
+}
 
 /// Exit with status code (FFI to libc)
 extern "C" fn c_exit(status : Int) -> Unit = "exit"
@@ -12,6 +25,67 @@ extern "C" fn c_exit(status : Int) -> Unit = "exit"
 fn[T] exit_error() -> T {
   c_exit(1)
   panic()
+}
+
+// ============================================================================
+// Output helpers for consistent error/warning formatting
+// ============================================================================
+
+/// Output error message (supports JSON and text formats)
+fn output_error(msg : String, json_output : Bool) -> Unit {
+  if json_output {
+    println("{\"error\": " + @util.json_string(msg) + "}")
+  } else {
+    println("Error: " + msg)
+  }
+}
+
+/// Output error message with hint (text mode only shows hint)
+fn output_error_with_hint(msg : String, hint : String, json_output : Bool) -> Unit {
+  if json_output {
+    println("{\"error\": " + @util.json_string(msg) + "}")
+  } else {
+    println("Error: " + msg)
+    println("Hint: " + hint)
+  }
+}
+
+/// Output warning message (suppressed in JSON mode)
+fn output_warning(msg : String, json_output : Bool) -> Unit {
+  if not(json_output) {
+    println("Warning: " + msg)
+  }
+}
+
+/// Get dry-run flag from subcommand (combines global and subcommand flags)
+fn get_dry_run_flag(subcmd : @clap.SimpleValue, global_dry_run : Bool) -> Bool {
+  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
+    Some(v) => v
+    None => false
+  }
+  global_dry_run || subcmd_dry_run
+}
+
+/// Get output format from subcommand (returns true if JSON)
+fn get_json_output(subcmd : @clap.SimpleValue) -> Bool {
+  // Use try? + unwrap_or pattern for consistent error handling
+  let output_format = (try? subcmd.get_one("output")).unwrap_or("text")
+  output_format == "json"
+}
+
+/// Print verbose header for command
+fn print_verbose_header(
+  cmd_name : String,
+  config_path : String,
+  dry_run : Bool,
+  verbose : Bool,
+  json_output : Bool
+) -> Unit {
+  if verbose && not(json_output) {
+    println("Running " + cmd_name + " command...")
+    println("  Config: " + config_path)
+    println("  Dry run: " + dry_run.to_string())
+  }
 }
 
 /// Create CLI parser
@@ -158,15 +232,13 @@ async fn main {
     args.push(all_args[i])
   }
 
-  // Parse
-  let help_message = try {
-    parser.parse(value, args[:])
-  } catch {
+  // Parse with try-catch-noraise pattern
+  let help_message = try parser.parse(value, args[:]) catch {
     e => {
       println("Error: " + e.to_string())
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   // Display help message if returned and exit
   match help_message {
@@ -186,11 +258,8 @@ async fn main {
     Some(v) => v
     None => false
   }
-  let config_path : String = try {
-    value.get_one("config")
-  } catch {
-    _ => "release.json"
-  }
+  // Use try? + unwrap_or pattern for consistent error handling
+  let config_path = (try? value.get_one("config")).unwrap_or("release.json")
 
   // Process subcommand
   match value.subcmd {
@@ -222,34 +291,18 @@ async fn cmd_update(
   verbose : Bool,
   config_path : String
 ) -> Unit {
-  // Check subcommand flags as well
-  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
-    Some(v) => v
-    None => false
-  }
-  let dry_run = global_dry_run || subcmd_dry_run
-  let output_format : String = try {
-    subcmd.get_one("output")
-  } catch {
-    _ => "text"
-  }
-  let json_output = output_format == "json"
+  let dry_run = get_dry_run_flag(subcmd, global_dry_run)
+  let json_output = get_json_output(subcmd)
 
-  if verbose && not(json_output) {
-    println("Running update command...")
-    println("  Config: " + config_path)
-    println("  Dry run: " + dry_run.to_string())
-  }
+  print_verbose_header("update", config_path, dry_run, verbose, json_output)
 
-  // Load config
-  let config = load_config(config_path)
+  // Load config and repo
+  let config = load_config(config_path, verbose~)
   let repo = @git.Repository::current()
 
-  // dirty check
+  // Dirty check
   if should_abort_dirty(config, repo, verbose) {
-    if json_output {
-      println("{\"error\": \"uncommitted changes in working directory\"}")
-    }
+    output_error("uncommitted changes in working directory", json_output)
     exit_error()
   }
 
@@ -259,72 +312,55 @@ async fn cmd_update(
     None => false
   }
 
-  // In monorepo mode, update each package separately (JSON not supported)
+  // In monorepo mode, update each package separately with try-catch-noraise pattern
   if packages_mode || not(config.packages.is_empty()) {
-    try {
-      @workflow.run_update_packages(config, repo, dry_run, verbose)
-    } catch {
+    try @workflow.run_update_packages(config, repo, dry_run, verbose) catch {
       e => {
-        if json_output {
-          println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
-        } else {
-          println("Error: " + e.to_string())
-        }
+        output_error(e.to_string(), json_output)
         exit_error()
       }
-    }
+    } noraise { _ => () }
     return
   }
 
-  // Get current version
-  let moon_mod = try {
-    load_moon_mod("moon.mod.json")
-  } catch {
+  // Get current version with try-catch-noraise pattern
+  let moon_mod = try load_moon_mod("moon.mod.json") catch {
     e => {
-      if json_output {
-        println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
-      } else {
-        println("Error: " + e.to_string())
-      }
+      output_error(e.to_string(), json_output)
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   let current_version = match @semver.Version::parse(moon_mod.version) {
     Some(v) => v
     None => {
-      if json_output {
-        println("{\"error\": \"invalid version in moon.mod.json\"}")
-      } else {
-        println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
-        println("Hint: Version should follow semver format (e.g., 1.2.3 or 1.2.3-alpha)")
-      }
+      output_error_with_hint(
+        "Invalid version in moon.mod.json: " + moon_mod.version,
+        "Version should follow semver format (e.g., 1.2.3 or 1.2.3-alpha)",
+        json_output,
+      )
       exit_error()
     }
   }
 
-  // Parse commits
-  let commits = try {
-    get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
-  } catch {
+  // Parse commits with try-catch-noraise pattern
+  let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
     e => {
-      if json_output {
-        println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
-      } else {
-        println("Error getting commits: " + e.to_string())
-        println("Hint: Make sure you are in a git repository with at least one commit")
-      }
+      output_error_with_hint(
+        "Error getting commits: " + e.to_string(),
+        "Make sure you are in a git repository with at least one commit",
+        json_output,
+      )
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   if commits.is_empty() {
-    if json_output {
-      println("{\"error\": \"no commits found since last tag\"}")
-    } else {
-      println("No commits found since last tag. Nothing to release.")
-      println("Hint: Create new commits or use 'moon-release set-version' to set version manually")
-    }
+    output_error_with_hint(
+      "No commits found since last tag. Nothing to release.",
+      "Create new commits or use 'moon-release set-version' to set version manually",
+      json_output,
+    )
     exit_error()
   }
 
@@ -340,12 +376,11 @@ async fn cmd_update(
       ) {
         Some(t) => t
         None => {
-          if json_output {
-            println("{\"error\": \"no releasable commits found\"}")
-          } else {
-            println("No releasable commits found (no feat, fix, or breaking changes)")
-            println("Hint: Use Conventional Commits (feat:, fix:) or --bump to force a version bump")
-          }
+          output_error_with_hint(
+            "No releasable commits found (no feat, fix, or breaking changes)",
+            "Use Conventional Commits (feat:, fix:) or --bump to force a version bump",
+            json_output,
+          )
           exit_error()
         }
       }
@@ -354,32 +389,25 @@ async fn cmd_update(
   // Calculate new version
   let new_version = @semver.bump(current_version, bump_type)
 
-  // Registry check (if enabled)
+  // Registry check (if enabled) with try-catch-noraise pattern
   if config.registry_check {
-    let should_rel = try {
-      @workflow.should_release(new_version, moon_mod.name, verbose)
-    } catch {
+    let should_rel = try @workflow.should_release(new_version, moon_mod.name, verbose) catch {
       e => {
-        if verbose && not(json_output) {
-          println("Warning: Registry check failed: " + e.to_string())
-        }
+        output_warning("Registry check failed: " + e.to_string(), json_output)
         true // Continue release on error
       }
-    }
+    } noraise { r => r }
 
     if not(should_rel) {
-      if json_output {
-        println("{\"error\": \"version not newer than registry\"}")
-      } else {
-        println(
-          "Version \{new_version.to_string()} is not newer than registry version. Nothing to update.",
-        )
-      }
+      output_error(
+        "Version " + new_version.to_string() + " is not newer than registry version. Nothing to update.",
+        json_output,
+      )
       exit_error()
     }
   }
 
-  // Create context
+  // Create context and run workflow
   let ctx = @workflow.ReleaseContext::new(
     config,
     repo,
@@ -390,10 +418,13 @@ async fn cmd_update(
     verbose~,
   )
 
-  // Run workflow
-  try {
-    @workflow.run_update(ctx)
-    // JSON output
+  // Run update with try-catch-noraise pattern
+  try @workflow.run_update(ctx) catch {
+    e => {
+      output_error(e.to_string(), json_output)
+      exit_error()
+    }
+  } noraise { _ =>
     if json_output {
       let bump_str = match bump_type {
         @semver.Major => "major"
@@ -410,15 +441,6 @@ async fn cmd_update(
       ])
       println(json_str)
     }
-  } catch {
-    e => {
-      if json_output {
-        println("{\"error\": " + json_string(e.to_string()) + "}")
-      } else {
-        println("Error: " + e.to_string())
-      }
-      exit_error()
-    }
   }
 }
 
@@ -429,60 +451,54 @@ async fn cmd_release_pr(
   verbose : Bool,
   config_path : String
 ) -> Unit {
-  // Check subcommand flags
-  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
-    Some(v) => v
-    None => false
-  }
-  let dry_run = global_dry_run || subcmd_dry_run
+  let dry_run = get_dry_run_flag(subcmd, global_dry_run)
+  let json_output = false // release-pr doesn't support JSON output
 
-  if verbose {
-    println("Running release-pr command...")
-    println("  Config: " + config_path)
-    println("  Dry run: " + dry_run.to_string())
-  }
+  print_verbose_header("release-pr", config_path, dry_run, verbose, json_output)
 
-  // Load config
-  let config = load_config(config_path)
+  // Load config and repo
+  let config = load_config(config_path, verbose~)
   let repo = @git.Repository::current()
 
-  // dirty check
+  // Dirty check
   if should_abort_dirty(config, repo, verbose) {
     exit_error()
   }
 
-  // Get current version
-  let moon_mod = try {
-    load_moon_mod("moon.mod.json")
-  } catch {
+  // Get current version with try-catch-noraise pattern
+  let moon_mod = try load_moon_mod("moon.mod.json") catch {
     e => {
-      println("Error: " + e.to_string())
+      output_error(e.to_string(), json_output)
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   let current_version = match @semver.Version::parse(moon_mod.version) {
     Some(v) => v
     None => {
-      println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
-      println("Hint: Version should follow semver format (e.g., 1.2.3)")
+      output_error_with_hint(
+        "Invalid version in moon.mod.json: " + moon_mod.version,
+        "Version should follow semver format (e.g., 1.2.3)",
+        json_output,
+      )
       exit_error()
     }
   }
 
-  // Parse commits
-  let commits = try {
-    get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
-  } catch {
+  // Parse commits with try-catch-noraise pattern
+  let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
     e => {
-      println("Error getting commits: " + e.to_string())
-      println("Hint: Make sure you are in a git repository with at least one commit")
+      output_error_with_hint(
+        "Error getting commits: " + e.to_string(),
+        "Make sure you are in a git repository with at least one commit",
+        json_output,
+      )
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   if commits.is_empty() {
-    println("No commits found since last tag. Nothing to release.")
+    output_error("No commits found since last tag. Nothing to release.", json_output)
     exit_error()
   }
 
@@ -498,8 +514,11 @@ async fn cmd_release_pr(
       ) {
         Some(t) => t
         None => {
-          println("No releasable commits found")
-          println("Hint: Use Conventional Commits or --bump to force a version bump")
+          output_error_with_hint(
+            "No releasable commits found",
+            "Use Conventional Commits or --bump to force a version bump",
+            json_output,
+          )
           exit_error()
         }
       }
@@ -519,26 +538,25 @@ async fn cmd_release_pr(
     verbose~,
   )
 
-  // Get GitHub client
-  let github = try {
-    get_github_client()
-  } catch {
+  // Get GitHub client with try-catch-noraise pattern
+  let github = try get_github_client() catch {
     e => {
-      println("Error: " + e.to_string())
-      println("Hint: Make sure gh CLI is installed and you're logged in (gh auth login)")
+      output_error_with_hint(
+        e.to_string(),
+        "Make sure gh CLI is installed and you're logged in (gh auth login)",
+        json_output,
+      )
       exit_error()
     }
-  }
+  } noraise { r => r }
 
-  // Run workflow
-  try {
-    @workflow.run_release_pr(ctx, github)
-  } catch {
+  // Run workflow with try-catch-noraise pattern
+  try @workflow.run_release_pr(ctx, github) catch {
     e => {
-      println("Error: " + e.to_string())
+      output_error(e.to_string(), json_output)
       exit_error()
     }
-  }
+  } noraise { _ => () }
 }
 
 /// release command
@@ -548,57 +566,51 @@ async fn cmd_release(
   verbose : Bool,
   config_path : String
 ) -> Unit {
-  // Check subcommand flags
-  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
-    Some(v) => v
-    None => false
-  }
-  let dry_run = global_dry_run || subcmd_dry_run
+  let dry_run = get_dry_run_flag(subcmd, global_dry_run)
+  let json_output = false // release doesn't support JSON output
 
-  if verbose {
-    println("Running release command...")
-    println("  Config: " + config_path)
-    println("  Dry run: " + dry_run.to_string())
-  }
+  print_verbose_header("release", config_path, dry_run, verbose, json_output)
 
-  // Load config
-  let config = load_config(config_path)
+  // Load config and repo
+  let config = load_config(config_path, verbose~)
   let repo = @git.Repository::current()
 
-  // dirty check
+  // Dirty check
   if should_abort_dirty(config, repo, verbose) {
     exit_error()
   }
 
-  // Get current version
-  let moon_mod = try {
-    load_moon_mod("moon.mod.json")
-  } catch {
+  // Get current version with try-catch-noraise pattern
+  let moon_mod = try load_moon_mod("moon.mod.json") catch {
     e => {
-      println("Error: " + e.to_string())
+      output_error(e.to_string(), json_output)
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   let current_version = match @semver.Version::parse(moon_mod.version) {
     Some(v) => v
     None => {
-      println("Error: Invalid version in moon.mod.json: " + moon_mod.version)
-      println("Hint: Version should follow semver format (e.g., 1.2.3)")
+      output_error_with_hint(
+        "Invalid version in moon.mod.json: " + moon_mod.version,
+        "Version should follow semver format (e.g., 1.2.3)",
+        json_output,
+      )
       exit_error()
     }
   }
 
-  // Parse commits
-  let commits = try {
-    get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits)
-  } catch {
+  // Parse commits with try-catch-noraise pattern
+  let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
     e => {
-      println("Error getting commits: " + e.to_string())
-      println("Hint: Make sure you are in a git repository")
+      output_error_with_hint(
+        "Error getting commits: " + e.to_string(),
+        "Make sure you are in a git repository",
+        json_output,
+      )
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   // Determine bump type
   let forced_bump = get_bump_type(subcmd)
@@ -615,20 +627,19 @@ async fn cmd_release(
       }
   }
 
-  // Get prerelease identifier
-  let prerelease : String? = try {
-    Some(subcmd.get_one("prerelease"))
-  } catch {
-    _ => None
-  }
+  // Get prerelease identifier with try? + to_option pattern
+  let prerelease = (try? subcmd.get_one("prerelease")).to_option()
 
   // Validate prerelease identifier format
   match prerelease {
     Some(id) =>
       match @workflow.validate_prerelease_identifier(id) {
         Some(reason) => {
-          println("Error: Invalid prerelease identifier '\{id}': \{reason}")
-          println("Hint: Use alphanumeric characters, hyphens, and dots (e.g., alpha, beta.1, rc-1)")
+          output_error_with_hint(
+            "Invalid prerelease identifier '" + id + "': " + reason,
+            "Use alphanumeric characters, hyphens, and dots (e.g., alpha, beta.1, rc-1)",
+            json_output,
+          )
           exit_error()
         }
         None => ()
@@ -638,8 +649,11 @@ async fn cmd_release(
 
   // Check if prerelease is allowed in config
   if prerelease is Some(_) && not(config.allow_prerelease) {
-    println("Error: Prerelease is not allowed in configuration.")
-    println("Hint: Set 'allow_prerelease: true' in release.json to enable prereleases")
+    output_error_with_hint(
+      "Prerelease is not allowed in configuration.",
+      "Set 'allow_prerelease: true' in release.json to enable prereleases",
+      json_output,
+    )
     exit_error()
   }
 
@@ -657,26 +671,25 @@ async fn cmd_release(
     verbose~,
   )
 
-  // Get GitHub client
-  let github = try {
-    get_github_client()
-  } catch {
+  // Get GitHub client with try-catch-noraise pattern
+  let github = try get_github_client() catch {
     e => {
-      println("Error: " + e.to_string())
-      println("Hint: Make sure gh CLI is installed and you're logged in (gh auth login)")
+      output_error_with_hint(
+        e.to_string(),
+        "Make sure gh CLI is installed and you're logged in (gh auth login)",
+        json_output,
+      )
       exit_error()
     }
-  }
+  } noraise { r => r }
 
-  // Run workflow
-  try {
-    @workflow.run_release(ctx, github)
-  } catch {
+  // Run workflow with try-catch-noraise pattern
+  try @workflow.run_release(ctx, github) catch {
     e => {
-      println("Error: " + e.to_string())
+      output_error(e.to_string(), json_output)
       exit_error()
     }
-  }
+  } noraise { _ => () }
 }
 
 /// init command
@@ -693,12 +706,7 @@ async fn cmd_init(
   println("Initializing release configuration...")
 
   // Check if file already exists
-  let file_exists = try {
-    let _ = @fs.read_file("release.json")
-    true
-  } catch {
-    _ => false
-  }
+  let file_exists = (try? @fs.read_file("release.json")) is Ok(_)
 
   if file_exists && not(force) {
     println("release.json already exists. Use --force to overwrite.")
@@ -710,17 +718,15 @@ async fn cmd_init(
     return
   }
 
-  // Write default config as JSON
+  // Write default config as JSON with try-catch-noraise pattern
   let config_json = generate_default_config_json()
 
-  try {
-    @fs.write_file("release.json", config_json, create=0o644)
-  } catch {
+  try @fs.write_file("release.json", config_json, create=0o644) catch {
     e => {
       println("Error: Failed to write release.json: " + e.to_string())
       exit_error()
     }
-  }
+  } noraise { _ => () }
 
   let config = @config.Config::default()
   println("Created release.json with defaults:")
@@ -813,25 +819,21 @@ async fn cmd_set_version(
     println("Setting version to: " + new_version.to_string())
   }
 
-  // Read current moon.mod.json
-  let moon_mod_content = try {
-    @fs.read_file("moon.mod.json").text()
-  } catch {
+  // Read current moon.mod.json with try-catch-noraise pattern
+  let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
     e => {
       println("Error: Failed to read moon.mod.json: " + e.to_string())
       exit_error()
     }
-  }
+  } noraise { r => r }
 
-  // Get current version
-  let moon_mod = try {
-    @moon_mod.parse(moon_mod_content)
-  } catch {
+  // Get current version with try-catch-noraise pattern
+  let moon_mod = try @moon_mod.parse(moon_mod_content) catch {
     e => {
       println("Error: Failed to parse moon.mod.json: " + e.to_string())
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   if dry_run {
     println("[dry-run] Would update moon.mod.json:")
@@ -840,24 +842,21 @@ async fn cmd_set_version(
     return
   }
 
-  // Update version
-  let updated_content = try {
-    @moon_mod.update_version(moon_mod_content, new_version)
-  } catch {
+  // Update version with try-catch-noraise pattern
+  let updated_content = try @moon_mod.update_version(moon_mod_content, new_version) catch {
     e => {
       println("Error: Failed to update version: " + e.to_string())
       exit_error()
     }
-  }
+  } noraise { r => r }
 
-  try {
-    @fs.write_file("moon.mod.json", updated_content, create=0o644)
-  } catch {
+  // Write file with try-catch-noraise pattern
+  try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
     e => {
       println("Error: Failed to write moon.mod.json: " + e.to_string())
       exit_error()
     }
-  }
+  } noraise { _ => () }
 
   println("Updated moon.mod.json:")
   println("  " + moon_mod.version + " -> " + new_version.to_string())
@@ -874,11 +873,8 @@ async fn cmd_check(
     Some(arr) if arr.length() > 0 => Some(arr[0])
     _ => None
   }
-  let output_format : String = try {
-    subcmd.get_one("output")
-  } catch {
-    _ => "text"
-  }
+  // Use try? + unwrap_or pattern for consistent error handling
+  let output_format = (try? subcmd.get_one("output")).unwrap_or("text")
   let json_output = output_format == "json"
 
   if not(json_output) {
@@ -893,12 +889,8 @@ async fn cmd_check(
   // Get Git repository
   let repo = @git.Repository::current()
 
-  // Get latest tag
-  let latest_tag = try {
-    get_latest_tag(repo)
-  } catch {
-    _ => None
-  }
+  // Get latest tag with try? + to_option + bind pattern
+  let latest_tag = (try? get_latest_tag(repo)).to_option().bind(fn(x) { x })
 
   if not(json_output) {
     match latest_tag {
@@ -907,10 +899,8 @@ async fn cmd_check(
     }
   }
 
-  // Get commits
-  let commits = try {
-    get_commits_since_last_tag(repo)
-  } catch {
+  // Get commits with try-catch-noraise pattern
+  let commits = try get_commits_since_last_tag(repo) catch {
     e => {
       if json_output {
         println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
@@ -919,7 +909,7 @@ async fn cmd_check(
       }
       exit_error()
     }
-  }
+  } noraise { r => r }
 
   // Determine bump type
   let bump_type = if commits.length() > 0 {
@@ -1051,25 +1041,27 @@ fn build_json_object(pairs : Array[(String, String)]) -> String {
 
 // ======== Helper functions ========
 
-/// Load configuration
-async fn load_config(path : String) -> @config.Config {
-  // Check if file exists
-  let content = try {
-    @fs.read_file(path).text()
-  } catch {
-    _ => return @config.Config::default()
-  }
+/// Load configuration with try-catch-noraise pattern
+async fn load_config(path : String, verbose~ : Bool = false) -> @config.Config {
+  // Check if file exists with try-catch-noraise pattern
+  let content = try @fs.read_file(path).text() catch {
+    e => {
+      if verbose {
+        println("Note: Config file not found or unreadable (" + path + "): " + e.to_string())
+        println("Using default configuration.")
+      }
+      return @config.Config::default()
+    }
+  } noraise { r => r }
 
-  // Parse
-  try {
-    @config.Config::parse(content)
-  } catch {
+  // Parse with try-catch-noraise pattern
+  try @config.Config::parse(content) catch {
     e => {
       println("Warning: Failed to parse config file: " + e.to_string())
       println("Using default configuration.")
       @config.Config::default()
     }
-  }
+  } noraise { r => r }
 }
 
 /// Load moon.mod.json
@@ -1083,12 +1075,8 @@ async fn get_commits_since_last_tag(
   repo : @git.Repository,
   max_commits~ : UInt? = None
 ) -> Array[(@conventional.ConventionalCommit, String)] raise {
-  // Get latest tag
-  let latest_tag = try {
-    get_latest_tag(repo)
-  } catch {
-    _ => None
-  }
+  // Get latest tag with try? + to_option + bind pattern
+  let latest_tag = (try? get_latest_tag(repo)).to_option().bind(fn(x) { x })
 
   // Get commit log
   let log_result = match latest_tag {
@@ -1156,17 +1144,24 @@ async fn get_github_client() -> @github.GitHubClient raise {
     ["gh", "repo", "view", "--json", "owner,name"],
   )
   if not(result.is_success()) {
+    let hint = if result.stderr.contains("not a git repository") {
+      "The current directory is not a git repository."
+    } else if result.stderr.contains("gh auth login") || result.stderr.contains("authentication") {
+      "Run 'gh auth login' to authenticate with GitHub."
+    } else if result.stderr.contains("not found") || result.stderr.contains("command not found") {
+      "The 'gh' CLI is not installed. Install it from https://cli.github.com/"
+    } else {
+      "Make sure you are in a GitHub repository and have 'gh' CLI installed and authenticated."
+    }
     raise @workflow.WorkflowError(
-      "Failed to get repository info. Make sure you are in a GitHub repository and have gh CLI installed.",
+      "Failed to get repository info: " + result.stderr.trim().to_string() + "\nHint: " + hint,
     )
   }
 
-  // Parse JSON
-  let json = try {
-    @json.parse(result.stdout)
-  } catch {
-    _ => raise @workflow.WorkflowError("Failed to parse repository info")
-  }
+  // Parse JSON with try-catch-noraise pattern
+  let json = try @json.parse(result.stdout) catch {
+    e => raise @workflow.WorkflowError("Failed to parse repository info from 'gh' output: " + e.to_string())
+  } noraise { r => r }
 
   match json {
     Object(obj) => {
@@ -1174,17 +1169,17 @@ async fn get_github_client() -> @github.GitHubClient raise {
         Some(Object(o)) =>
           match o.get("login") {
             Some(String(s)) => s
-            _ => raise @workflow.WorkflowError("Invalid owner info")
+            _ => raise @workflow.WorkflowError("Invalid owner info: expected 'owner.login' to be a string in 'gh' output")
           }
-        _ => raise @workflow.WorkflowError("Invalid owner info")
+        _ => raise @workflow.WorkflowError("Invalid owner info: expected 'owner' to be an object in 'gh' output")
       }
       let name = match obj.get("name") {
         Some(String(s)) => s
-        _ => raise @workflow.WorkflowError("Invalid repo name")
+        _ => raise @workflow.WorkflowError("Invalid repo name: expected 'name' to be a string in 'gh' output")
       }
       @github.GitHubClient::new(owner, name)
     }
-    _ => raise @workflow.WorkflowError("Invalid repository info")
+    _ => raise @workflow.WorkflowError("Invalid repository info: expected JSON object from 'gh' output")
   }
 }
 
@@ -1204,13 +1199,19 @@ fn substr_hash(hash : String, len : Int) -> String {
 }
 
 /// Check for uncommitted changes
-async fn check_dirty(repo : @git.Repository) -> Bool {
-  let result = try {
-    @executor.run_git(repo, ["status", "--porcelain"])
-  } catch {
-    _ => return false
-  }
-  not(result.stdout.trim().is_empty())
+/// Returns (is_dirty, error_occurred)
+async fn check_dirty(repo : @git.Repository, verbose : Bool) -> (Bool, Bool) {
+  // Check git status with try-catch-noraise pattern
+  let result = try @executor.run_git(repo, ["status", "--porcelain"]) catch {
+    e => {
+      if verbose {
+        println("Warning: Failed to check git status: " + e.to_string())
+        println("Assuming working directory is clean.")
+      }
+      return (false, true)
+    }
+  } noraise { r => r }
+  (not(result.stdout.trim().is_empty()), false)
 }
 
 /// Check allow_dirty (returns true if dirty and allow_dirty=false)
@@ -1223,16 +1224,18 @@ async fn should_abort_dirty(
     return false
   }
 
-  let is_dirty = check_dirty(repo)
+  let (is_dirty, _error_occurred) = check_dirty(repo, verbose)
   if is_dirty {
     println("Error: Working directory has uncommitted changes.")
     println("Commit or stash your changes, or set 'allow_dirty: true' in config.")
     if verbose {
-      let result = try {
-        @executor.run_git(repo, ["status", "--short"])
-      } catch {
-        _ => return true
-      }
+      // Get status with try-catch-noraise pattern
+      let result = try @executor.run_git(repo, ["status", "--short"]) catch {
+        e => {
+          println("Warning: Failed to get file list: " + e.to_string())
+          return true
+        }
+      } noraise { r => r }
       println("")
       println("Changed files:")
       println(result.stdout)
@@ -1240,240 +1243,6 @@ async fn should_abort_dirty(
     return true
   }
   false
-}
-
-/// generate-completions command
-fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
-  let shell : String = if subcmd.positional_args.length() > 0 {
-    subcmd.positional_args[0]
-  } else {
-    println("Error: shell argument is required")
-    println("Usage: moon-release generate-completions <shell>")
-    println("Supported shells: bash, zsh, fish")
-    exit_error()
-  }
-
-  match shell {
-    "bash" => print_bash_completion()
-    "zsh" => print_zsh_completion()
-    "fish" => print_fish_completion()
-    _ => {
-      println("Error: unsupported shell: " + shell)
-      println("Supported shells: bash, zsh, fish")
-      exit_error()
-    }
-  }
-}
-
-/// Output bash completion script
-fn print_bash_completion() -> Unit {
-  let script =
-    #|# moon-release bash completion
-    #|# Add this to ~/.bashrc or source it
-    #|
-    #|_moon_release_completions() {
-    #|    local cur prev opts commands
-    #|    COMPREPLY=()
-    #|    cur="${COMP_WORDS[COMP_CWORD]}"
-    #|    prev="${COMP_WORDS[COMP_CWORD-1]}"
-    #|
-    #|    commands="update release-pr release init version check set-version generate-completions"
-    #|    global_opts="-n --dry-run -v --verbose -c --config -h --help"
-    #|
-    #|    case "${COMP_WORDS[1]}" in
-    #|        update)
-    #|            opts="-n --dry-run -b --bump -p --packages -o --output"
-    #|            ;;
-    #|        release-pr)
-    #|            opts="-n --dry-run -b --bump"
-    #|            ;;
-    #|        release)
-    #|            opts="-n --dry-run -b --bump -p --prerelease"
-    #|            ;;
-    #|        init)
-    #|            opts="-f --force"
-    #|            ;;
-    #|        check)
-    #|            opts="-o --output"
-    #|            ;;
-    #|        set-version)
-    #|            opts="-n --dry-run"
-    #|            ;;
-    #|        generate-completions)
-    #|            if [[ ${COMP_CWORD} -eq 2 ]]; then
-    #|                COMPREPLY=( $(compgen -W "bash zsh fish" -- ${cur}) )
-    #|                return 0
-    #|            fi
-    #|            opts=""
-    #|            ;;
-    #|        *)
-    #|            if [[ ${COMP_CWORD} -eq 1 ]]; then
-    #|                COMPREPLY=( $(compgen -W "${commands}" -- ${cur}) )
-    #|                return 0
-    #|            fi
-    #|            opts="${global_opts}"
-    #|            ;;
-    #|    esac
-    #|
-    #|    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-    #|    return 0
-    #|}
-    #|
-    #|complete -F _moon_release_completions moon-release
-  println(script)
-}
-
-/// Output zsh completion script
-fn print_zsh_completion() -> Unit {
-  let script =
-    #|#compdef moon-release
-    #|# moon-release zsh completion
-    #|# Add this to ~/.zshrc or place in your fpath
-    #|
-    #|_moon-release() {
-    #|    local -a commands
-    #|    commands=(
-    #|        'update:Update version locally (no commit/push)'
-    #|        'release-pr:Create a release pull request'
-    #|        'release:Create a release (tag and GitHub release)'
-    #|        'init:Initialize release configuration'
-    #|        'version:Show version information'
-    #|        'check:Check the current state without making changes'
-    #|        'set-version:Set the package version manually'
-    #|        'generate-completions:Generate shell completion script'
-    #|    )
-    #|
-    #|    local -a global_opts
-    #|    global_opts=(
-    #|        '-n[Show what would be done without making changes]'
-    #|        '--dry-run[Show what would be done without making changes]'
-    #|        '-v[Enable verbose output]'
-    #|        '--verbose[Enable verbose output]'
-    #|        '-c[Path to config file]:config file:_files'
-    #|        '--config[Path to config file]:config file:_files'
-    #|        '-h[Show help]'
-    #|        '--help[Show help]'
-    #|    )
-    #|
-    #|    _arguments -C \
-    #|        $global_opts \
-    #|        '1:command:->command' \
-    #|        '*::arg:->args'
-    #|
-    #|    case $state in
-    #|        command)
-    #|            _describe -t commands 'moon-release command' commands
-    #|            ;;
-    #|        args)
-    #|            case $words[1] in
-    #|                update)
-    #|                    _arguments \
-    #|                        '-n[Show what would be done]' \
-    #|                        '--dry-run[Show what would be done]' \
-    #|                        '-b[Force version bump]:bump:(major minor patch)' \
-    #|                        '--bump[Force version bump]:bump:(major minor patch)' \
-    #|                        '-p[Update all packages]' \
-    #|                        '--packages[Update all packages]' \
-    #|                        '-o[Output format]:format:(text json)' \
-    #|                        '--output[Output format]:format:(text json)'
-    #|                    ;;
-    #|                release-pr)
-    #|                    _arguments \
-    #|                        '-n[Show what would be done]' \
-    #|                        '--dry-run[Show what would be done]' \
-    #|                        '-b[Force version bump]:bump:(major minor patch)' \
-    #|                        '--bump[Force version bump]:bump:(major minor patch)'
-    #|                    ;;
-    #|                release)
-    #|                    _arguments \
-    #|                        '-n[Show what would be done]' \
-    #|                        '--dry-run[Show what would be done]' \
-    #|                        '-b[Force version bump]:bump:(major minor patch)' \
-    #|                        '--bump[Force version bump]:bump:(major minor patch)' \
-    #|                        '-p[Prerelease identifier]:prerelease:' \
-    #|                        '--prerelease[Prerelease identifier]:prerelease:'
-    #|                    ;;
-    #|                init)
-    #|                    _arguments \
-    #|                        '-f[Overwrite existing configuration]' \
-    #|                        '--force[Overwrite existing configuration]'
-    #|                    ;;
-    #|                check)
-    #|                    _arguments \
-    #|                        '-o[Output format]:format:(text json)' \
-    #|                        '--output[Output format]:format:(text json)'
-    #|                    ;;
-    #|                set-version)
-    #|                    _arguments \
-    #|                        '-n[Show what would be done]' \
-    #|                        '--dry-run[Show what would be done]' \
-    #|                        ':version:'
-    #|                    ;;
-    #|                generate-completions)
-    #|                    _arguments \
-    #|                        ':shell:(bash zsh fish)'
-    #|                    ;;
-    #|            esac
-    #|            ;;
-    #|    esac
-    #|}
-    #|
-    #|_moon-release "$@"
-  println(script)
-}
-
-/// Output fish completion script
-fn print_fish_completion() -> Unit {
-  let script =
-    #|# moon-release fish completion
-    #|# Add this to ~/.config/fish/completions/moon-release.fish
-    #|
-    #|# Disable file completions
-    #|complete -c moon-release -f
-    #|
-    #|# Global options
-    #|complete -c moon-release -s n -l dry-run -d 'Show what would be done without making changes'
-    #|complete -c moon-release -s v -l verbose -d 'Enable verbose output'
-    #|complete -c moon-release -s c -l config -r -d 'Path to config file'
-    #|complete -c moon-release -s h -l help -d 'Show help'
-    #|
-    #|# Commands
-    #|complete -c moon-release -n '__fish_use_subcommand' -a update -d 'Update version locally'
-    #|complete -c moon-release -n '__fish_use_subcommand' -a release-pr -d 'Create a release pull request'
-    #|complete -c moon-release -n '__fish_use_subcommand' -a release -d 'Create a release'
-    #|complete -c moon-release -n '__fish_use_subcommand' -a init -d 'Initialize release configuration'
-    #|complete -c moon-release -n '__fish_use_subcommand' -a version -d 'Show version information'
-    #|complete -c moon-release -n '__fish_use_subcommand' -a check -d 'Check the current state'
-    #|complete -c moon-release -n '__fish_use_subcommand' -a set-version -d 'Set the package version manually'
-    #|complete -c moon-release -n '__fish_use_subcommand' -a generate-completions -d 'Generate shell completion script'
-    #|
-    #|# update options
-    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s n -l dry-run -d 'Show what would be done'
-    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
-    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s p -l packages -d 'Update all packages'
-    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s o -l output -r -a 'text json' -d 'Output format'
-    #|
-    #|# release-pr options
-    #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -s n -l dry-run -d 'Show what would be done'
-    #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
-    #|
-    #|# release options
-    #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s n -l dry-run -d 'Show what would be done'
-    #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
-    #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s p -l prerelease -r -d 'Prerelease identifier'
-    #|
-    #|# init options
-    #|complete -c moon-release -n '__fish_seen_subcommand_from init' -s f -l force -d 'Overwrite existing configuration'
-    #|
-    #|# check options
-    #|complete -c moon-release -n '__fish_seen_subcommand_from check' -s o -l output -r -a 'text json' -d 'Output format'
-    #|
-    #|# set-version options
-    #|complete -c moon-release -n '__fish_seen_subcommand_from set-version' -s n -l dry-run -d 'Show what would be done'
-    #|
-    #|# generate-completions options
-    #|complete -c moon-release -n '__fish_seen_subcommand_from generate-completions' -a 'bash zsh fish' -d 'Shell type'
-  println(script)
 }
 
 /// generate-schema command

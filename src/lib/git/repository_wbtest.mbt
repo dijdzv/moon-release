@@ -16,6 +16,17 @@ test "parse commit log empty" {
   assert_eq(commits.length(), 0)
 }
 
+test "parse commit log with pipe in message" {
+  // Subject contains | character which should be preserved
+  let output = "abc123|feat: handle foo | bar | baz|John Doe|2024-01-15T10:00:00Z"
+  let commits = parse_commit_log(output)
+  assert_eq(commits.length(), 1)
+  assert_eq(commits[0].hash, "abc123")
+  assert_eq(commits[0].message, "feat: handle foo | bar | baz")
+  assert_eq(commits[0].author, "John Doe")
+  assert_eq(commits[0].date, "2024-01-15T10:00:00Z")
+}
+
 test "parse conventional commits" {
   let output =
     "abc123|feat: add feature|John Doe|2024-01-15\ndef456|fix: correct bug|Jane Doe|2024-01-14\nghi789|not conventional|Bob|2024-01-13"

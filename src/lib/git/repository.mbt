@@ -148,6 +148,8 @@ pub fn Repository::push_command(
 }
 
 /// Parse commit log output
+/// Format: hash|subject|author|date (where subject may contain |)
+/// We parse from both ends: hash is always 40 chars, author and date are at the end
 pub fn parse_commit_log(output : String) -> Array[GitCommit] {
   let commits : Array[GitCommit] = []
   let lines : Array[String] = output
@@ -162,16 +164,37 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
     }
 
     // format: hash|subject|author|date
+    // Subject may contain | so we parse carefully:
+    // - hash is always first (40 chars for full SHA)
+    // - author is second-to-last
+    // - date is last
+    // - everything in between is the subject
     let parts : Array[String] = line
       .split("|")
       .map(fn(sv) { sv.to_string() })
       .collect()
+
     if parts.length() >= 4 {
+      let hash = parts[0]
+      let date = parts[parts.length() - 1]
+      let author = parts[parts.length() - 2]
+      // Join middle parts back together to reconstruct subject with |
+      let message_parts : Array[String] = []
+      for j = 1; j < parts.length() - 2; j = j + 1 {
+        message_parts.push(parts[j])
+      }
+      let message = message_parts.iter().fold(init="", fn(acc, s) {
+        if acc.is_empty() { s } else { acc + "|" + s }
+      })
+      let commit = GitCommit::{ hash, message, author, date }
+      commits.push(commit)
+    } else if parts.length() == 3 {
+      // Edge case: subject is empty
       let commit = GitCommit::{
         hash: parts[0],
-        message: parts[1],
-        author: parts[2],
-        date: parts[3],
+        message: "",
+        author: parts[1],
+        date: parts[2],
       }
       commits.push(commit)
     }
