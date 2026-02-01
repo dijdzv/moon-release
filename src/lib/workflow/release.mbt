@@ -172,10 +172,27 @@ pub async fn run_release_pr(
     println("[WARN] You may need to manually checkout: git checkout " + base_branch)
   }
 
+  // Generate PR body (auto-detect monorepo mode)
+  let pr_body = if not(ctx.config.packages.is_empty()) {
+    // Monorepo mode: use release-plz style format
+    if ctx.verbose {
+      println("Generating monorepo-style PR body...")
+    }
+    let pkg_info = collect_package_release_info(ctx.config, ctx.repo, ctx.verbose)
+    if pkg_info.is_empty() {
+      // Fallback to single-package mode if no packages have changes
+      build_pr_body(ctx)
+    } else {
+      build_pr_body_monorepo(pkg_info)
+    }
+  } else {
+    // Single-package mode
+    build_pr_body(ctx)
+  }
+
   match existing_pr {
     Some((pr_num, _)) => {
       // Update existing PR with try-catch-noraise pattern
-      let pr_body = build_pr_body(ctx)
       let update_result = try @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body]) catch {
         e => raise WorkflowError("Failed to update PR: " + e.to_string())
       } noraise { r => r }
@@ -187,7 +204,6 @@ pub async fn run_release_pr(
     None => {
       // Create new PR
       let pr_title = commit_msg
-      let pr_body = build_pr_body(ctx)
       let pr_cmd = github.create_pull_request_command(
         pr_title,
         pr_body,
@@ -585,6 +601,160 @@ fn generate_package_changelog(
   }
 
   sb.to_string()
+}
+
+/// Collect package release info for monorepo PR body
+// Suppress: WorkflowError declared for API consistency with other workflow functions
+#warnings("-unused_error_type")
+pub async fn collect_package_release_info(
+  config : @config.Config,
+  repo : @git.Repository,
+  verbose : Bool
+) -> Array[PackageReleaseInfo] raise WorkflowError {
+  let packages : Array[PackageReleaseInfo] = []
+
+  if config.packages.is_empty() {
+    return packages
+  }
+
+  // Phase 1: Collect information for each package
+  let updates : Array[(String, @semver.Version, @semver.BumpType, Array[(@conventional.ConventionalCommit, String)])] = []
+
+  for pkg in config.packages {
+    if verbose {
+      println("  Analyzing package: " + pkg.name)
+    }
+
+    // Path validation (prevent directory traversal)
+    if not(validate_path(pkg.path)) {
+      if verbose {
+        println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
+      }
+      continue
+    }
+
+    let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
+    let moon_mod_path = pkg_path + "moon.mod.json"
+
+    // Read moon.mod.json with try-catch-noraise pattern
+    let moon_mod_content = try @fs.read_file(moon_mod_path).text() catch {
+      _ => {
+        if verbose {
+          println("  Warning: Could not read " + moon_mod_path)
+        }
+        continue
+      }
+    } noraise { c => c }
+
+    // Parse with try-catch-noraise pattern
+    let moon_mod = try @moon_mod.parse(moon_mod_content) catch {
+      e => {
+        if verbose {
+          println("  Warning: Could not parse " + moon_mod_path + ": " + e.to_string())
+        }
+        continue
+      }
+    } noraise { m => m }
+
+    let current_version = match @semver.Version::parse(moon_mod.version) {
+      Some(v) => v
+      None => {
+        if verbose {
+          println("  Warning: Invalid version in " + moon_mod_path)
+        }
+        continue
+      }
+    }
+
+    // Get commits with try-catch-noraise pattern
+    let commits = try get_package_commits(repo, pkg.path) catch {
+      e => {
+        if verbose {
+          println("  Warning: Could not get commits for " + pkg.name + ": " + e.to_string())
+        }
+        continue
+      }
+    } noraise { c => c }
+
+    if commits.is_empty() {
+      if verbose {
+        println("    No changes in " + pkg.name)
+      }
+      continue
+    }
+
+    // Determine bump type
+    let bump_type = match @semver.determine_bump(commits.map(fn(c) { c.0 })) {
+      Some(t) => t
+      None => {
+        if verbose {
+          println("    No releasable changes in " + pkg.name)
+        }
+        continue
+      }
+    }
+
+    updates.push((pkg.name, current_version, bump_type, commits))
+  }
+
+  // Phase 2: Consolidate bump types by version_group (simplified - use max bump)
+  let group_bumps : @hashmap.HashMap[String, @semver.BumpType] = @hashmap.new()
+
+  for i = 0; i < updates.length(); i = i + 1 {
+    let (name, _, bump_type, _) = updates[i]
+    // Find the package config to get version_group
+    for pkg in config.packages {
+      if pkg.name == name {
+        match pkg.version_group {
+          Some(group) => {
+            let current_group_bump = group_bumps.get(group)
+            let should_update = match current_group_bump {
+              None => true
+              Some(existing) => bump_priority(bump_type) > bump_priority(existing)
+            }
+            if should_update {
+              group_bumps.set(group, bump_type)
+            }
+          }
+          None => ()
+        }
+        break
+      }
+    }
+  }
+
+  // Phase 3: Build PackageReleaseInfo with consolidated versions
+  for i = 0; i < updates.length(); i = i + 1 {
+    let (name, current_version, bump_type, commits) = updates[i]
+
+    // Find version_group for this package
+    let mut final_bump = bump_type
+    for pkg in config.packages {
+      if pkg.name == name {
+        match pkg.version_group {
+          Some(group) =>
+            match group_bumps.get(group) {
+              Some(group_bump) => final_bump = group_bump
+              None => ()
+            }
+          None => ()
+        }
+        break
+      }
+    }
+
+    let new_version = @semver.bump(current_version, final_bump)
+    packages.push(
+      PackageReleaseInfo::{
+        name,
+        old_version: current_version,
+        new_version,
+        commits,
+      },
+    )
+  }
+
+  packages
 }
 
 /// Monorepo: update multiple packages
