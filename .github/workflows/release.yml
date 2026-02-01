@@ -9,6 +9,10 @@ on:
         description: 'Dry run (no actual changes)'
         type: boolean
         default: false
+      build-only:
+        description: 'Build binaries only (skip release-pr)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -48,9 +52,9 @@ jobs:
 
   # Build binaries for multiple platforms
   # Triggered when a release PR is merged (commit message starts with "chore: release v")
-  # This is the bootstrap mechanism for moon-release's own releases
+  # Or manually via workflow_dispatch with build-only option
   build:
-    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')
+    if: (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.build-only == 'true')
     strategy:
       matrix:
         include:
