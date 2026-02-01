@@ -52,7 +52,7 @@ pub fn Config::default() -> Config {
     pr_title: "chore: release v{{ version }}",
     pr_draft: false,
     pr_labels: [],
-    pr_body: "## Release v{{ version }}\n\n---\n*This PR was automatically created by moon-release.*",
+    pr_body: "## Release v{{ version }}\n\n{{ changelog }}\n\n---\n*This PR was automatically created by moon-release.*",
     allow_prerelease: false,
     git_tag_enable: true,
     git_tag_name: "v{{ version }}",

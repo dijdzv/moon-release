@@ -132,7 +132,9 @@ pub fn validate_path(path : String) -> Bool {
 
 /// Build PR body (apply template)
 pub fn build_pr_body(ctx : ReleaseContext) -> String {
-  ctx.config.pr_body.replace(old="{{ version }}", new=ctx.new_version.to_string())
+  ctx.config.pr_body
+    .replace(old="{{ version }}", new=ctx.new_version.to_string())
+    .replace(old="{{ changelog }}", new=generate_release_notes(ctx.commits))
 }
 
 /// Validate git ref name (branch/tag) according to git-check-ref-format rules
