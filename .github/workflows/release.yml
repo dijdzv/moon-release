@@ -27,7 +27,9 @@ jobs:
         uses: hustcer/setup-moonbit@v1
 
       - name: Build moon-release
-        run: moon build --target native
+        run: |
+          moon update
+          moon build --target native
 
       - name: Run moon-release (release-pr)
         env:
@@ -67,7 +69,9 @@ jobs:
         uses: hustcer/setup-moonbit@v1
 
       - name: Build
-        run: moon build --target native
+        run: |
+          moon update
+          moon build --target native
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
@@ -100,7 +104,9 @@ jobs:
         uses: hustcer/setup-moonbit@v1
 
       - name: Build moon-release
-        run: moon build --target native
+        run: |
+          moon update
+          moon build --target native
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
