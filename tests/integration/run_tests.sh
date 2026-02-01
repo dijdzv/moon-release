@@ -462,8 +462,8 @@ test_generate_completions() {
     log_fail "generate-completions fish should output complete commands"
   fi
 
-  # invalid shell
-  output=$($BINARY generate-completions invalid 2>&1)
+  # invalid shell (use || true to prevent set -e from exiting)
+  output=$($BINARY generate-completions invalid 2>&1 || true)
   if echo "$output" | grep -q "unsupported shell"; then
     log_pass "generate-completions rejects invalid shell"
   else

@@ -33,6 +33,13 @@ test:
 test-verbose:
     moon test --verbose
 
+# Run integration tests
+test-integration:
+    ./tests/integration/run_tests.sh
+
+# Run all tests (unit + integration)
+test-all: test test-integration
+
 # === Development ===
 
 # Check code without building
