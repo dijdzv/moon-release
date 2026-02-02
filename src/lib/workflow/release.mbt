@@ -1,3 +1,18 @@
+/// Get mooncakes credentials file path
+async fn get_mooncakes_credentials_path() -> String {
+  // ~/.moon/credentials.json
+  let home = try @executor.run_command(["printenv", "HOME"]) catch {
+    _ => @executor.CommandResult::failed("printenv failed")
+  } noraise { r => r }
+
+  if home.is_success() {
+    home.stdout.trim().to_string() + "/.moon/credentials.json"
+  } else {
+    // Fallback for Windows or other systems
+    ".moon/credentials.json"
+  }
+}
+
 /// Validate publish configuration
 /// Ensures required files exist for enabled publish targets
 pub async fn validate_publish_config(
@@ -13,6 +28,23 @@ pub async fn validate_publish_config(
     try @moon_mod.parse(content) catch {
       e => raise WorkflowError("moon_publish is enabled but moon.mod.json is invalid: " + e.to_string())
     } noraise { _ => () }
+
+    // Check if mooncakes credentials exist (warning only, not error)
+    let creds_path = try get_mooncakes_credentials_path() catch {
+      _ => ".moon/credentials.json"
+    } noraise { p => p }
+    let creds_result = try @fs.read_file(creds_path).text() catch {
+      _ => ""
+    } noraise { c => c }
+
+    if creds_result.is_empty() || not(creds_result.contains("token")) {
+      println("Warning: mooncakes credentials not found at " + creds_path)
+      println("  moon publish may fail without authentication.")
+      println("  Run 'moon login' to authenticate with mooncakes.io")
+      if verbose {
+        println("  Or set MOONCAKES_TOKEN and MOONCAKES_USERNAME in CI environment")
+      }
+    }
   }
 
   // Check package.json exists if npm_publish is enabled

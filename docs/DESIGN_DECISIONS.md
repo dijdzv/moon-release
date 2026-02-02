@@ -88,11 +88,12 @@ moon-release is designed with reference to release-plz, but has made several des
 
 **release-plz**: Publishing to crates.io
 
-**moon-release**: Publishing to mooncakes.io
+**moon-release**: Publishing to mooncakes.io and npm
 
 **Reasons**:
 - MoonBit packages are managed on mooncakes.io
 - Publishing via `moon publish` command
+- npm support for JS target distribution (`moon build --target js` + `npm publish`)
 
 ## Implemented Features (Equivalent to release-plz)
 
@@ -120,8 +121,10 @@ The following features are implemented equivalent to release-plz:
 | `--dry-run` | Preview mode |
 | `set-version` command | Manual version setting |
 | `registry_check` | Version check before publish |
-| `publish_frozen` | `moon publish --frozen` option |
+| `moon_publish_frozen` | `moon publish --frozen` option |
 | `semver_check` | Built-in API compatibility check |
+| `npm_publish` | npm registry publishing support |
+| `npm_build_command` | Custom JS build command before npm publish |
 
 ## moon-release Unique Features
 
@@ -133,6 +136,8 @@ Features unique to moon-release not found in release-plz:
 | `init` command | Initialize configuration file |
 | `--prerelease` flag | Create alpha/beta/rc releases |
 | mooncakes.io integration | Auto-publish via `moon publish` |
+| npm registry integration | Auto-publish to npm with JS build |
+| Dual publish support | Publish to both mooncakes.io and npm in one release |
 
 ## Design Principles
 
@@ -146,5 +151,4 @@ Features unique to moon-release not found in release-plz:
 
 - GitLab / Gitea support (based on demand)
 - CHANGELOG generation option (based on demand)
-- API compatibility check (when MoonBit tools become available)
 - Plugin system (for advanced customization)
