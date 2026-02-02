@@ -53,19 +53,11 @@ pub async fn validate_publish_config(
       _ => raise WorkflowError("npm_publish is enabled but package.json not found")
     } noraise { _ => () }
 
-    // Check if NPM_TOKEN is set (warning only, not error)
-    // Use printenv to check environment variable
-    let check_result = try @executor.run_command(["printenv", "NPM_TOKEN"]) catch {
-      _ => @executor.CommandResult::failed("printenv failed")
-    } noraise { r => r }
-
-    if not(check_result.is_success()) || check_result.stdout.trim().is_empty() {
-      println("Warning: NPM_TOKEN environment variable is not set.")
-      println("  npm publish may fail without authentication.")
-      println("  See README.md for npm authentication setup.")
-      if verbose {
-        println("  Hint: export NPM_TOKEN=npm_xxxx")
-      }
+    // Note: npm Trusted Publishing uses OIDC, no token check needed
+    // Authentication is handled by GitHub Actions id-token permission
+    if verbose {
+      println("npm_publish enabled: using Trusted Publishing (OIDC)")
+      println("  Make sure 'id-token: write' permission is set in workflow")
     }
   }
 }
@@ -808,7 +800,7 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
   if ctx.dry_run {
     println("[dry-run] Would run: " + build_cmd_str)
-    println("[dry-run] Would run: npm publish")
+    println("[dry-run] Would run: npm publish --provenance --access public")
     return
   }
 
@@ -829,8 +821,8 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     println("  JS build successful")
   }
 
-  // Build npm publish command
-  let publish_cmd = ["npm", "publish"]
+  // Build npm publish command with --provenance for Trusted Publishing
+  let publish_cmd = ["npm", "publish", "--provenance", "--access", "public"]
 
   // Use timeout from config (default 300 seconds = 5 minutes)
   let timeout = ctx.config.npm_publish_timeout
@@ -859,17 +851,20 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
           result.stderr.contains("authentication") ||
           result.stderr.contains("401") ||
           result.stderr.contains("403") {
-          "\n\nHint: npm authentication failed. Make sure you have:\n" +
-          "  1. Created an npm access token (Automation type recommended for CI)\n" +
-          "  2. Set NPM_TOKEN environment variable\n" +
-          "  3. Created .npmrc with: //registry.npmjs.org/:_authToken=$\\{NPM_TOKEN\\}\n" +
-          "See: https://docs.npmjs.com/creating-and-viewing-access-tokens"
+          "\n\nHint: npm authentication failed. For Trusted Publishing, make sure:\n" +
+          "  1. Configure Trusted Publishing on npmjs.com (Package Settings)\n" +
+          "  2. Set 'id-token: write' permission in GitHub Actions workflow\n" +
+          "  3. Run npm publish with --provenance flag\n" +
+          "See: https://docs.npmjs.com/generating-provenance-statements"
         } else if result.stderr.contains("EPUBLISHCONFLICT") ||
           result.stderr.contains("already exists") {
           "\n\nHint: This version already exists in the registry."
         } else if result.stderr.contains("E402") ||
           result.stderr.contains("payment") {
           "\n\nHint: npm publish requires a paid account for private packages."
+        } else if result.stderr.contains("provenance") {
+          "\n\nHint: --provenance requires GitHub Actions with id-token: write permission.\n" +
+          "  If running locally, use 'npm publish' without --provenance."
         } else {
           ""
         }

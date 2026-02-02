@@ -403,39 +403,24 @@ Add the release job that runs when a release PR is merged:
 
 ### Publishing to npm (Optional)
 
-To publish to npm registry, you need to configure npm authentication.
+moon-release uses **npm Trusted Publishing** (OIDC) for secure, tokenless authentication.
 
-#### 1. Get npm Access Token
+#### 1. Configure Trusted Publishing on npmjs.com
 
-Go to [npmjs.com](https://www.npmjs.com/) → Avatar → **Access Tokens** → **Generate New Token**:
+1. Go to [npmjs.com](https://www.npmjs.com/) and log in
+2. Navigate to your package → **Settings** → **Configure Trusted Publishing**
+3. Add a new trusted publisher:
+   - **Repository owner**: Your GitHub username or organization
+   - **Repository name**: Your repository name
+   - **Workflow filename**: `release.yml` (or your workflow file)
+   - **Environment**: (leave empty or set if using environments)
 
-| Token Type | Description |
-|------------|-------------|
-| **Automation** | Recommended for CI/CD. Bypasses 2FA. |
-| Publish | Has publish permission but requires 2FA OTP |
-| Read-only | Download only |
+> **💡 Note:** If this is a new package, you need to publish it once manually first:
+> ```bash
+> npm publish --access public
+> ```
 
-> **💡 Tip:** Use **Automation** token for GitHub Actions to avoid 2FA prompts.
-
-#### 2. Configure GitHub Secrets
-
-Go to **Settings → Secrets and variables → Actions → New repository secret**:
-
-| Secret Name | Value |
-|-------------|-------|
-| `NPM_TOKEN` | Your npm access token (starts with `npm_`) |
-
-#### 3. Create `.npmrc` File
-
-Create `.npmrc` in your project root:
-
-```
-//registry.npmjs.org/:_authToken=${NPM_TOKEN}
-```
-
-This tells npm to use the `NPM_TOKEN` environment variable for authentication.
-
-#### 4. Update Configuration
+#### 2. Update Configuration
 
 Enable npm publishing in `release.json`:
 
@@ -447,17 +432,35 @@ Enable npm publishing in `release.json`:
 }
 ```
 
-#### 5. Update Workflow
+#### 3. Update Workflow
 
-Add `NPM_TOKEN` to the release job:
+Add `id-token: write` permission to your workflow:
 
 ```yaml
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write  # Required for npm Trusted Publishing
+    steps:
+      # ... other steps ...
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: ./moon-release release --verbose
 ```
+
+> **🔒 Security:** Trusted Publishing is more secure than access tokens:
+> - No secrets to store or rotate
+> - Short-lived tokens generated per-workflow
+> - Scoped to specific repository and workflow
 
 #### Execution Order
 
@@ -480,8 +483,8 @@ If the JS build fails, no tag or release is created (atomic operation).
 | `GITHUB_TOKEN` | Yes (auto) | Automatically provided |
 | `MOONCAKES_TOKEN` | For mooncakes publish | Settings → Secrets |
 | `MOONCAKES_USERNAME` | For mooncakes publish | Settings → Secrets |
-| `NPM_TOKEN` | For npm publish | Settings → Secrets |
-| `.npmrc` | For npm publish | Project root |
+| `id-token: write` | For npm publish | Workflow permissions |
+| Trusted Publishing | For npm publish | npmjs.com package settings |
 
 ### Workflow Template
 
