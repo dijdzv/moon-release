@@ -34,6 +34,68 @@ async fn get_package_name() -> String {
   moon_mod.name
 }
 
+/// Read version from package.json
+#warnings("-unused_error_type")
+pub async fn get_package_json_version() -> @semver.Version? raise WorkflowError {
+  // Try to read package.json
+  let content = try @fs.read_file("package.json").text() catch {
+    _ => return None  // File doesn't exist
+  } noraise { c => c }
+
+  // Find the version field
+  let lines = content.split("\n")
+  for line_view in lines {
+    let line = line_view.to_string()
+    let trimmed = line.trim_start()
+    if trimmed.has_prefix("\"version\"") && trimmed.contains(":") {
+      // Extract version value between quotes
+      // Pattern: "version": "x.y.z"
+      let parts = trimmed.split("\"")
+      let part_array : Array[String] = []
+      for p in parts {
+        part_array.push(p.to_string())
+      }
+      // parts[0] = "", parts[1] = "version", parts[2] = ": ", parts[3] = version
+      if part_array.length() >= 4 {
+        let version_str = part_array[3]
+        return @semver.Version::parse(version_str)
+      }
+    }
+  }
+  None
+}
+
+/// Get current version from the appropriate source based on config
+pub async fn get_current_version(
+  config : @config.Config
+) -> @semver.Version raise WorkflowError {
+  // Try moon.mod.json first if moon_publish is enabled
+  if config.moon_publish {
+    let content = try @fs.read_file("moon.mod.json").text() catch {
+      e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string())
+    } noraise { c => c }
+
+    let moon_mod = try @moon_mod.parse(content) catch {
+      e => raise WorkflowError("Failed to parse moon.mod.json: " + e.to_string())
+    } noraise { m => m }
+
+    match @semver.Version::parse(moon_mod.version) {
+      Some(v) => return v
+      None => raise WorkflowError("Invalid version in moon.mod.json: " + moon_mod.version)
+    }
+  }
+
+  // Try package.json if npm_publish is enabled
+  if config.npm_publish {
+    match get_package_json_version() {
+      Some(v) => return v
+      None => raise WorkflowError("Failed to read version from package.json")
+    }
+  }
+
+  raise WorkflowError("No publish target enabled. Enable moon_publish or npm_publish.")
+}
+
 /// Update package.json version field using string replacement
 /// Returns the updated content, or None if file doesn't exist
 async fn update_package_json_version(
@@ -97,27 +159,31 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   if ctx.dry_run {
-    println("[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}")
+    if ctx.config.moon_publish {
+      println("[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}")
+    }
     if ctx.config.npm_publish {
       println("[dry-run] Would update package.json to version \{ctx.new_version.to_string()}")
     }
     return
   }
 
-  // Update moon.mod.json with try-catch-noraise pattern
-  let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
-    e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string() + ". Make sure the file exists and is readable.")
-  } noraise { c => c }
+  // Update moon.mod.json if moon_publish is enabled
+  if ctx.config.moon_publish {
+    let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
+      e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string() + ". Make sure the file exists and is readable.")
+    } noraise { c => c }
 
-  let updated_content = try @moon_mod.update_version(moon_mod_content, ctx.new_version) catch {
-    e => raise WorkflowError("Failed to update version in moon.mod.json: " + e.to_string())
-  } noraise { c => c }
+    let updated_content = try @moon_mod.update_version(moon_mod_content, ctx.new_version) catch {
+      e => raise WorkflowError("Failed to update version in moon.mod.json: " + e.to_string())
+    } noraise { c => c }
 
-  try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
-    e => raise WorkflowError("Failed to write moon.mod.json: " + e.to_string() + ". Check file permissions.")
-  } noraise { _ => () }
+    try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
+      e => raise WorkflowError("Failed to write moon.mod.json: " + e.to_string() + ". Check file permissions.")
+    } noraise { _ => () }
 
-  println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
+    println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
+  }
 
   // Update package.json if npm_publish is enabled
   if ctx.config.npm_publish {

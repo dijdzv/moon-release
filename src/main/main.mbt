@@ -473,25 +473,17 @@ async fn cmd_release_pr(
     exit_error()
   }
 
-  // Get current version with try-catch-noraise pattern
-  let moon_mod = try load_moon_mod("moon.mod.json") catch {
+  // Get current version from appropriate source (moon.mod.json or package.json)
+  let current_version = try @workflow.get_current_version(config) catch {
     e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
-  } noraise { r => r }
-
-  let current_version = match @semver.Version::parse(moon_mod.version) {
-    Some(v) => v
-    None => {
       output_error_with_hint(
-        "Invalid version in moon.mod.json: " + moon_mod.version,
+        e.to_string(),
         "Version should follow semver format (e.g., 1.2.3)",
         json_output,
       )
       exit_error()
     }
-  }
+  } noraise { v => v }
 
   // Parse commits with try-catch-noraise pattern
   let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
@@ -596,25 +588,17 @@ async fn cmd_release(
     exit_error()
   }
 
-  // Get current version with try-catch-noraise pattern
-  let moon_mod = try load_moon_mod("moon.mod.json") catch {
+  // Get current version from appropriate source (moon.mod.json or package.json)
+  let current_version = try @workflow.get_current_version(config) catch {
     e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
-  } noraise { r => r }
-
-  let current_version = match @semver.Version::parse(moon_mod.version) {
-    Some(v) => v
-    None => {
       output_error_with_hint(
-        "Invalid version in moon.mod.json: " + moon_mod.version,
+        e.to_string(),
         "Version should follow semver format (e.g., 1.2.3)",
         json_output,
       )
       exit_error()
     }
-  }
+  } noraise { v => v }
 
   // Parse commits with try-catch-noraise pattern
   let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
