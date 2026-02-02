@@ -461,7 +461,7 @@ async fn cmd_release_pr(
   let repo = @git.Repository::current()
 
   // Validate publish configuration
-  try @workflow.validate_publish_config(config) catch {
+  try @workflow.validate_publish_config(config, verbose~) catch {
     e => {
       output_error(e.to_string(), json_output)
       exit_error()
@@ -576,7 +576,7 @@ async fn cmd_release(
   let repo = @git.Repository::current()
 
   // Validate publish configuration
-  try @workflow.validate_publish_config(config) catch {
+  try @workflow.validate_publish_config(config, verbose~) catch {
     e => {
       output_error(e.to_string(), json_output)
       exit_error()

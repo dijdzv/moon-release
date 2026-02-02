@@ -1,6 +1,9 @@
 /// Validate publish configuration
 /// Ensures required files exist for enabled publish targets
-pub async fn validate_publish_config(config : @config.Config) -> Unit raise WorkflowError {
+pub async fn validate_publish_config(
+  config : @config.Config,
+  verbose~ : Bool = false
+) -> Unit raise WorkflowError {
   // Check moon.mod.json exists if moon_publish is enabled
   if config.moon_publish {
     let content = try @fs.read_file("moon.mod.json").text() catch {
@@ -17,6 +20,21 @@ pub async fn validate_publish_config(config : @config.Config) -> Unit raise Work
     try @fs.read_file("package.json").text() catch {
       _ => raise WorkflowError("npm_publish is enabled but package.json not found")
     } noraise { _ => () }
+
+    // Check if NPM_TOKEN is set (warning only, not error)
+    // Use printenv to check environment variable
+    let check_result = try @executor.run_command(["printenv", "NPM_TOKEN"]) catch {
+      _ => @executor.CommandResult::failed("printenv failed")
+    } noraise { r => r }
+
+    if not(check_result.is_success()) || check_result.stdout.trim().is_empty() {
+      println("Warning: NPM_TOKEN environment variable is not set.")
+      println("  npm publish may fail without authentication.")
+      println("  See README.md for npm authentication setup.")
+      if verbose {
+        println("  Hint: export NPM_TOKEN=npm_xxxx")
+      }
+    }
   }
 }
 
@@ -803,8 +821,27 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     }
     Some(result) =>
       if not(result.is_success()) {
-        // npm publish failed - this is an error now since we want all-or-nothing
-        raise WorkflowError("Failed to publish to npm: " + result.stderr)
+        // npm publish failed - provide helpful error message
+        let hint = if result.stderr.contains("ENEEDAUTH") ||
+          result.stderr.contains("need to be logged in") ||
+          result.stderr.contains("authentication") ||
+          result.stderr.contains("401") ||
+          result.stderr.contains("403") {
+          "\n\nHint: npm authentication failed. Make sure you have:\n" +
+          "  1. Created an npm access token (Automation type recommended for CI)\n" +
+          "  2. Set NPM_TOKEN environment variable\n" +
+          "  3. Created .npmrc with: //registry.npmjs.org/:_authToken=$\\{NPM_TOKEN\\}\n" +
+          "See: https://docs.npmjs.com/creating-and-viewing-access-tokens"
+        } else if result.stderr.contains("EPUBLISHCONFLICT") ||
+          result.stderr.contains("already exists") {
+          "\n\nHint: This version already exists in the registry."
+        } else if result.stderr.contains("E402") ||
+          result.stderr.contains("payment") {
+          "\n\nHint: npm publish requires a paid account for private packages."
+        } else {
+          ""
+        }
+        raise WorkflowError("Failed to publish to npm: " + result.stderr + hint)
       }
   }
 

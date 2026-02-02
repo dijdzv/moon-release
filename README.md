@@ -8,6 +8,7 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
 - **GitHub Release** - Automatic creation of tags and release notes
 - **Release PR** - Automatic creation and update of release pull requests
 - **mooncakes.io** - Automatic publishing to the MoonBit package registry
+- **npm** - Automatic publishing to the npm registry
 - **API Compatibility Check** - semver-checks for breaking change detection
 - **Monorepo Support** - Version synchronization via version_group
 
@@ -142,9 +143,12 @@ Customize behavior with `release.json`.
   "git_release_name": "Release v{{ version }}",
   "git_release_body": "{{ changelog }}",
   "git_release_latest": true,
-  "publish": true,
-  "publish_frozen": false,
-  "publish_timeout": 300,
+  "moon_publish": true,
+  "moon_publish_frozen": false,
+  "moon_publish_timeout": 300,
+  "npm_publish": false,
+  "npm_build_command": null,
+  "npm_publish_timeout": 300,
   "semver_check": true,
   "registry_check": false,
   "allow_dirty": false,
@@ -172,9 +176,12 @@ Customize behavior with `release.json`.
 | `git_release_name` | `"Release v{{ version }}"` | Release name template |
 | `git_release_body` | `null` | Release body template (null for auto-generate) |
 | `git_release_latest` | `true` | Mark GitHub Release as latest |
-| `publish` | `true` | Whether to publish to mooncakes.io |
-| `publish_frozen` | `false` | Use `moon publish --frozen` |
-| `publish_timeout` | `300` | Publish timeout in seconds (future implementation) |
+| `moon_publish` | `true` | Whether to publish to mooncakes.io |
+| `moon_publish_frozen` | `false` | Use `moon publish --frozen` |
+| `moon_publish_timeout` | `300` | Publish timeout in seconds |
+| `npm_publish` | `false` | Whether to publish to npm registry |
+| `npm_build_command` | `null` | Custom build command before npm publish (default: `moon build --target js`) |
+| `npm_publish_timeout` | `300` | npm publish timeout in seconds |
 | `semver_check` | `false` | Run API compatibility check |
 | `registry_check` | `false` | Check registry version before publish |
 | `allow_dirty` | `false` | Allow uncommitted changes |
@@ -238,19 +245,22 @@ For monorepos with multiple packages, configure each package individually with `
     {
       "name": "core",
       "path": "packages/core",
-      "publish": true,
+      "moon_publish": true,
+      "npm_publish": true,
       "version_group": "main"
     },
     {
       "name": "utils",
       "path": "packages/utils",
-      "publish": true,
+      "moon_publish": true,
+      "npm_publish": false,
       "version_group": "main"
     },
     {
       "name": "internal",
       "path": "packages/internal",
-      "publish": false
+      "moon_publish": false,
+      "npm_publish": false
     }
   ]
 }
@@ -391,6 +401,76 @@ Add the release job that runs when a release PR is merged:
 > The token in `~/.moon/credentials.json` may have full account permissions.
 > Use at your own risk with this understanding.
 
+### Publishing to npm (Optional)
+
+To publish to npm registry, you need to configure npm authentication.
+
+#### 1. Get npm Access Token
+
+Go to [npmjs.com](https://www.npmjs.com/) → Avatar → **Access Tokens** → **Generate New Token**:
+
+| Token Type | Description |
+|------------|-------------|
+| **Automation** | Recommended for CI/CD. Bypasses 2FA. |
+| Publish | Has publish permission but requires 2FA OTP |
+| Read-only | Download only |
+
+> **💡 Tip:** Use **Automation** token for GitHub Actions to avoid 2FA prompts.
+
+#### 2. Configure GitHub Secrets
+
+Go to **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret Name | Value |
+|-------------|-------|
+| `NPM_TOKEN` | Your npm access token (starts with `npm_`) |
+
+#### 3. Create `.npmrc` File
+
+Create `.npmrc` in your project root:
+
+```
+//registry.npmjs.org/:_authToken=${NPM_TOKEN}
+```
+
+This tells npm to use the `NPM_TOKEN` environment variable for authentication.
+
+#### 4. Update Configuration
+
+Enable npm publishing in `release.json`:
+
+```json
+{
+  "moon_publish": true,
+  "npm_publish": true,
+  "npm_build_command": "moon build --target js"
+}
+```
+
+#### 5. Update Workflow
+
+Add `NPM_TOKEN` to the release job:
+
+```yaml
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: ./moon-release release --verbose
+```
+
+#### Execution Order
+
+When `npm_publish` is enabled, moon-release executes in this order:
+
+1. **Build JS target** - Runs `npm_build_command` (default: `moon build --target js`)
+2. Create Git tag
+3. Create GitHub Release
+4. Publish to mooncakes.io (if `moon_publish: true`)
+5. Publish to npm
+
+If the JS build fails, no tag or release is created (atomic operation).
+
 ### Configuration Summary
 
 | Setting | Required | Where to Configure |
@@ -398,8 +478,10 @@ Add the release job that runs when a release PR is merged:
 | Repository write permissions | Yes | Settings → Actions → General |
 | Allow PR creation | Yes | Settings → Actions → General |
 | `GITHUB_TOKEN` | Yes (auto) | Automatically provided |
-| `MOONCAKES_TOKEN` | For publish | Settings → Secrets |
-| `MOONCAKES_USERNAME` | For publish | Settings → Secrets |
+| `MOONCAKES_TOKEN` | For mooncakes publish | Settings → Secrets |
+| `MOONCAKES_USERNAME` | For mooncakes publish | Settings → Secrets |
+| `NPM_TOKEN` | For npm publish | Settings → Secrets |
+| `.npmrc` | For npm publish | Project root |
 
 ### Workflow Template
 
