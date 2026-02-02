@@ -66,10 +66,14 @@ pub async fn get_package_json_version() -> @semver.Version? raise WorkflowError 
 }
 
 /// Get current version from the appropriate source based on config
+/// If both moon_publish and npm_publish are enabled, returns the higher version
 pub async fn get_current_version(
   config : @config.Config
 ) -> @semver.Version raise WorkflowError {
-  // Try moon.mod.json first if moon_publish is enabled
+  let mut moon_version : @semver.Version? = None
+  let mut npm_version : @semver.Version? = None
+
+  // Read from moon.mod.json if moon_publish is enabled
   if config.moon_publish {
     let content = try @fs.read_file("moon.mod.json").text() catch {
       e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string())
@@ -80,20 +84,29 @@ pub async fn get_current_version(
     } noraise { m => m }
 
     match @semver.Version::parse(moon_mod.version) {
-      Some(v) => return v
+      Some(v) => moon_version = Some(v)
       None => raise WorkflowError("Invalid version in moon.mod.json: " + moon_mod.version)
     }
   }
 
-  // Try package.json if npm_publish is enabled
+  // Read from package.json if npm_publish is enabled
   if config.npm_publish {
     match get_package_json_version() {
-      Some(v) => return v
+      Some(v) => npm_version = Some(v)
       None => raise WorkflowError("Failed to read version from package.json")
     }
   }
 
-  raise WorkflowError("No publish target enabled. Enable moon_publish or npm_publish.")
+  // Return the higher version if both are available
+  match (moon_version, npm_version) {
+    (Some(mv), Some(nv)) => {
+      // Compare and return higher version
+      if mv.compare(nv) >= 0 { mv } else { nv }
+    }
+    (Some(mv), None) => mv
+    (None, Some(nv)) => nv
+    (None, None) => raise WorkflowError("No publish target enabled. Enable moon_publish or npm_publish.")
+  }
 }
 
 /// Update package.json version field using string replacement
