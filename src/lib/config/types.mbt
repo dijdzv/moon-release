@@ -15,6 +15,7 @@ pub struct Config {
   moon_publish : Bool
   moon_publish_frozen : Bool
   npm_publish : Bool
+  npm_build_command : String?  // Command to build JS target before npm publish
   semver_check : Bool
   pr_branch_prefix : String
   base_branch : String
@@ -34,6 +35,7 @@ pub struct PackageConfig {
   path : String
   moon_publish : Bool
   npm_publish : Bool
+  npm_build_command : String?  // Command to build JS target before npm publish
   version_group : String?
 } derive(Show, Eq)
 
@@ -67,6 +69,7 @@ pub fn Config::default() -> Config {
     moon_publish: true,
     moon_publish_frozen: false,
     npm_publish: false,  // Disabled by default
+    npm_build_command: None,  // Default: "moon build --target js" when npm_publish is true
     semver_check: false,
     pr_branch_prefix: "release/",
     base_branch: "main",
@@ -88,6 +91,7 @@ pub fn PackageConfig::default(name : String, path : String) -> PackageConfig {
     path,
     moon_publish: true,
     npm_publish: false,
+    npm_build_command: None,
     version_group: None,
   }
 }
@@ -133,6 +137,7 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     moon_publish: parse_bool(obj, "moon_publish", d.moon_publish),
     moon_publish_frozen: parse_bool(obj, "moon_publish_frozen", d.moon_publish_frozen),
     npm_publish: parse_bool(obj, "npm_publish", d.npm_publish),
+    npm_build_command: parse_optional_string(obj, "npm_build_command", d.npm_build_command),
     semver_check: parse_bool(obj, "semver_check", d.semver_check),
     pr_branch_prefix: parse_string(obj, "pr_branch_prefix", d.pr_branch_prefix),
     base_branch: parse_string(obj, "base_branch", d.base_branch),
@@ -176,10 +181,13 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
         let npm_publish = try parse_pkg_bool(pkg_obj, "npm_publish", false) catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }
+        let npm_build_command = try parse_pkg_optional_string(pkg_obj, "npm_build_command", None) catch {
+          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
+        } noraise { r => r }
         let version_group = try parse_pkg_optional_string(pkg_obj, "version_group", None) catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }
-        result.push(PackageConfig::{ name, path, moon_publish, npm_publish, version_group })
+        result.push(PackageConfig::{ name, path, moon_publish, npm_publish, npm_build_command, version_group })
       }
       _ => raise ConfigError("packages[" + i.to_string() + "]: must be an object, got " + arr[i].stringify())
     }

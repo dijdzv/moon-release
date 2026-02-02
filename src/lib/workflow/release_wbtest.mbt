@@ -366,3 +366,55 @@ test "build_pr_body_monorepo - groups commits by type" {
     _ => fail("commit parse failed")
   }
 }
+
+// npm build command tests
+
+test "get_npm_build_command - returns default when no custom command" {
+  let config = @config.Config::default()
+  let cmd = get_npm_build_command(config)
+  assert_eq(cmd.length(), 4)
+  assert_eq(cmd[0], "moon")
+  assert_eq(cmd[1], "build")
+  assert_eq(cmd[2], "--target")
+  assert_eq(cmd[3], "js")
+}
+
+test "get_npm_build_command - returns custom command when specified" {
+  let content =
+    #|{
+    #|  "npm_build_command": "npm run build"
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let cmd = get_npm_build_command(config)
+  assert_eq(cmd.length(), 3)
+  assert_eq(cmd[0], "npm")
+  assert_eq(cmd[1], "run")
+  assert_eq(cmd[2], "build")
+}
+
+test "get_npm_build_command - handles single word command" {
+  let content =
+    #|{
+    #|  "npm_build_command": "make"
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let cmd = get_npm_build_command(config)
+  assert_eq(cmd.length(), 1)
+  assert_eq(cmd[0], "make")
+}
+
+test "get_npm_build_command - handles complex command" {
+  let content =
+    #|{
+    #|  "npm_build_command": "moon build --target js --output-dir dist"
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let cmd = get_npm_build_command(config)
+  assert_eq(cmd.length(), 6)
+  assert_eq(cmd[0], "moon")
+  assert_eq(cmd[1], "build")
+  assert_eq(cmd[2], "--target")
+  assert_eq(cmd[3], "js")
+  assert_eq(cmd[4], "--output-dir")
+  assert_eq(cmd[5], "dist")
+}

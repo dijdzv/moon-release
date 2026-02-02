@@ -351,3 +351,11 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
 
   None
 }
+
+/// Get the npm build command (from config or default)
+pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
+  match config.npm_build_command {
+    Some(cmd) => cmd.split(" ").map(fn(s) { s.to_string() }).collect()
+    None => ["moon", "build", "--target", "js"]
+  }
+}

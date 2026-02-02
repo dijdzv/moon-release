@@ -389,3 +389,80 @@ test "parse config with max_analyze_commits - overflow rejected" {
     _ => fail("Wrong error type")
   }
 }
+
+// npm publish configuration tests
+
+test "default config - npm_publish disabled" {
+  let config = Config::default()
+  assert_eq(config.npm_publish, false)
+  assert_eq(config.npm_build_command, None)
+  assert_eq(config.npm_publish_timeout, 300U)
+}
+
+test "parse config with npm_publish enabled" {
+  let content =
+    #|{
+    #|  "npm_publish": true
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.npm_publish, true)
+}
+
+test "parse config with npm_build_command" {
+  let content =
+    #|{
+    #|  "npm_build_command": "npm run build"
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.npm_build_command, Some("npm run build"))
+}
+
+test "parse config with npm_build_command null" {
+  let content =
+    #|{
+    #|  "npm_build_command": null
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.npm_build_command, None)
+}
+
+test "parse config with npm_publish_timeout custom" {
+  let content =
+    #|{
+    #|  "npm_publish_timeout": 600
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.npm_publish_timeout, 600U)
+}
+
+test "parse config with all npm options" {
+  let content =
+    #|{
+    #|  "npm_publish": true,
+    #|  "npm_build_command": "moon build --target js",
+    #|  "npm_publish_timeout": 180
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.npm_publish, true)
+  assert_eq(config.npm_build_command, Some("moon build --target js"))
+  assert_eq(config.npm_publish_timeout, 180U)
+}
+
+test "parse config with packages - npm_build_command" {
+  let content =
+    #|{
+    #|  "packages": [
+    #|    {"name": "pkg1", "npm_publish": true, "npm_build_command": "npm run build:pkg1"}
+    #|  ]
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.packages.length(), 1)
+  assert_eq(config.packages[0].npm_publish, true)
+  assert_eq(config.packages[0].npm_build_command, Some("npm run build:pkg1"))
+}
+
+test "PackageConfig::default - npm options" {
+  let pkg = PackageConfig::default("my-package", "packages/my")
+  assert_eq(pkg.npm_publish, false)
+  assert_eq(pkg.npm_build_command, None)
+}

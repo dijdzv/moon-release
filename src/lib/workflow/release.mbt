@@ -502,6 +502,42 @@ async fn check_remote_branch_exists(
   result.is_success() && not(result.stdout.trim().is_empty())
 }
 
+/// Pre-build JS target for npm publish (called before tag creation)
+/// This ensures build failures happen before any artifacts are created
+pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
+  if not(ctx.config.npm_publish) {
+    return
+  }
+
+  let build_cmd = get_npm_build_command(ctx.config)
+  let build_cmd_str = build_cmd.iter().fold(init="", fn(acc, s) {
+    if acc.is_empty() { s } else { acc + " " + s }
+  })
+
+  if ctx.dry_run {
+    println("[dry-run] Would pre-build JS target: " + build_cmd_str)
+    return
+  }
+
+  if ctx.verbose {
+    println("Pre-building JS target for npm publish...")
+    println("  Command: " + build_cmd_str)
+  }
+
+  // Run build command - fail if build fails (before any tag/release creation)
+  let build_result = try @executor.run_command(build_cmd) catch {
+    e => raise WorkflowError("Failed to build JS target: " + e.to_string())
+  } noraise { r => r }
+
+  if not(build_result.is_success()) {
+    raise WorkflowError("Failed to build JS target: " + build_result.stderr)
+  }
+
+  if ctx.verbose {
+    println("  JS build successful (ready for npm publish)")
+  }
+}
+
 /// release command: create tag and release
 pub async fn run_release(
   ctx : ReleaseContext,
@@ -510,6 +546,10 @@ pub async fn run_release(
   if ctx.verbose {
     println("Running release workflow...")
   }
+
+  // Pre-build JS target if npm_publish is enabled (before any tag/release creation)
+  // This ensures build failures happen early, preventing partial releases
+  pre_build_js(ctx)
 
   // Generate tag name and release title from templates
   let tag_name = ctx.config.git_tag_name.replace(
@@ -696,21 +736,51 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   println("Published to mooncakes.io")
 }
 
-/// npm publish command: publish to npm registry
+/// Get the npm build command (from config or default)
+pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
+  match config.npm_build_command {
+    Some(cmd) => cmd.split(" ").map(fn(s) { s.to_string() }).collect()
+    None => ["moon", "build", "--target", "js"]
+  }
+}
+
+/// npm publish command: build JS target and publish to npm registry
 pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   if ctx.verbose {
     println("Publishing to npm...")
   }
 
-  // Build npm publish command
-  let publish_cmd = ["npm", "publish"]
+  // Build JS target first
+  let build_cmd = get_npm_build_command(ctx.config)
+  let build_cmd_str = build_cmd.iter().fold(init="", fn(acc, s) {
+    if acc.is_empty() { s } else { acc + " " + s }
+  })
 
   if ctx.dry_run {
-    println("[dry-run] Would run: " + publish_cmd.iter().fold(init="", fn(acc, s) {
-      if acc.is_empty() { s } else { acc + " " + s }
-    }))
+    println("[dry-run] Would run: " + build_cmd_str)
+    println("[dry-run] Would run: npm publish")
     return
   }
+
+  if ctx.verbose {
+    println("  Building JS target: " + build_cmd_str)
+  }
+
+  // Run build command - fail if build fails
+  let build_result = try @executor.run_command(build_cmd) catch {
+    e => raise WorkflowError("Failed to build JS target: " + e.to_string())
+  } noraise { r => r }
+
+  if not(build_result.is_success()) {
+    raise WorkflowError("Failed to build JS target: " + build_result.stderr)
+  }
+
+  if ctx.verbose {
+    println("  JS build successful")
+  }
+
+  // Build npm publish command
+  let publish_cmd = ["npm", "publish"]
 
   // Use timeout from config (default 300 seconds = 5 minutes)
   let timeout = ctx.config.npm_publish_timeout
@@ -733,10 +803,8 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     }
     Some(result) =>
       if not(result.is_success()) {
-        // publish failed - treat as warning since tag is already created
-        println("Warning: Failed to publish to npm: " + result.stderr)
-        println("You can manually publish with: npm publish")
-        return
+        // npm publish failed - this is an error now since we want all-or-nothing
+        raise WorkflowError("Failed to publish to npm: " + result.stderr)
       }
   }
 
