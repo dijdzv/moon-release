@@ -1317,20 +1317,36 @@ fn cmd_generate_schema() -> Unit {
     #|      "description": "Mark the GitHub release as latest",
     #|      "default": true
     #|    },
-    #|    "publish": {
+    #|    "moon_publish": {
     #|      "type": "boolean",
     #|      "description": "Publish to mooncakes.io registry",
     #|      "default": true
     #|    },
-    #|    "publish_frozen": {
+    #|    "moon_publish_frozen": {
     #|      "type": "boolean",
-    #|      "description": "Use --frozen flag when publishing",
+    #|      "description": "Use --frozen flag when publishing to mooncakes.io",
     #|      "default": false
     #|    },
-    #|    "publish_timeout": {
+    #|    "moon_publish_timeout": {
     #|      "type": "integer",
     #|      "minimum": 0,
-    #|      "description": "Timeout in seconds for publish command (reserved for future use)",
+    #|      "description": "Timeout in seconds for moon publish command",
+    #|      "default": 300
+    #|    },
+    #|    "npm_publish": {
+    #|      "type": "boolean",
+    #|      "description": "Publish to npm registry (uses Trusted Publishing)",
+    #|      "default": false
+    #|    },
+    #|    "npm_build_command": {
+    #|      "type": ["string", "null"],
+    #|      "description": "Command to build JS target before npm publish. Default: moon build --target js",
+    #|      "default": null
+    #|    },
+    #|    "npm_publish_timeout": {
+    #|      "type": "integer",
+    #|      "minimum": 0,
+    #|      "description": "Timeout in seconds for npm publish command",
     #|      "default": 300
     #|    },
     #|    "semver_check": {
@@ -1363,10 +1379,20 @@ fn cmd_generate_schema() -> Unit {
     #|            "description": "Path to package directory",
     #|            "default": "."
     #|          },
-    #|          "publish": {
+    #|          "moon_publish": {
     #|            "type": "boolean",
-    #|            "description": "Publish this package",
+    #|            "description": "Publish this package to mooncakes.io",
     #|            "default": true
+    #|          },
+    #|          "npm_publish": {
+    #|            "type": "boolean",
+    #|            "description": "Publish this package to npm",
+    #|            "default": false
+    #|          },
+    #|          "npm_build_command": {
+    #|            "type": ["string", "null"],
+    #|            "description": "Command to build JS target for this package",
+    #|            "default": null
     #|          },
     #|          "version_group": {
     #|            "type": ["string", "null"],
