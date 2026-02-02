@@ -460,6 +460,14 @@ async fn cmd_release_pr(
   let config = load_config(config_path, verbose~)
   let repo = @git.Repository::current()
 
+  // Validate publish configuration
+  try @workflow.validate_publish_config(config) catch {
+    e => {
+      output_error(e.to_string(), json_output)
+      exit_error()
+    }
+  } noraise { _ => () }
+
   // Dirty check
   if should_abort_dirty(config, repo, verbose) {
     exit_error()
@@ -574,6 +582,14 @@ async fn cmd_release(
   // Load config and repo
   let config = load_config(config_path, verbose~)
   let repo = @git.Repository::current()
+
+  // Validate publish configuration
+  try @workflow.validate_publish_config(config) catch {
+    e => {
+      output_error(e.to_string(), json_output)
+      exit_error()
+    }
+  } noraise { _ => () }
 
   // Dirty check
   if should_abort_dirty(config, repo, verbose) {
@@ -734,8 +750,9 @@ async fn cmd_init(
   println("  allow_prerelease: " + config.allow_prerelease.to_string())
   println("  git_tag_enable: " + config.git_tag_enable.to_string())
   println("  git_release_enable: " + config.git_release_enable.to_string())
-  println("  publish: " + config.publish.to_string())
-  println("  publish_frozen: " + config.publish_frozen.to_string())
+  println("  moon_publish: " + config.moon_publish.to_string())
+  println("  moon_publish_frozen: " + config.moon_publish_frozen.to_string())
+  println("  npm_publish: " + config.npm_publish.to_string())
   println("  semver_check: " + config.semver_check.to_string())
   println("  pr_branch_prefix: " + config.pr_branch_prefix)
   println("  base_branch: " + config.base_branch)
@@ -755,8 +772,9 @@ fn generate_default_config_json() -> String {
     #|  "git_release_enable": true,
     #|  "git_release_draft": false,
     #|  "git_release_name": "Release v{{ version }}",
-    #|  "publish": true,
-    #|  "publish_frozen": false,
+    #|  "moon_publish": true,
+    #|  "moon_publish_frozen": false,
+    #|  "npm_publish": false,
     #|  "semver_check": false,
     #|  "pr_branch_prefix": "release/",
     #|  "base_branch": "main",

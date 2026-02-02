@@ -4,7 +4,8 @@ test "default config" {
   assert_eq(config.allow_prerelease, false)
   assert_eq(config.git_tag_enable, true)
   assert_eq(config.git_release_enable, true)
-  assert_eq(config.publish, true)
+  assert_eq(config.moon_publish, true)
+  assert_eq(config.npm_publish, false)
 }
 
 test "parse empty config uses defaults" {
@@ -47,13 +48,15 @@ test "parse config with booleans" {
     #|  "allow_prerelease": true,
     #|  "git_tag_enable": false,
     #|  "git_release_enable": false,
-    #|  "publish": false
+    #|  "moon_publish": false,
+    #|  "npm_publish": true
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
   assert_eq(config.allow_prerelease, true)
   assert_eq(config.git_tag_enable, false)
   assert_eq(config.git_release_enable, false)
-  assert_eq(config.publish, false)
+  assert_eq(config.moon_publish, false)
+  assert_eq(config.npm_publish, true)
 }
 
 test "parse invalid json" {
@@ -76,7 +79,8 @@ test "apply version template" {
 test "default config - new options" {
   let config = Config::default()
   assert_eq(config.git_release_latest, true)
-  assert_eq(config.publish_timeout, 300U)
+  assert_eq(config.moon_publish_timeout, 300U)
+  assert_eq(config.npm_publish_timeout, 300U)
   assert_eq(config.max_analyze_commits, None)
   assert_eq(config.custom_major_increment_regex, None)
   assert_eq(config.custom_minor_increment_regex, None)
@@ -92,13 +96,22 @@ test "parse config with git_release_latest false" {
   assert_eq(config.git_release_latest, false)
 }
 
-test "parse config with publish_timeout" {
+test "parse config with moon_publish_timeout" {
   let content =
     #|{
-    #|  "publish_timeout": 600
+    #|  "moon_publish_timeout": 600
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
-  assert_eq(config.publish_timeout, 600U)
+  assert_eq(config.moon_publish_timeout, 600U)
+}
+
+test "parse config with npm_publish_timeout" {
+  let content =
+    #|{
+    #|  "npm_publish_timeout": 120
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.npm_publish_timeout, 120U)
 }
 
 test "parse config with max_analyze_commits" {
@@ -174,10 +187,10 @@ test "parse config with invalid pattern - empty string" {
   assert_true(result is None)
 }
 
-test "parse invalid publish_timeout - negative" {
+test "parse invalid moon_publish_timeout - negative" {
   let content =
     #|{
-    #|  "publish_timeout": -1
+    #|  "moon_publish_timeout": -1
     #|}
   try {
     let _ = Config::parse(content)
@@ -221,16 +234,18 @@ test "parse config with packages" {
     #|{
     #|  "packages": [
     #|    {"name": "core", "path": "packages/core"},
-    #|    {"name": "cli", "path": "packages/cli", "publish": false}
+    #|    {"name": "cli", "path": "packages/cli", "moon_publish": false, "npm_publish": true}
     #|  ]
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
   assert_eq(config.packages.length(), 2)
   assert_eq(config.packages[0].name, "core")
   assert_eq(config.packages[0].path, "packages/core")
-  assert_eq(config.packages[0].publish, true)
+  assert_eq(config.packages[0].moon_publish, true)
+  assert_eq(config.packages[0].npm_publish, false)
   assert_eq(config.packages[1].name, "cli")
-  assert_eq(config.packages[1].publish, false)
+  assert_eq(config.packages[1].moon_publish, false)
+  assert_eq(config.packages[1].npm_publish, true)
 }
 
 test "parse config with packages - version_group" {
@@ -280,14 +295,16 @@ test "parse config with all new options" {
   let content =
     #|{
     #|  "git_release_latest": false,
-    #|  "publish_timeout": 120,
+    #|  "moon_publish_timeout": 120,
+    #|  "npm_publish_timeout": 60,
     #|  "max_analyze_commits": 50,
     #|  "allow_dirty": true,
     #|  "registry_check": true
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
   assert_eq(config.git_release_latest, false)
-  assert_eq(config.publish_timeout, 120U)
+  assert_eq(config.moon_publish_timeout, 120U)
+  assert_eq(config.npm_publish_timeout, 60U)
   assert_eq(config.max_analyze_commits, Some(50U))
   assert_eq(config.allow_dirty, true)
   assert_eq(config.registry_check, true)
@@ -297,7 +314,8 @@ test "PackageConfig::default" {
   let pkg = PackageConfig::default("my-package", "packages/my-package")
   assert_eq(pkg.name, "my-package")
   assert_eq(pkg.path, "packages/my-package")
-  assert_eq(pkg.publish, true)
+  assert_eq(pkg.moon_publish, true)
+  assert_eq(pkg.npm_publish, false)
   assert_eq(pkg.version_group, None)
 }
 
@@ -308,21 +326,21 @@ test "ConfigError::to_string" {
 
 // UInt overflow boundary tests
 
-test "parse config with publish_timeout - large valid value" {
+test "parse config with moon_publish_timeout - large valid value" {
   // Large but valid value (within safe Double range for integer precision)
   let content =
     #|{
-    #|  "publish_timeout": 1000000000
+    #|  "moon_publish_timeout": 1000000000
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
-  assert_eq(config.publish_timeout, 1000000000U)
+  assert_eq(config.moon_publish_timeout, 1000000000U)
 }
 
-test "parse config with publish_timeout - overflow rejected" {
+test "parse config with moon_publish_timeout - overflow rejected" {
   // 4294967296 exceeds UInt max, should be rejected
   let content =
     #|{
-    #|  "publish_timeout": 4294967296
+    #|  "moon_publish_timeout": 4294967296
     #|}
   try {
     let _ = Config::parse(content)
@@ -333,11 +351,11 @@ test "parse config with publish_timeout - overflow rejected" {
   }
 }
 
-test "parse config with publish_timeout - float rejected" {
+test "parse config with moon_publish_timeout - float rejected" {
   // Non-integer values should be rejected
   let content =
     #|{
-    #|  "publish_timeout": 300.5
+    #|  "moon_publish_timeout": 300.5
     #|}
   try {
     let _ = Config::parse(content)

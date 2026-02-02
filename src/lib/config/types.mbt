@@ -12,8 +12,9 @@ pub struct Config {
   git_release_name : String
   git_release_body : String?
   git_release_latest : Bool
-  publish : Bool
-  publish_frozen : Bool
+  moon_publish : Bool
+  moon_publish_frozen : Bool
+  npm_publish : Bool
   semver_check : Bool
   pr_branch_prefix : String
   base_branch : String
@@ -23,14 +24,16 @@ pub struct Config {
   custom_major_increment_regex : String?
   custom_minor_increment_regex : String?
   max_analyze_commits : UInt?
-  publish_timeout : UInt  // In seconds
+  moon_publish_timeout : UInt  // In seconds
+  npm_publish_timeout : UInt   // In seconds
 } derive(Show, Eq)
 
 /// Package configuration (for monorepo)
 pub struct PackageConfig {
   name : String
   path : String
-  publish : Bool
+  moon_publish : Bool
+  npm_publish : Bool
   version_group : String?
 } derive(Show, Eq)
 
@@ -61,8 +64,9 @@ pub fn Config::default() -> Config {
     git_release_name: "Release v{{ version }}",
     git_release_body: None,
     git_release_latest: true,
-    publish: true,
-    publish_frozen: false,
+    moon_publish: true,
+    moon_publish_frozen: false,
+    npm_publish: false,  // Disabled by default
     semver_check: false,
     pr_branch_prefix: "release/",
     base_branch: "main",
@@ -72,7 +76,8 @@ pub fn Config::default() -> Config {
     custom_major_increment_regex: None,
     custom_minor_increment_regex: None,
     max_analyze_commits: None,
-    publish_timeout: 300,  // Default 5 minutes
+    moon_publish_timeout: 300,  // Default 5 minutes
+    npm_publish_timeout: 300,   // Default 5 minutes
   }
 }
 
@@ -81,7 +86,8 @@ pub fn PackageConfig::default(name : String, path : String) -> PackageConfig {
   PackageConfig::{
     name,
     path,
-    publish: true,
+    moon_publish: true,
+    npm_publish: false,
     version_group: None,
   }
 }
@@ -124,8 +130,9 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     git_release_name: parse_string(obj, "git_release_name", d.git_release_name),
     git_release_body: parse_optional_string(obj, "git_release_body", d.git_release_body),
     git_release_latest: parse_bool(obj, "git_release_latest", d.git_release_latest),
-    publish: parse_bool(obj, "publish", d.publish),
-    publish_frozen: parse_bool(obj, "publish_frozen", d.publish_frozen),
+    moon_publish: parse_bool(obj, "moon_publish", d.moon_publish),
+    moon_publish_frozen: parse_bool(obj, "moon_publish_frozen", d.moon_publish_frozen),
+    npm_publish: parse_bool(obj, "npm_publish", d.npm_publish),
     semver_check: parse_bool(obj, "semver_check", d.semver_check),
     pr_branch_prefix: parse_string(obj, "pr_branch_prefix", d.pr_branch_prefix),
     base_branch: parse_string(obj, "base_branch", d.base_branch),
@@ -145,7 +152,8 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
       "max_analyze_commits",
       d.max_analyze_commits,
     ),
-    publish_timeout: parse_uint(obj, "publish_timeout", d.publish_timeout),
+    moon_publish_timeout: parse_uint(obj, "moon_publish_timeout", d.moon_publish_timeout),
+    npm_publish_timeout: parse_uint(obj, "npm_publish_timeout", d.npm_publish_timeout),
   }
 }
 
@@ -162,13 +170,16 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
         let path = try parse_pkg_string(pkg_obj, "path", ".") catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }
-        let publish = try parse_pkg_bool(pkg_obj, "publish", true) catch {
+        let moon_publish = try parse_pkg_bool(pkg_obj, "moon_publish", true) catch {
+          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
+        } noraise { r => r }
+        let npm_publish = try parse_pkg_bool(pkg_obj, "npm_publish", false) catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }
         let version_group = try parse_pkg_optional_string(pkg_obj, "version_group", None) catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }
-        result.push(PackageConfig::{ name, path, publish, version_group })
+        result.push(PackageConfig::{ name, path, moon_publish, npm_publish, version_group })
       }
       _ => raise ConfigError("packages[" + i.to_string() + "]: must be an object, got " + arr[i].stringify())
     }

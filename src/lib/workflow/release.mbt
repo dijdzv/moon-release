@@ -1,3 +1,25 @@
+/// Validate publish configuration
+/// Ensures required files exist for enabled publish targets
+pub async fn validate_publish_config(config : @config.Config) -> Unit raise WorkflowError {
+  // Check moon.mod.json exists if moon_publish is enabled
+  if config.moon_publish {
+    let content = try @fs.read_file("moon.mod.json").text() catch {
+      _ => raise WorkflowError("moon_publish is enabled but moon.mod.json not found")
+    } noraise { c => c }
+    // Validate it's parseable
+    try @moon_mod.parse(content) catch {
+      e => raise WorkflowError("moon_publish is enabled but moon.mod.json is invalid: " + e.to_string())
+    } noraise { _ => () }
+  }
+
+  // Check package.json exists if npm_publish is enabled
+  if config.npm_publish {
+    try @fs.read_file("package.json").text() catch {
+      _ => raise WorkflowError("npm_publish is enabled but package.json not found")
+    } noraise { _ => () }
+  }
+}
+
 /// Get package name from moon.mod.json
 async fn get_package_name() -> String {
   // Try to read package name from moon.mod.json
@@ -12,6 +34,59 @@ async fn get_package_name() -> String {
   moon_mod.name
 }
 
+/// Update package.json version field using string replacement
+/// Returns the updated content, or None if file doesn't exist
+async fn update_package_json_version(
+  new_version : @semver.Version
+) -> String? raise WorkflowError {
+  // Try to read package.json
+  let content = try @fs.read_file("package.json").text() catch {
+    _ => return None  // File doesn't exist, that's OK
+  } noraise { c => c }
+
+  // Find and replace the version field using simple pattern matching
+  // Look for "version": "x.y.z" pattern
+  let lines = content.split("\n")
+  let updated_lines : Array[String] = []
+  let mut found = false
+
+  for line_view in lines {
+    let line = line_view.to_string()
+    let trimmed = line.trim_start()
+    if trimmed.has_prefix("\"version\"") && trimmed.contains(":") {
+      // This is the version line, replace the value
+      // Preserve indentation
+      let indent = get_line_indent(line)
+      updated_lines.push(indent + "\"version\": \"" + new_version.to_string() + "\",")
+      found = true
+    } else {
+      updated_lines.push(line)
+    }
+  }
+
+  if not(found) {
+    raise WorkflowError("package.json does not contain a 'version' field")
+  }
+
+  Some(updated_lines.iter().fold(init="", fn(acc, line) {
+    if acc.is_empty() { line } else { acc + "\n" + line }
+  }))
+}
+
+/// Get the leading whitespace of a line
+fn get_line_indent(line : String) -> String {
+  let chars = line.to_array()
+  let sb = StringBuilder::new()
+  for c in chars {
+    if c == ' ' || c == '\t' {
+      sb.write_char(c)
+    } else {
+      break
+    }
+  }
+  sb.to_string()
+}
+
 /// update command: local update only
 pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   if ctx.verbose {
@@ -23,6 +98,9 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
   if ctx.dry_run {
     println("[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}")
+    if ctx.config.npm_publish {
+      println("[dry-run] Would update package.json to version \{ctx.new_version.to_string()}")
+    }
     return
   }
 
@@ -40,6 +118,21 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   } noraise { _ => () }
 
   println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
+
+  // Update package.json if npm_publish is enabled
+  if ctx.config.npm_publish {
+    match update_package_json_version(ctx.new_version) {
+      Some(updated_pkg_json) => {
+        try @fs.write_file("package.json", updated_pkg_json, create=0o644) catch {
+          e => raise WorkflowError("Failed to write package.json: " + e.to_string())
+        } noraise { _ => () }
+        println("Updated package.json to version \{ctx.new_version.to_string()}")
+      }
+      None =>
+        // This shouldn't happen because validate_publish_config already checked
+        raise WorkflowError("npm_publish is enabled but package.json not found")
+    }
+  }
 }
 
 /// release-pr command: create or update PR
@@ -365,8 +458,11 @@ pub async fn run_release(
     if ctx.config.git_release_enable {
       println("[dry-run] Would create GitHub release: " + release_title)
     }
-    if ctx.config.publish {
+    if ctx.config.moon_publish {
       println("[dry-run] Would publish to mooncakes.io")
+    }
+    if ctx.config.npm_publish {
+      println("[dry-run] Would publish to npm")
     }
     return
   }
@@ -431,8 +527,13 @@ pub async fn run_release(
   }
 
   // Publish to mooncakes.io
-  if ctx.config.publish {
+  if ctx.config.moon_publish {
     run_publish(ctx)
+  }
+
+  // Publish to npm
+  if ctx.config.npm_publish {
+    run_npm_publish(ctx)
   }
 }
 
@@ -472,7 +573,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   // Build publish command
-  let publish_cmd : Array[String] = if ctx.config.publish_frozen {
+  let publish_cmd : Array[String] = if ctx.config.moon_publish_frozen {
     ["moon", "publish", "--frozen"]
   } else {
     ["moon", "publish"]
@@ -486,7 +587,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   // Use timeout from config (default 300 seconds = 5 minutes)
-  let timeout = ctx.config.publish_timeout
+  let timeout = ctx.config.moon_publish_timeout
   if ctx.verbose {
     println("  Timeout: \{timeout} seconds")
   }
@@ -514,6 +615,53 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   println("Published to mooncakes.io")
+}
+
+/// npm publish command: publish to npm registry
+pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
+  if ctx.verbose {
+    println("Publishing to npm...")
+  }
+
+  // Build npm publish command
+  let publish_cmd = ["npm", "publish"]
+
+  if ctx.dry_run {
+    println("[dry-run] Would run: " + publish_cmd.iter().fold(init="", fn(acc, s) {
+      if acc.is_empty() { s } else { acc + " " + s }
+    }))
+    return
+  }
+
+  // Use timeout from config (default 300 seconds = 5 minutes)
+  let timeout = ctx.config.npm_publish_timeout
+  if ctx.verbose {
+    println("  Timeout: \{timeout} seconds")
+  }
+
+  // Run npm publish with try-catch-noraise pattern
+  let publish_result = try @executor.run_command_with_timeout(publish_cmd, timeout) catch {
+    e => raise WorkflowError("Failed to publish to npm: " + e.to_string())
+  } noraise { r => r }
+
+  match publish_result {
+    None => {
+      // Timeout occurred
+      println("Warning: npm publish timed out after \{timeout} seconds")
+      println("The publish process may still be running in the background.")
+      println("You can manually publish with: npm publish")
+      return
+    }
+    Some(result) =>
+      if not(result.is_success()) {
+        // publish failed - treat as warning since tag is already created
+        println("Warning: Failed to publish to npm: " + result.stderr)
+        println("You can manually publish with: npm publish")
+        return
+      }
+  }
+
+  println("Published to npm")
 }
 
 /// Package update info
@@ -1018,9 +1166,9 @@ pub async fn run_publish_packages(
   }
 
   for pkg in config.packages {
-    if not(pkg.publish) {
+    if not(pkg.moon_publish) {
       if verbose {
-        println("  Skipping " + pkg.name + " (publish: false)")
+        println("  Skipping " + pkg.name + " (moon_publish: false)")
       }
       continue
     }
