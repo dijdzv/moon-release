@@ -81,7 +81,7 @@ pub fn Repository::get_commits_command(
     "-C",
     self.path,
     "log",
-    "--pretty=format:%H|%s|%an|%aI",
+    "--pretty=format:%H%x1E%s%x1E%an%x1E%aI",
     from + ".." + to,
   ]
 }
@@ -96,14 +96,14 @@ pub fn Repository::get_commits_since_tag_command(
     "-C",
     self.path,
     "log",
-    "--pretty=format:%H|%s|%an|%aI",
+    "--pretty=format:%H%x1E%s%x1E%an%x1E%aI",
     tag + "..HEAD",
   ]
 }
 
 /// Get command to retrieve all commits (when no tags exist)
 pub fn Repository::get_all_commits_command(self : Repository) -> Array[String] {
-  ["git", "-C", self.path, "log", "--pretty=format:%H|%s|%an|%aI"]
+  ["git", "-C", self.path, "log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI"]
 }
 
 /// Get command to create a tag
@@ -112,7 +112,7 @@ pub fn Repository::create_tag_command(
   tag_name : String,
   message : String
 ) -> Array[String] {
-  ["git", "-C", self.path, "tag", "-a", tag_name, "-m", message]
+  ["git", "-C", self.path, "tag", "-a", "-m", message, "--", tag_name]
 }
 
 /// Get command to create a commit
@@ -148,8 +148,8 @@ pub fn Repository::push_command(
 }
 
 /// Parse commit log output
-/// Format: hash|subject|author|date (where subject may contain |)
-/// We parse from both ends: hash is always 40 chars, author and date are at the end
+/// Format: hash\x1Esubject\x1Eauthor\x1Edate (using Record Separator U+001E)
+/// Subject may contain any printable character safely since \x1E is a control character
 pub fn parse_commit_log(output : String) -> Array[GitCommit] {
   let commits : Array[GitCommit] = []
   let lines : Array[String] = output
@@ -163,14 +163,9 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
       continue
     }
 
-    // format: hash|subject|author|date
-    // Subject may contain | so we parse carefully:
-    // - hash is always first (40 chars for full SHA)
-    // - author is second-to-last
-    // - date is last
-    // - everything in between is the subject
+    // Split by Record Separator (U+001E)
     let parts : Array[String] = line
-      .split("|")
+      .split("\u001e")
       .map(fn(sv) { sv.to_string() })
       .collect()
 
@@ -178,13 +173,13 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
       let hash = parts[0]
       let date = parts[parts.length() - 1]
       let author = parts[parts.length() - 2]
-      // Join middle parts back together to reconstruct subject with |
+      // Join middle parts back together (should be just one part with \x1E separator)
       let message_parts : Array[String] = []
       for j = 1; j < parts.length() - 2; j = j + 1 {
         message_parts.push(parts[j])
       }
       let message = message_parts.iter().fold(init="", fn(acc, s) {
-        if acc.is_empty() { s } else { acc + "|" + s }
+        if acc.is_empty() { s } else { acc + "\u001e" + s }
       })
       let commit = GitCommit::{ hash, message, author, date }
       commits.push(commit)

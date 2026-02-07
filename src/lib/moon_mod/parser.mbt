@@ -90,12 +90,13 @@ fn replace_json_field(
     }
   }
 
-  // Find and replace "version": "..." pattern
+  // Find and replace "field": "..." pattern
+  // Must find the field as a JSON key (followed by ':'), not inside a string value
   let pattern = "\"" + field + "\""
   let chars : Array[Char] = content.to_array()
 
-  // Find field name
-  let field_start = find_pattern(content, pattern)
+  // Find field name as a JSON key (not inside a string value)
+  let field_start = find_json_key(content, pattern)
   if field_start < 0 {
     raise ParseError("Field '" + field + "' not found")
   }
@@ -141,8 +142,9 @@ fn replace_json_field(
   before + "\"" + new_value + "\"" + after
 }
 
-/// Find pattern position
-fn find_pattern(haystack : String, needle : String) -> Int {
+/// Find JSON key position (skips occurrences inside string values)
+/// Returns the char index of the key pattern, only if followed by ':'
+fn find_json_key(haystack : String, needle : String) -> Int {
   let h_chars : Array[Char] = haystack.to_array()
   let n_chars : Array[Char] = needle.to_array()
 
@@ -150,17 +152,51 @@ fn find_pattern(haystack : String, needle : String) -> Int {
     return -1
   }
 
-  for i = 0; i <= h_chars.length() - n_chars.length(); i = i + 1 {
-    let mut matched = true
-    for j = 0; j < n_chars.length(); j = j + 1 {
-      if h_chars[i + j] != n_chars[j] {
-        matched = false
-        break
+  let mut in_string = false
+  let mut i = 0
+  while i <= h_chars.length() - n_chars.length() {
+    let c = h_chars[i]
+    if c == '\\' && in_string && i + 1 < h_chars.length() {
+      // Skip escaped character inside string
+      i = i + 2
+      continue
+    }
+    if c == '"' {
+      if in_string {
+        // Closing quote - we were inside a string value
+        in_string = false
+        i = i + 1
+        continue
       }
+      // Opening quote - check if this matches the needle pattern
+      let mut matched = true
+      for j = 0; j < n_chars.length(); j = j + 1 {
+        if i + j >= h_chars.length() || h_chars[i + j] != n_chars[j] {
+          matched = false
+          break
+        }
+      }
+      if matched {
+        // Check if followed by ':' (with optional whitespace)
+        let mut k = i + n_chars.length()
+        while k < h_chars.length() && (h_chars[k] == ' ' || h_chars[k] == '\t') {
+          k = k + 1
+        }
+        if k < h_chars.length() && h_chars[k] == ':' {
+          return i
+        }
+        // Not a key - it's a string value, skip past the closing quote
+        // Move past the opening quote and into the string
+        i = i + 1
+        in_string = true
+      } else {
+        // Opening quote of some other string
+        i = i + 1
+        in_string = true
+      }
+      continue
     }
-    if matched {
-      return i
-    }
+    i = i + 1
   }
   -1
 }

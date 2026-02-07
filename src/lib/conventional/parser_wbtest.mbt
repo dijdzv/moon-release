@@ -155,3 +155,36 @@ test "parse invalid - no description" {
   let result = parse(msg)
   assert_eq(result, None)
 }
+
+// M-5: Empty type string should return None
+test "parse invalid - empty type" {
+  let msg = ": some description"
+  let result = parse(msg)
+  assert_eq(result, None)
+}
+
+// H-3: Multibyte character support
+test "parse commit with multibyte description" {
+  let msg = "feat: 日本語の説明"
+  let result = parse(msg)
+  match result {
+    Some(commit) => {
+      assert_eq(commit.typ, Feat)
+      assert_eq(commit.description, "日本語の説明")
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "parse commit with multibyte scope" {
+  let msg = "feat(コア): add feature"
+  let result = parse(msg)
+  match result {
+    Some(commit) => {
+      assert_eq(commit.typ, Feat)
+      assert_eq(commit.scope, Some("コア"))
+      assert_eq(commit.description, "add feature")
+    }
+    None => fail("Expected Some, got None")
+  }
+}

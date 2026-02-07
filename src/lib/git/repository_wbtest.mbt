@@ -1,6 +1,6 @@
 test "parse commit log" {
   let output =
-    "abc123|feat: add feature|John Doe|2024-01-15T10:00:00Z\ndef456|fix: correct bug|Jane Doe|2024-01-14T09:00:00Z"
+    "abc123\u001efeat: add feature\u001eJohn Doe\u001e2024-01-15T10:00:00Z\ndef456\u001efix: correct bug\u001eJane Doe\u001e2024-01-14T09:00:00Z"
   let commits = parse_commit_log(output)
   assert_eq(commits.length(), 2)
   assert_eq(commits[0].hash, "abc123")
@@ -17,8 +17,8 @@ test "parse commit log empty" {
 }
 
 test "parse commit log with pipe in message" {
-  // Subject contains | character which should be preserved
-  let output = "abc123|feat: handle foo | bar | baz|John Doe|2024-01-15T10:00:00Z"
+  // Subject contains | character which should be preserved (using \x1E as separator)
+  let output = "abc123\u001efeat: handle foo | bar | baz\u001eJohn Doe\u001e2024-01-15T10:00:00Z"
   let commits = parse_commit_log(output)
   assert_eq(commits.length(), 1)
   assert_eq(commits[0].hash, "abc123")
@@ -29,7 +29,7 @@ test "parse commit log with pipe in message" {
 
 test "parse conventional commits" {
   let output =
-    "abc123|feat: add feature|John Doe|2024-01-15\ndef456|fix: correct bug|Jane Doe|2024-01-14\nghi789|not conventional|Bob|2024-01-13"
+    "abc123\u001efeat: add feature\u001eJohn Doe\u001e2024-01-15\ndef456\u001efix: correct bug\u001eJane Doe\u001e2024-01-14\nghi789\u001enot conventional\u001eBob\u001e2024-01-13"
   let git_commits = parse_commit_log(output)
   let conventional = parse_conventional_commits(git_commits)
   // Only 2 are conventional (feat, fix)

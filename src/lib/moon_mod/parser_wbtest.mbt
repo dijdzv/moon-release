@@ -87,3 +87,23 @@ test "update version" {
     None => fail("Failed to parse version")
   }
 }
+
+// H-1: "version" appearing inside a string value should not be matched as key
+test "update version - version in value string" {
+  let content =
+    #|{
+    #|  "name": "my-version-checker",
+    #|  "version": "1.0.0",
+    #|  "description": "checks version compatibility"
+    #|}
+  let new_version = @semver.Version::parse("2.0.0")
+  match new_version {
+    Some(v) => {
+      let result = try { update_version(content, v) } catch { _ => fail("Unexpected error") }
+      // The key "version" should be updated, not the "version" in "my-version-checker"
+      assert_true(result.contains("\"2.0.0\""))
+      assert_true(result.contains("\"my-version-checker\""))
+    }
+    None => fail("Failed to parse version")
+  }
+}

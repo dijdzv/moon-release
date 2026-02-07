@@ -55,3 +55,42 @@ test "PathValidation error_message - AbsolutePath has message" {
     None => fail("expected error message")
   }
 }
+
+// H-2: False positive tests - ".." inside names should NOT be detected as traversal
+test "is_safe_path - double dots in filename is valid" {
+  assert_true(is_safe_path("packages/foo..bar"))
+}
+
+test "is_safe_path - double dots in directory name is valid" {
+  assert_true(is_safe_path("my..project/src"))
+}
+
+test "is_safe_path - actual traversal is still detected" {
+  assert_false(is_safe_path("packages/../../etc"))
+}
+
+test "is_safe_path - traversal at start" {
+  assert_false(is_safe_path("../secret"))
+}
+
+test "is_safe_path - traversal at end" {
+  assert_false(is_safe_path("packages/.."))
+}
+
+// L-4: Windows path tests
+test "is_absolute_path - Windows drive letter" {
+  assert_true(is_absolute_path("C:\\Users\\test"))
+  assert_true(is_absolute_path("D:/projects"))
+}
+
+test "is_absolute_path - Windows UNC path" {
+  assert_true(is_absolute_path("\\\\server\\share"))
+}
+
+test "is_safe_path - Windows absolute path is rejected" {
+  assert_false(is_safe_path("C:\\Users\\test"))
+}
+
+test "is_safe_path - Windows backslash traversal" {
+  assert_false(is_safe_path("packages\\..\\secrets"))
+}

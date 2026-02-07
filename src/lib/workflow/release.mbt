@@ -194,7 +194,9 @@ async fn update_package_json_version(
 
     for i = 0; i < chars.length(); i = i + 1 {
       let c = chars[i]
-      if c == '"' && (i == 0 || chars[i - 1] != '\\') {
+      // Count consecutive backslashes before this character
+      // An even number means the quote is NOT escaped
+      if c == '"' && ({ let mut bs = 0; let mut k = i - 1; while k >= 0 && chars[k] == '\\' { bs = bs + 1; k = k - 1 }; bs % 2 == 0 }) {
         if not(in_string) {
           // Opening quote - check if this is "version" key at depth 1
           if depth == 1 && i + 8 < chars.length() &&
@@ -840,6 +842,9 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
 }
 
 /// Get the npm build command (from config or default)
+/// Note: Simple space-based splitting is used. Commands with quoted arguments
+/// containing spaces (e.g., 'echo "hello world"') are not supported.
+/// Use a wrapper script for complex commands.
 pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
   match config.npm_build_command {
     Some(cmd) => cmd.split(" ").map(fn(s) { s.to_string() }).collect()
@@ -1393,9 +1398,9 @@ async fn get_package_commits(
 
   let log_cmd = if tag_result.is_success() {
     let tag = tag_result.stdout_trimmed()
-    ["log", "--pretty=format:%H|%s|%an|%aI", tag + "..HEAD", "--", path]
+    ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", tag + "..HEAD", "--", path]
   } else {
-    ["log", "--pretty=format:%H|%s|%an|%aI", "--", path]
+    ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", "--", path]
   }
 
   // Get log with try-catch-noraise pattern

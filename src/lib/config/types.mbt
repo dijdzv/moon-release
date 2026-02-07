@@ -23,8 +23,8 @@ pub struct Config {
   packages : Array[PackageConfig]
   registry_check : Bool
   allow_dirty : Bool
-  custom_major_increment_regex : String?
-  custom_minor_increment_regex : String?
+  custom_major_increment_regex : String?  // Substring match (not regex). Matches if commit description contains this string.
+  custom_minor_increment_regex : String?  // Substring match (not regex). Matches if commit description contains this string.
   max_analyze_commits : UInt?
   moon_publish_timeout : UInt  // In seconds
   npm_publish_timeout : UInt   // In seconds
@@ -325,7 +325,7 @@ fn parse_optional_uint(
 ) -> UInt? raise ConfigError {
   match obj.get(key) {
     Some(Number(n, ..)) =>
-      if n >= 0.0 && n <= uint_max_as_double && n == n.to_int().to_double() {
+      if n >= 0.0 && n <= uint_max_as_double && n % 1.0 == 0.0 {
         Some(n.to_uint())
       } else if n > uint_max_as_double {
         raise ConfigError("'" + key + "' value is too large (max: 4294967295)")
@@ -346,7 +346,7 @@ fn parse_uint(
 ) -> UInt raise ConfigError {
   match obj.get(key) {
     Some(Number(n, ..)) =>
-      if n >= 0.0 && n <= uint_max_as_double && n == n.to_int().to_double() {
+      if n >= 0.0 && n <= uint_max_as_double && n % 1.0 == 0.0 {
         n.to_uint()
       } else if n > uint_max_as_double {
         raise ConfigError("'" + key + "' value is too large (max: 4294967295)")

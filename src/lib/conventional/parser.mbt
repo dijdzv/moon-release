@@ -85,6 +85,9 @@ fn parse_header(header : String) -> (CommitType, String?, Bool, String)? {
 
 /// Convert type string to CommitType
 fn parse_type(s : String) -> CommitType? {
+  if s.is_empty() {
+    return None
+  }
   match s {
     "feat" => Some(Feat)
     "fix" => Some(Fix)
@@ -101,30 +104,38 @@ fn parse_type(s : String) -> CommitType? {
   }
 }
 
-/// Get substring (safe version)
+/// Get substring (safe version, char-index based)
 fn substr(s : String, start : Int, end : Int) -> String {
-  if start < 0 || end > s.length() || start > end {
+  let chars : Array[Char] = s.to_array()
+  let len = chars.length()
+  if start < 0 || end > len || start > end {
     return ""
   }
-  let chars : Array[Char] = s.to_array()
   let result = StringBuilder::new()
   for i = start; i < end; i = i + 1 {
-    if i < chars.length() {
-      result.write_char(chars[i])
-    }
+    result.write_char(chars[i])
   }
   result.to_string()
 }
 
-/// Find position of substring
+/// Find position of substring (char-index based)
 fn find_substring(haystack : String, needle : String) -> Int? {
-  let haystack_len = haystack.length()
-  let needle_len = needle.length()
-  if needle_len > haystack_len {
+  let h_chars : Array[Char] = haystack.to_array()
+  let n_chars : Array[Char] = needle.to_array()
+  let h_len = h_chars.length()
+  let n_len = n_chars.length()
+  if n_len > h_len {
     return None
   }
-  for i = 0; i <= haystack_len - needle_len; i = i + 1 {
-    if substr(haystack, i, i + needle_len) == needle {
+  for i = 0; i <= h_len - n_len; i = i + 1 {
+    let mut matched = true
+    for j = 0; j < n_len; j = j + 1 {
+      if h_chars[i + j] != n_chars[j] {
+        matched = false
+        break
+      }
+    }
+    if matched {
       return Some(i)
     }
   }
