@@ -260,6 +260,7 @@ fn diff_traits(
           new_trait.name,
           "trait",
           changes,
+          is_trait=true,
         )
       }
       None => ()
@@ -329,12 +330,15 @@ fn diff_values(
 }
 
 /// Detect method differences
+/// When is_trait is true, adding a method is a breaking change
+/// (all implementors must provide the new method)
 fn diff_methods(
   old_methods : Array[MethodInfo],
   new_methods : Array[MethodInfo],
   parent_name : String,
   parent_category : String,
-  changes : Array[ApiChange]
+  changes : Array[ApiChange],
+  is_trait~ : Bool = false
 ) -> Unit {
   let old_map : @hashmap.HashMap[String, MethodInfo] = @hashmap.new()
   for m in old_methods {
@@ -361,14 +365,15 @@ fn diff_methods(
   }
 
   // Added methods
+  // For traits, adding a method is breaking (existing implementors must update)
   for m in new_methods {
     if old_map.get(m.name) is None {
       changes.push(
         ApiChange::{
-          kind: Addition,
+          kind: if is_trait { Breaking } else { Addition },
           category: parent_category,
           name: parent_name + "::" + m.name,
-          description: "Method added",
+          description: if is_trait { "Trait method added (breaking: implementors must update)" } else { "Method added" },
         },
       )
     }

@@ -233,6 +233,71 @@ test "detect added method as addition" {
   assert_eq(diff.changes[0].name, "Foo::new_method")
 }
 
+test "detect added trait method as breaking" {
+  let old_api = PackageApi::{
+    name: "test",
+    types: [],
+    errors: [],
+    traits: [
+      TraitInfo::{
+        name: "MyTrait",
+        signature: "pub trait MyTrait {}",
+        methods: [MethodInfo::{ name: "existing", signature: "fn existing() -> Int" }],
+      },
+    ],
+    values: [],
+  }
+  let new_api = PackageApi::{
+    name: "test",
+    types: [],
+    errors: [],
+    traits: [
+      TraitInfo::{
+        name: "MyTrait",
+        signature: "pub trait MyTrait {}",
+        methods: [
+          MethodInfo::{ name: "existing", signature: "fn existing() -> Int" },
+          MethodInfo::{ name: "new_method", signature: "fn new_method() -> String" },
+        ],
+      },
+    ],
+    values: [],
+  }
+
+  let diff = diff_api(old_api, new_api)
+  assert_true(diff.has_breaking)
+  assert_eq(diff.changes[0].kind, Breaking)
+  assert_eq(diff.changes[0].name, "MyTrait::new_method")
+}
+
+test "detect added type method as addition (not breaking)" {
+  let old_api = PackageApi::{
+    name: "test",
+    types: [TypeInfo::{ name: "Foo", signature: "pub struct Foo {}", methods: [] }],
+    errors: [],
+    traits: [],
+    values: [],
+  }
+  let new_api = PackageApi::{
+    name: "test",
+    types: [
+      TypeInfo::{
+        name: "Foo",
+        signature: "pub struct Foo {}",
+        methods: [MethodInfo::{ name: "new_method", signature: "fn Foo::new_method() -> Int" }],
+      },
+    ],
+    errors: [],
+    traits: [],
+    values: [],
+  }
+
+  let diff = diff_api(old_api, new_api)
+  assert_true(diff.has_additions)
+  assert_false(diff.has_breaking)
+  assert_eq(diff.changes[0].kind, Addition)
+}
+
 test "detect method signature change as breaking" {
   let old_api = PackageApi::{
     name: "test",

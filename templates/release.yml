@@ -34,6 +34,7 @@ jobs:
   # Create or update release PR on every push to main
   release-pr:
     runs-on: ubuntu-latest
+    if: "!(startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v'))"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,9 +86,14 @@ jobs:
       # Remove this step if "publish": false in release.json
       - name: Configure mooncakes credentials
         if: ${{ secrets.MOONCAKES_TOKEN != '' }}
+        env:
+          MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
+          MOONCAKES_USERNAME: ${{ secrets.MOONCAKES_USERNAME }}
         run: |
           mkdir -p ~/.moon
-          echo '{"token": "${{ secrets.MOONCAKES_TOKEN }}", "username": "${{ secrets.MOONCAKES_USERNAME }}"}' > ~/.moon/credentials.json
+          jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
+            '{"token": $token, "username": $username}' > ~/.moon/credentials.json
+          chmod 600 ~/.moon/credentials.json
 
       - name: Download moon-release
         run: |

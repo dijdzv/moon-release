@@ -52,14 +52,13 @@ runs:
     - name: Setup mooncakes.io credentials
       if: inputs.mooncakes-token != '' && inputs.mooncakes-username != ''
       shell: bash
+      env:
+        MOONCAKES_TOKEN: ${{ inputs.mooncakes-token }}
+        MOONCAKES_USERNAME: ${{ inputs.mooncakes-username }}
       run: |
         mkdir -p ~/.moon
-        cat > ~/.moon/credentials.json << EOF
-        {
-          "token": "${{ inputs.mooncakes-token }}",
-          "username": "${{ inputs.mooncakes-username }}"
-        }
-        EOF
+        jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
+          '{"token": $token, "username": $username}' > ~/.moon/credentials.json
         chmod 600 ~/.moon/credentials.json
 
     - name: Build moon-release
@@ -83,8 +82,20 @@ runs:
           VERBOSE_FLAG="--verbose"
         fi
 
-        ${{ github.action_path }}/target/native/release/build/src/main/main.exe \
+        OUTPUT=$(${{ github.action_path }}/target/native/release/build/src/main/main.exe \
           ${{ inputs.command }} \
           --config "${{ inputs.config-file }}" \
           $DRY_RUN_FLAG \
-          $VERBOSE_FLAG
+          $VERBOSE_FLAG 2>&1) || true
+        echo "$OUTPUT"
+
+        # Capture outputs for downstream steps
+        VERSION=$(echo "$OUTPUT" | grep -oP 'version \K[0-9]+\.[0-9]+\.[0-9]+[^ ]*' | tail -1 || true)
+        TAG=$(echo "$OUTPUT" | grep -oP 'tag: \K\S+' | tail -1 || true)
+        PR_URL=$(echo "$OUTPUT" | grep -oP 'https://github\.com/\S+/pull/\d+' | tail -1 || true)
+
+        {
+          echo "version=${VERSION}"
+          echo "tag=${TAG}"
+          echo "pr-url=${PR_URL}"
+        } >> "$GITHUB_OUTPUT"
