@@ -63,7 +63,7 @@ fn split_at_char(s : String, c : Char) -> (String, String?) {
     if chars[i] == c {
       let before = substr_chars(chars, 0, i)
       let after = substr_chars(chars, i + 1, chars.length())
-      return (before, if after.is_empty() { None } else { Some(after) })
+      return (before, Some(after))
     }
   }
   (s, None)
@@ -80,7 +80,7 @@ fn split_prerelease(s : String) -> (String, String?) {
       // - after 2nd . is the prerelease separator
       let before = substr_chars(chars, 0, i)
       let after = substr_chars(chars, i + 1, chars.length())
-      return (before, if after.is_empty() { None } else { Some(after) })
+      return (before, Some(after))
     }
   }
   (s, None)

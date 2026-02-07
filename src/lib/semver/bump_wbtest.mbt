@@ -84,12 +84,16 @@ test "bump_with_prerelease alpha" {
     prerelease: None,
     build_metadata: None,
   }
-  let result = bump_with_prerelease(v, Minor, Some("alpha"))
-  assert_eq(result.major, 1)
-  assert_eq(result.minor, 3)
-  assert_eq(result.patch, 0)
-  assert_eq(result.prerelease, Some("alpha"))
-  assert_eq(result.build_metadata, None)
+  match bump_with_prerelease(v, Minor, Some("alpha")) {
+    Some(result) => {
+      assert_eq(result.major, 1)
+      assert_eq(result.minor, 3)
+      assert_eq(result.patch, 0)
+      assert_eq(result.prerelease, Some("alpha"))
+      assert_eq(result.build_metadata, None)
+    }
+    None => fail("Expected Some, got None")
+  }
 }
 
 test "bump_with_prerelease rc.1" {
@@ -100,11 +104,15 @@ test "bump_with_prerelease rc.1" {
     prerelease: None,
     build_metadata: None,
   }
-  let result = bump_with_prerelease(v, Major, Some("rc.1"))
-  assert_eq(result.major, 3)
-  assert_eq(result.minor, 0)
-  assert_eq(result.patch, 0)
-  assert_eq(result.prerelease, Some("rc.1"))
+  match bump_with_prerelease(v, Major, Some("rc.1")) {
+    Some(result) => {
+      assert_eq(result.major, 3)
+      assert_eq(result.minor, 0)
+      assert_eq(result.patch, 0)
+      assert_eq(result.prerelease, Some("rc.1"))
+    }
+    None => fail("Expected Some, got None")
+  }
 }
 
 test "bump_with_prerelease None clears prerelease" {
@@ -115,10 +123,14 @@ test "bump_with_prerelease None clears prerelease" {
     prerelease: Some("beta"),
     build_metadata: Some("build.123"),
   }
-  let result = bump_with_prerelease(v, Patch, None)
-  assert_eq(result.patch, 1)
-  assert_eq(result.prerelease, None)
-  assert_eq(result.build_metadata, None)
+  match bump_with_prerelease(v, Patch, None) {
+    Some(result) => {
+      assert_eq(result.patch, 1)
+      assert_eq(result.prerelease, None)
+      assert_eq(result.build_metadata, None)
+    }
+    None => fail("Expected Some, got None")
+  }
 }
 
 // determine_bump_with_custom tests
@@ -195,4 +207,20 @@ test "determine_bump_with_custom - no match returns None" {
     }
     None => fail("parse failed")
   }
+}
+
+test "bump_with_prerelease rejects invalid prerelease" {
+  let v = Version::{
+    major: 1,
+    minor: 0,
+    patch: 0,
+    prerelease: None,
+    build_metadata: None,
+  }
+  // Underscore is not allowed in prerelease identifiers
+  assert_true(bump_with_prerelease(v, Minor, Some("alpha_1")) is None)
+  // Empty prerelease is not allowed
+  assert_true(bump_with_prerelease(v, Minor, Some("")) is None)
+  // Leading zeros in numeric identifiers are not allowed
+  assert_true(bump_with_prerelease(v, Minor, Some("01")) is None)
 }

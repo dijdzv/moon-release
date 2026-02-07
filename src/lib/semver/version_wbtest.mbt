@@ -287,3 +287,15 @@ test "parse version - valid zeros" {
     None => fail("Should parse 0.0.0")
   }
 }
+
+test "parse rejects empty prerelease" {
+  assert_true(Version::parse("1.2.3-") is None)
+}
+
+test "parse rejects empty build metadata" {
+  assert_true(Version::parse("1.2.3+") is None)
+}
+
+test "parse rejects empty prerelease with build metadata" {
+  assert_true(Version::parse("1.2.3-+build") is None)
+}

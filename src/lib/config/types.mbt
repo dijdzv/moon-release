@@ -23,6 +23,8 @@ pub struct Config {
   packages : Array[PackageConfig]
   registry_check : Bool
   allow_dirty : Bool
+  // NOTE: Despite the name "regex", these fields use substring matching, not regular expressions.
+  // The name is kept for backward compatibility with existing config files.
   custom_major_increment_regex : String?  // Substring match (not regex). Matches if commit description contains this string.
   custom_minor_increment_regex : String?  // Substring match (not regex). Matches if commit description contains this string.
   max_analyze_commits : UInt?
@@ -116,6 +118,32 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     _ => raise ConfigError("Config file must contain a JSON object at the root level")
   }
 
+  // Check for unknown keys and warn
+  let known_keys : Array[String] = [
+    "pr_title", "pr_draft", "pr_labels", "pr_body",
+    "allow_prerelease", "git_tag_enable", "git_tag_name",
+    "git_release_enable", "git_release_draft", "git_release_name",
+    "git_release_body", "git_release_latest",
+    "moon_publish", "moon_publish_frozen",
+    "npm_publish", "npm_build_command", "npm_publish_provenance",
+    "semver_check", "pr_branch_prefix", "base_branch",
+    "packages", "registry_check", "allow_dirty",
+    "custom_major_increment_regex", "custom_minor_increment_regex",
+    "max_analyze_commits", "moon_publish_timeout", "npm_publish_timeout",
+  ]
+  for key, _ in obj {
+    let mut found = false
+    for i = 0; i < known_keys.length(); i = i + 1 {
+      if known_keys[i] == key {
+        found = true
+        break
+      }
+    }
+    if not(found) {
+      println("Warning: unknown config key '\{key}' in release.json")
+    }
+  }
+
   // packages needs special handling
   let packages = match obj.get("packages") {
     Some(Array(arr)) => parse_packages(arr)
@@ -139,7 +167,10 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     moon_publish: parse_bool(obj, "moon_publish", d.moon_publish),
     moon_publish_frozen: parse_bool(obj, "moon_publish_frozen", d.moon_publish_frozen),
     npm_publish: parse_bool(obj, "npm_publish", d.npm_publish),
-    npm_build_command: parse_optional_string(obj, "npm_build_command", d.npm_build_command),
+    npm_build_command: validate_optional_command(
+      parse_optional_string(obj, "npm_build_command", d.npm_build_command),
+      "npm_build_command",
+    ),
     npm_publish_provenance: parse_bool(obj, "npm_publish_provenance", d.npm_publish_provenance),
     semver_check: parse_bool(obj, "semver_check", d.semver_check),
     pr_branch_prefix: parse_string(obj, "pr_branch_prefix", d.pr_branch_prefix),
@@ -184,7 +215,10 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
         let npm_publish = try parse_pkg_bool(pkg_obj, "npm_publish", false) catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }
-        let npm_build_command = try parse_pkg_optional_string(pkg_obj, "npm_build_command", None) catch {
+        let npm_build_command_raw = try parse_pkg_optional_string(pkg_obj, "npm_build_command", None) catch {
+          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
+        } noraise { r => r }
+        let npm_build_command = try validate_optional_command(npm_build_command_raw, "npm_build_command") catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }
         let version_group = try parse_pkg_optional_string(pkg_obj, "version_group", None) catch {
@@ -201,6 +235,39 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
 // ============================================================================
 // JSON parse helper functions
 // ============================================================================
+
+/// Validate that a command string does not contain shell control characters
+/// that could be used for command injection.
+/// Returns true if the command is safe, false if it contains dangerous characters.
+fn validate_command(cmd : String) -> Bool {
+  let chars = cmd.to_array()
+  for i = 0; i < chars.length(); i = i + 1 {
+    let c = chars[i]
+    if c == ';' || c == '|' || c == '&' || c == '`' || c == '$' || c == '\n' || c == '\r' || c == '\u0000' {
+      return false
+    }
+  }
+  true
+}
+
+/// Validate an optional command string, raising ConfigError if it contains
+/// shell control characters.
+fn validate_optional_command(
+  cmd : String?,
+  field_name : String
+) -> String? raise ConfigError {
+  match cmd {
+    Some(c) =>
+      if validate_command(c) {
+        Some(c)
+      } else {
+        raise ConfigError(
+          "'\{field_name}' contains shell control characters (;|&`$) which are not allowed",
+        )
+      }
+    None => None
+  }
+}
 
 /// Validate custom pattern (used for increment patterns)
 /// Note: These patterns use substring matching (contains), not regex

@@ -20,16 +20,16 @@ permissions:
 
 jobs:
   release-pr:
-    if: github.event.inputs.build-only != 'true'
+    if: github.event.inputs.build-only != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !(startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v'))))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+        uses: hustcer/setup-moonbit@530086df82b240bec92955d3562f43a2783f21af # v1
 
       - name: Build moon-release
         run: |
@@ -44,9 +44,10 @@ jobs:
       - name: Run moon-release (release-pr)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry-run }}
         run: |
           DRY_RUN_FLAG=""
-          if [ "${{ github.event.inputs.dry-run }}" = "true" ]; then
+          if [ "$DRY_RUN" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
           ./target/native/release/build/src/main/main.exe release-pr $DRY_RUN_FLAG --verbose
@@ -71,12 +72,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+        uses: hustcer/setup-moonbit@530086df82b240bec92955d3562f43a2783f21af # v1
 
       - name: Fetch dependencies
         run: moon update
@@ -124,7 +125,7 @@ jobs:
           copy .\target\native\release\build\src\main\main.exe .\${{ matrix.artifact }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
@@ -135,12 +136,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+        uses: hustcer/setup-moonbit@530086df82b240bec92955d3562f43a2783f21af # v1
 
       - name: Build moon-release
         run: |
@@ -148,7 +149,7 @@ jobs:
           moon build --target native
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
 
@@ -161,7 +162,11 @@ jobs:
       - name: Get version from moon.mod.json
         id: version
         run: |
-          VERSION=$(grep '"version"' moon.mod.json | sed 's/.*: *"\([^"]*\)".*/\1/')
+          VERSION=$(jq -r '.version' moon.mod.json)
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "ERROR: version not found in moon.mod.json"
+            exit 1
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create release with binaries
@@ -171,5 +176,9 @@ jobs:
           # Run moon-release to create tag and release
           ./target/native/release/build/src/main/main.exe release --verbose
 
-          # Upload binaries to the release
-          gh release upload "v${{ steps.version.outputs.version }}" release-assets/* --clobber
+      - name: Upload binaries to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release upload "v${VERSION}" release-assets/* --clobber

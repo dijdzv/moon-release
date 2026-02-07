@@ -466,3 +466,100 @@ test "PackageConfig::default - npm options" {
   assert_eq(pkg.npm_publish, false)
   assert_eq(pkg.npm_build_command, None)
 }
+
+// M-12: npm_build_command shell injection validation tests
+
+test "parse config with npm_build_command - rejects semicolon" {
+  let content =
+    #|{
+    #|  "npm_build_command": "npm run build; rm -rf /"
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for shell injection")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("shell control characters"))
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse config with npm_build_command - rejects pipe" {
+  let content =
+    #|{
+    #|  "npm_build_command": "npm run build | cat /etc/passwd"
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for shell injection")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("shell control characters"))
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse config with npm_build_command - rejects ampersand" {
+  let content =
+    #|{
+    #|  "npm_build_command": "npm run build && malicious"
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for shell injection")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("shell control characters"))
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse config with npm_build_command - rejects backtick" {
+  let content =
+    #|{
+    #|  "npm_build_command": "npm run `whoami`"
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for shell injection")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("shell control characters"))
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse config with npm_build_command - rejects dollar sign" {
+  let content =
+    #|{
+    #|  "npm_build_command": "npm run $HOME"
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for shell injection")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("shell control characters"))
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse config with npm_build_command - allows safe command" {
+  let content =
+    #|{
+    #|  "npm_build_command": "moon build --target js --output-dir dist"
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.npm_build_command, Some("moon build --target js --output-dir dist"))
+}
+
+test "parse config with packages - npm_build_command rejects injection" {
+  let content =
+    #|{
+    #|  "packages": [
+    #|    {"name": "pkg1", "npm_build_command": "npm run build; evil"}
+    #|  ]
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error for shell injection in package")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("shell control characters"))
+    _ => fail("Wrong error type")
+  }
+}

@@ -94,3 +94,19 @@ test "is_safe_path - Windows absolute path is rejected" {
 test "is_safe_path - Windows backslash traversal" {
   assert_false(is_safe_path("packages\\..\\secrets"))
 }
+
+// M-19: NUL byte should return NullByte variant, not DirectoryTraversal
+test "validate_path_full - NUL byte returns NullByte" {
+  assert_eq(validate_path_full("path\u0000evil"), NullByte)
+}
+
+test "PathValidation error_message - NullByte has message" {
+  match NullByte.error_message() {
+    Some(msg) => assert_true(msg.contains("NUL byte"))
+    None => fail("expected error message")
+  }
+}
+
+test "is_safe_path - NUL byte is rejected" {
+  assert_false(is_safe_path("path\u0000evil"))
+}

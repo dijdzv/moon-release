@@ -30,8 +30,37 @@ pub suberror GitHubError {
   GitHubError(String)
 }
 
-/// Create client
-pub fn GitHubClient::new(owner : String, repo : String) -> GitHubClient {
+/// Validate a GitHub repository component (owner or repo name)
+/// Only allows alphanumeric, hyphen, underscore, and dot characters
+fn validate_repo_component(s : String) -> Bool {
+  if s.is_empty() {
+    return false
+  }
+  let chars = s.to_array()
+  for i = 0; i < chars.length(); i = i + 1 {
+    let c = chars[i]
+    if not((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {
+      return false
+    }
+  }
+  true
+}
+
+/// Create client with owner/repo validation
+pub fn GitHubClient::new(
+  owner : String,
+  repo : String
+) -> GitHubClient raise GitHubError {
+  if not(validate_repo_component(owner)) {
+    raise GitHubError(
+      "Invalid GitHub owner: '" + owner + "' (only alphanumeric, hyphen, underscore, and dot allowed)",
+    )
+  }
+  if not(validate_repo_component(repo)) {
+    raise GitHubError(
+      "Invalid GitHub repo: '" + repo + "' (only alphanumeric, hyphen, underscore, and dot allowed)",
+    )
+  }
   GitHubClient::{ owner, repo }
 }
 
@@ -187,7 +216,10 @@ pub fn parse_release_json(output : String) -> Release raise GitHubError {
 
   let tag_name = match obj.get("tagName") {
     Some(String(s)) => s
-    _ => ""
+    _ =>
+      raise GitHubError(
+        "Missing or invalid 'tagName' in release JSON response",
+      )
   }
 
   let name = match obj.get("name") {
@@ -259,7 +291,6 @@ pub fn parse_release_list_json(
   result
 }
 
-/// Parse PR response
 /// Parse PR response with try-catch-noraise pattern
 pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError {
   let json = try @json.parse(output) catch {

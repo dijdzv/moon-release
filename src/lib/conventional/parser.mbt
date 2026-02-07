@@ -243,8 +243,18 @@ fn build_body(lines : Array[String]) -> String? {
     return None
   }
 
+  // Skip trailing empty lines
+  let mut end_idx = lines.length()
+  while end_idx > start_idx && lines[end_idx - 1].trim().is_empty() {
+    end_idx = end_idx - 1
+  }
+
+  if start_idx >= end_idx {
+    return None
+  }
+
   let result : Array[String] = []
-  for i = start_idx; i < lines.length(); i = i + 1 {
+  for i = start_idx; i < end_idx; i = i + 1 {
     result.push(lines[i])
   }
 

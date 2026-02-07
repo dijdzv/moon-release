@@ -109,7 +109,7 @@ test "parse values" {
   assert_eq(api.values[1].name, "my_function")
 }
 
-test "merge_package_apis combines all items" {
+test "merge_package_apis combines all items with prefix" {
   let api1 = PackageApi::{
     name: "pkg1",
     types: [TypeInfo::{ name: "Type1", signature: "pub struct Type1 {}", methods: [] }],
@@ -128,6 +128,25 @@ test "merge_package_apis combines all items" {
   let merged = merge_package_apis([api1, api2])
   assert_eq(merged.types.length(), 2)
   assert_eq(merged.errors.length(), 1)
+  // Names should be prefixed with package path when merging multiple packages
+  assert_eq(merged.types[0].name, "pkg1.Type1")
+  assert_eq(merged.types[1].name, "pkg2.Type2")
+  assert_eq(merged.errors[0].name, "pkg2.Error1")
+}
+
+test "merge_package_apis single package no prefix" {
+  let api = PackageApi::{
+    name: "pkg1",
+    types: [TypeInfo::{ name: "Type1", signature: "pub struct Type1 {}", methods: [] }],
+    errors: [],
+    traits: [],
+    values: [ValueInfo::{ name: "foo", signature: "pub fn foo() -> Unit" }],
+  }
+
+  let merged = merge_package_apis([api])
+  // Single package: names should NOT be prefixed
+  assert_eq(merged.types[0].name, "Type1")
+  assert_eq(merged.values[0].name, "foo")
 }
 
 test "PackageApi::empty returns empty api" {

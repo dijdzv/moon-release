@@ -87,8 +87,52 @@ test "get tags command" {
 
 test "get commits since tag command" {
   let repo = Repository::open_unchecked("/repo")
-  let cmd = repo.get_commits_since_tag_command("v1.0.0")
+  let cmd = try { repo.get_commits_since_tag_command("v1.0.0") } catch { _ => fail("unexpected error") }
   assert_true(cmd.iter().any(fn(s) { s.contains("v1.0.0..HEAD") }))
+}
+
+test "get commits since tag command - rejects empty tag" {
+  let repo = Repository::open_unchecked("/repo")
+  try {
+    let _ = repo.get_commits_since_tag_command("")
+    fail("expected error")
+  } catch {
+    GitError(msg) => assert_true(msg.contains("Invalid git ref"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "get commits since tag command - rejects shell metacharacters" {
+  let repo = Repository::open_unchecked("/repo")
+  try {
+    let _ = repo.get_commits_since_tag_command("v1.0.0; rm -rf /")
+    fail("expected error")
+  } catch {
+    GitError(msg) => assert_true(msg.contains("Invalid git ref"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "get commits since tag command - rejects option-like arguments" {
+  let repo = Repository::open_unchecked("/repo")
+  try {
+    let _ = repo.get_commits_since_tag_command("--exec=malicious")
+    fail("expected error")
+  } catch {
+    GitError(msg) => assert_true(msg.contains("Invalid git ref"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "get commits command - rejects invalid refs" {
+  let repo = Repository::open_unchecked("/repo")
+  try {
+    let _ = repo.get_commits_command("valid", "bad|ref")
+    fail("expected error")
+  } catch {
+    GitError(msg) => assert_true(msg.contains("Invalid git ref"))
+    _ => fail("wrong error type")
+  }
 }
 
 test "create tag command" {

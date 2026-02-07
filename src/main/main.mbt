@@ -302,7 +302,9 @@ async fn cmd_update(
 
   // Dirty check
   if should_abort_dirty(config, repo, verbose) {
-    output_error("uncommitted changes in working directory", json_output)
+    if json_output {
+      output_error("uncommitted changes in working directory", json_output)
+    }
     exit_error()
   }
 
@@ -431,10 +433,10 @@ async fn cmd_update(
         @semver.Minor => "minor"
         @semver.Patch => "patch"
       }
-      let json_str = build_json_object([
-        ("old_version", json_string(current_version.to_string())),
-        ("new_version", json_string(new_version.to_string())),
-        ("bump_type", json_string(bump_str)),
+      let json_str = @util.build_json_object([
+        ("old_version", @util.json_string(current_version.to_string())),
+        ("new_version", @util.json_string(new_version.to_string())),
+        ("bump_type", @util.json_string(bump_str)),
         ("commits_count", commits.length().to_string()),
         ("dry_run", dry_run.to_string()),
         ("updated_files", "[\"moon.mod.json\"]"),
@@ -470,6 +472,9 @@ async fn cmd_release_pr(
 
   // Dirty check
   if should_abort_dirty(config, repo, verbose) {
+    if json_output {
+      output_error("uncommitted changes in working directory", json_output)
+    }
     exit_error()
   }
 
@@ -585,6 +590,9 @@ async fn cmd_release(
 
   // Dirty check
   if should_abort_dirty(config, repo, verbose) {
+    if json_output {
+      output_error("uncommitted changes in working directory", json_output)
+    }
     exit_error()
   }
 
@@ -612,8 +620,11 @@ async fn cmd_release(
     }
   } noraise { r => r }
 
+  // Determine bump type
+  let forced_bump = get_bump_type(subcmd)
+
   // Check for empty commits (no forced bump and no commits)
-  if commits.is_empty() && get_bump_type(subcmd) is None {
+  if commits.is_empty() && forced_bump is None {
     output_error_with_hint(
       "No commits found since last tag. Nothing to release.",
       "Create new commits or use --bump to force a version bump",
@@ -621,9 +632,6 @@ async fn cmd_release(
     )
     exit_error()
   }
-
-  // Determine bump type
-  let forced_bump = get_bump_type(subcmd)
   let bump_type = match forced_bump {
     Some(t) => t
     None =>
@@ -668,7 +676,17 @@ async fn cmd_release(
   }
 
   // Calculate new version
-  let new_version = @semver.bump_with_prerelease(current_version, bump_type, prerelease)
+  let new_version = match @semver.bump_with_prerelease(current_version, bump_type, prerelease) {
+    Some(v) => v
+    None => {
+      output_error_with_hint(
+        "Invalid prerelease identifier: " + prerelease.unwrap_or(""),
+        "Prerelease must contain only ASCII alphanumerics and hyphens [0-9A-Za-z-]",
+        json_output,
+      )
+      exit_error()
+    }
+  }
 
   // Create context
   let ctx = @workflow.ReleaseContext::new(
@@ -913,10 +931,10 @@ async fn cmd_check(
   }
 
   // Get commits with try-catch-noraise pattern
-  let commits = try get_commits_since_last_tag(repo) catch {
+  let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
     e => {
       if json_output {
-        println("{\"error\": " + json_string(e.to_string()) + "}")
+        println("{\"error\": " + @util.json_string(e.to_string()) + "}")
       } else {
         println("Error getting commits: " + e.to_string())
       }
@@ -939,7 +957,7 @@ async fn cmd_check(
   if json_output {
     // latest_tag
     let latest_tag_json = match latest_tag {
-      Some(tag) => json_string(tag)
+      Some(tag) => @util.json_string(tag)
       None => "null"
     }
     // suggested_bump
@@ -954,14 +972,14 @@ async fn cmd_check(
     for i = 0; i < commits.length(); i = i + 1 {
       let (cc, hash) = commits[i]
       let scope_json = match cc.scope {
-        Some(s) => json_string(s)
+        Some(s) => @util.json_string(s)
         None => "null"
       }
-      let commit_json = build_json_object([
-        ("hash", json_string(hash)),
-        ("type", json_string(commit_type_to_string(cc.typ))),
+      let commit_json = @util.build_json_object([
+        ("hash", @util.json_string(hash)),
+        ("type", @util.json_string(commit_type_to_string(cc.typ))),
         ("scope", scope_json),
-        ("description", json_string(cc.description)),
+        ("description", @util.json_string(cc.description)),
         ("breaking", cc.breaking.to_string()),
       ])
       commits_json_arr.push(commit_json)
@@ -970,7 +988,7 @@ async fn cmd_check(
       if acc.is_empty() { s } else { acc + "," + s }
     }) + "]"
 
-    let json_str = build_json_object([
+    let json_str = @util.build_json_object([
       ("latest_tag", latest_tag_json),
       ("commits_count", commits.length().to_string()),
       ("suggested_bump", bump_json),
@@ -1039,16 +1057,6 @@ fn commit_type_to_string(typ : @conventional.CommitType) -> String {
     @conventional.Revert => "revert"
     @conventional.Custom(s) => s
   }
-}
-
-/// Create JSON string literal (with quotes)
-fn json_string(s : String) -> String {
-  @util.json_string(s)
-}
-
-/// Build JSON object
-fn build_json_object(pairs : Array[(String, String)]) -> String {
-  @util.build_json_object(pairs)
 }
 
 // ======== Helper functions ========
@@ -1221,9 +1229,9 @@ async fn check_dirty(repo : @git.Repository, verbose : Bool) -> (Bool, Bool) {
     e => {
       if verbose {
         println("Warning: Failed to check git status: " + e.to_string())
-        println("Assuming working directory is clean.")
+        println("Assuming working directory has changes.")
       }
-      return (false, true)
+      return (true, true)
     }
   } noraise { r => r }
   (not(result.stdout.trim().is_empty()), false)

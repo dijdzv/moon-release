@@ -6,19 +6,15 @@ pub enum PathValidation {
   DirectoryTraversal
   /// Path is absolute (starts with /)
   AbsolutePath
+  /// Path contains a NUL byte
+  NullByte
 } derive(Show, Eq)
 
-/// Check if path contains a ".." traversal segment or a NUL byte
+/// Check if path contains a ".." traversal segment
 /// Splits on both '/' and '\' to handle Windows paths
 fn has_traversal_segment(path : String) -> Bool {
   let chars = path.to_array()
   let len = chars.length()
-  // Check for NUL byte
-  for c in chars {
-    if c == '\u0000' {
-      return true
-    }
-  }
   let mut seg_start = 0
   let mut i = 0
   while i <= len {
@@ -81,7 +77,7 @@ pub fn validate_path_full(path : String, allow_absolute~ : Bool = false) -> Path
   // Check for NUL byte
   for c in path {
     if c == '\u0000' {
-      return DirectoryTraversal
+      return NullByte
     }
   }
 
@@ -113,5 +109,6 @@ pub fn PathValidation::error_message(self : PathValidation) -> String? {
     Valid => None
     DirectoryTraversal => Some("path contains '..' (directory traversal not allowed)")
     AbsolutePath => Some("absolute paths are not allowed")
+    NullByte => Some("path contains NUL byte")
   }
 }

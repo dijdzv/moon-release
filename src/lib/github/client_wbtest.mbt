@@ -236,3 +236,78 @@ test "parse invalid pr json" {
     _ => fail("Wrong error type")
   }
 }
+
+test "client new - rejects empty owner" {
+  try {
+    let _ = GitHubClient::new("", "repo")
+    fail("expected error")
+  } catch {
+    GitHubError(msg) => assert_true(msg.contains("Invalid GitHub owner"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "client new - rejects empty repo" {
+  try {
+    let _ = GitHubClient::new("owner", "")
+    fail("expected error")
+  } catch {
+    GitHubError(msg) => assert_true(msg.contains("Invalid GitHub repo"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "client new - rejects owner with slash" {
+  try {
+    let _ = GitHubClient::new("owner/evil", "repo")
+    fail("expected error")
+  } catch {
+    GitHubError(msg) => assert_true(msg.contains("Invalid GitHub owner"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "client new - rejects repo with space" {
+  try {
+    let _ = GitHubClient::new("owner", "my repo")
+    fail("expected error")
+  } catch {
+    GitHubError(msg) => assert_true(msg.contains("Invalid GitHub repo"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "parse release json - missing tagName raises error" {
+  let json =
+    #|{
+    #|  "name": "Release 1.0.0",
+    #|  "body": "Notes",
+    #|  "isDraft": false,
+    #|  "isPrerelease": false
+    #|}
+  try {
+    let _ = parse_release_json(json)
+    fail("expected error")
+  } catch {
+    GitHubError(msg) => assert_true(msg.contains("tagName"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "parse release json - null tagName raises error" {
+  let json =
+    #|{
+    #|  "tagName": null,
+    #|  "name": "Release 1.0.0",
+    #|  "body": "Notes",
+    #|  "isDraft": false,
+    #|  "isPrerelease": false
+    #|}
+  try {
+    let _ = parse_release_json(json)
+    fail("expected error")
+  } catch {
+    GitHubError(msg) => assert_true(msg.contains("tagName"))
+    _ => fail("wrong error type")
+  }
+}

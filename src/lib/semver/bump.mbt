@@ -7,18 +7,31 @@ pub(all) enum BumpType {
 
 /// Bump version
 pub fn bump(version : Version, typ : BumpType) -> Version {
-  bump_with_prerelease(version, typ, None)
+  // bump with None prerelease always succeeds
+  match bump_with_prerelease(version, typ, None) {
+    Some(v) => v
+    None => abort("unreachable: bump with None prerelease should always succeed")
+  }
 }
 
 /// Bump version (with optional prerelease)
+/// Returns None if the prerelease identifier is invalid
 pub fn bump_with_prerelease(
   version : Version,
   typ : BumpType,
   prerelease : String?
-) -> Version {
+) -> Version? {
+  // Validate prerelease if provided
+  match prerelease {
+    Some(pre_str) =>
+      if not(validate_prerelease(pre_str)) {
+        return None
+      }
+    None => ()
+  }
   // Note: UInt overflow is theoretically possible (e.g., version 4294967295.0.0 + major bump)
   // but impractical in real-world usage. No overflow check is performed.
-  match typ {
+  let result = match typ {
     Major =>
       Version::{
         major: version.major + 1,
@@ -44,6 +57,7 @@ pub fn bump_with_prerelease(
         build_metadata: None,
       }
   }
+  Some(result)
 }
 
 /// Determine bump type from commits

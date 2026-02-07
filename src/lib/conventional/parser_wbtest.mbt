@@ -188,3 +188,27 @@ test "parse commit with multibyte scope" {
     None => fail("Expected Some, got None")
   }
 }
+
+// L-6: Trailing empty lines in body should be trimmed
+test "parse commit with trailing empty lines in body" {
+  let msg = "feat: add feature\n\nThis is the body.\n\n\n"
+  let result = parse(msg)
+  match result {
+    Some(commit) => {
+      assert_eq(commit.body, Some("This is the body."))
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "parse commit with trailing empty lines before footer" {
+  let msg = "feat: add feature\n\nBody text.\n\n\n\nFixes #123"
+  let result = parse(msg)
+  match result {
+    Some(commit) => {
+      assert_eq(commit.body, Some("Body text."))
+      assert_eq(commit.footers.length(), 1)
+    }
+    None => fail("Expected Some, got None")
+  }
+}

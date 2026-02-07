@@ -23,6 +23,26 @@ pub fn GitError::to_string(self : GitError) -> String {
   }
 }
 
+/// Validates that a git ref name doesn't contain dangerous characters
+fn validate_ref_param(ref_name : String) -> Bool {
+  if ref_name.is_empty() {
+    return false
+  }
+  let chars = ref_name.to_array()
+  for i = 0; i < chars.length(); i = i + 1 {
+    let c = chars[i]
+    // Reject shell metacharacters and git option prefix
+    if c == ' ' || c == '\n' || c == '\r' || c == '\u0000' || c == '|' || c == ';' || c == '`' {
+      return false
+    }
+  }
+  // Reject option-like arguments
+  if ref_name.has_prefix("--") {
+    return false
+  }
+  true
+}
+
 /// Validate repository path for security
 /// Rejects paths containing ".." (directory traversal)
 /// Delegates to util module for common validation logic
@@ -75,7 +95,13 @@ pub fn Repository::get_commits_command(
   self : Repository,
   from : String,
   to : String
-) -> Array[String] {
+) -> Array[String] raise GitError {
+  if not(validate_ref_param(from)) {
+    raise GitError("Invalid git ref: '" + from + "'")
+  }
+  if not(validate_ref_param(to)) {
+    raise GitError("Invalid git ref: '" + to + "'")
+  }
   [
     "git",
     "-C",
@@ -90,7 +116,10 @@ pub fn Repository::get_commits_command(
 pub fn Repository::get_commits_since_tag_command(
   self : Repository,
   tag : String
-) -> Array[String] {
+) -> Array[String] raise GitError {
+  if not(validate_ref_param(tag)) {
+    raise GitError("Invalid git ref: '" + tag + "'")
+  }
   [
     "git",
     "-C",
