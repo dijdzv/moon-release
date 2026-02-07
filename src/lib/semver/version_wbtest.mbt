@@ -267,15 +267,12 @@ test "parse version - all components at boundary" {
   }
 }
 
-test "parse version - leading zeros in version" {
-  // Note: Current implementation allows leading zeros in version numbers
-  // This is different from strict SemVer which forbids leading zeros
-  // Testing current behavior (implementation detail, may change)
-  let result = Version::parse("01.0.0")
-  match result {
-    Some(v) => assert_eq(v.major, 1)  // Leading zero is ignored
-    None => ()  // Also acceptable if strict parsing is added later
-  }
+test "parse version - leading zeros rejected per SemVer 2.0.0" {
+  // SemVer 2.0.0 spec forbids leading zeros in numeric identifiers
+  assert_eq(Version::parse("01.0.0"), None)
+  assert_eq(Version::parse("0.01.0"), None)
+  assert_eq(Version::parse("0.0.01"), None)
+  assert_eq(Version::parse("007.0.0"), None)
 }
 
 test "parse version - valid zeros" {

@@ -87,17 +87,24 @@ fn substr_chars(chars : Array[Char], start : Int, end : Int) -> String {
 
 /// Parse string to UInt
 /// Reject numbers with more than 9 digits to prevent overflow
+/// Reject leading zeros per SemVer 2.0.0 spec (e.g., "01" is invalid, "0" is valid)
 fn parse_uint(s : String) -> UInt? {
   if s.is_empty() {
     return None
   }
+  let chars = s.to_array()
+  let len = chars.length()
   // Reject more than 9 digits to prevent overflow
   // 999,999,999 < UInt max (4,294,967,295) so it's safe
-  if s.length() > 9 {
+  if len > 9 {
+    return None
+  }
+  // Reject leading zeros (e.g., "01", "007") but allow "0"
+  if chars[0] == '0' && len > 1 {
     return None
   }
   let mut result : UInt = 0
-  for c in s {
+  for c in chars {
     if c >= '0' && c <= '9' {
       result = result * 10 + (c.to_uint() - '0'.to_uint())
     } else {

@@ -36,6 +36,14 @@ pub fn run_gh(_args : Array[String]) -> CommandResult raise ExecutorError {
   raise ExecutorError("Executor requires native target")
 }
 
+/// Execute command with timeout (stub)
+pub fn run_command_with_timeout(
+  _cmd : Array[String],
+  _timeout_seconds : UInt
+) -> CommandResult? raise ExecutorError {
+  raise ExecutorError("Executor requires native target")
+}
+
 /// Check if command succeeded
 pub fn CommandResult::is_success(self : CommandResult) -> Bool {
   self.exit_code == 0

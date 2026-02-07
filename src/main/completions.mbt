@@ -37,7 +37,7 @@ fn print_bash_completion() -> Unit {
     #|    cur="${COMP_WORDS[COMP_CWORD]}"
     #|    prev="${COMP_WORDS[COMP_CWORD-1]}"
     #|
-    #|    commands="update release-pr release init version check set-version generate-completions"
+    #|    commands="update release-pr release init version check set-version generate-completions generate-schema"
     #|    global_opts="-n --dry-run -v --verbose -c --config -h --help"
     #|
     #|    case "${COMP_WORDS[1]}" in
@@ -101,6 +101,7 @@ fn print_zsh_completion() -> Unit {
     #|        'check:Check the current state without making changes'
     #|        'set-version:Set the package version manually'
     #|        'generate-completions:Generate shell completion script'
+    #|        'generate-schema:Generate JSON schema for release.json'
     #|    )
     #|
     #|    local -a global_opts
@@ -173,6 +174,8 @@ fn print_zsh_completion() -> Unit {
     #|                    _arguments \
     #|                        ':shell:(bash zsh fish)'
     #|                    ;;
+    #|                generate-schema)
+    #|                    ;;
     #|            esac
     #|            ;;
     #|    esac
@@ -206,6 +209,7 @@ fn print_fish_completion() -> Unit {
     #|complete -c moon-release -n '__fish_use_subcommand' -a check -d 'Check the current state'
     #|complete -c moon-release -n '__fish_use_subcommand' -a set-version -d 'Set the package version manually'
     #|complete -c moon-release -n '__fish_use_subcommand' -a generate-completions -d 'Generate shell completion script'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a generate-schema -d 'Generate JSON schema for release.json'
     #|
     #|# update options
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s n -l dry-run -d 'Show what would be done'

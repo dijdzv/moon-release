@@ -886,10 +886,6 @@ async fn cmd_check(
   verbose : Bool,
   _config_path : String
 ) -> Unit {
-  let from_tag : String? = match subcmd.args.get("from") {
-    Some(arr) if arr.length() > 0 => Some(arr[0])
-    _ => None
-  }
   // Use try? + unwrap_or pattern for consistent error handling
   let output_format = (try? subcmd.get_one("output")).unwrap_or("text")
   let json_output = output_format == "json"
@@ -897,10 +893,7 @@ async fn cmd_check(
   if not(json_output) {
     println("Checking current state...")
     println("")
-    match from_tag {
-      Some(tag) => println("Analyzing commits since: " + tag)
-      None => println("Analyzing commits since last tag...")
-    }
+    println("Analyzing commits since last tag...")
   }
 
   // Get Git repository
@@ -1148,7 +1141,10 @@ fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
         "major" => Some(@semver.Major)
         "minor" => Some(@semver.Minor)
         "patch" => Some(@semver.Patch)
-        _ => None
+        bump_value => {
+          println("Warning: Invalid bump value '\{bump_value}'. Expected 'major', 'minor', or 'patch'. Ignoring --bump flag.")
+          None
+        }
       }
     _ => None
   }

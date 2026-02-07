@@ -46,7 +46,8 @@ fn hex_digit(n : UInt) -> Char {
     12 => 'c'
     13 => 'd'
     14 => 'e'
-    _ => 'f'
+    15 => 'f'
+    _ => abort("hex_digit: invalid value \{n} (expected 0-15)")
   }
 }
 

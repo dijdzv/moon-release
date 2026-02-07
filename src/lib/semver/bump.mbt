@@ -85,6 +85,8 @@ pub fn determine_bump_with_custom(
     // Standard Conventional Commits rules
     match commit.typ {
       Feat => has_feat = true
+      // Perf is classified as Patch: performance improvements don't add new API surface
+      // and are backward-compatible, similar to bug fixes
       Fix | Perf => has_fix = true
       _ => ()
     }
