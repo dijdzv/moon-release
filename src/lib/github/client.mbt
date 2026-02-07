@@ -276,7 +276,7 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
   let number = match obj.get("number") {
     Some(Number(n, ..)) =>
       // Treat negative, non-integer, or overflow values as 0
-      if n < 0.0 || n > uint_max_as_double || n != n.to_int().to_double() {
+      if n < 0.0 || n > uint_max_as_double || n % 1.0 != 0.0 {
         0U
       } else {
         n.to_uint()
