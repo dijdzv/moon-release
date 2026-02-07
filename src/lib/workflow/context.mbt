@@ -108,6 +108,11 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
         "prerelease identifier can only contain alphanumeric characters, hyphens, and dots",
       )
     }
+
+    // Check for consecutive dots (empty segments)
+    if c == '.' && i + 1 < chars.length() && chars[i + 1] == '.' {
+      return Some("prerelease identifier cannot contain consecutive dots")
+    }
   }
 
   // Cannot start or end with dot or hyphen

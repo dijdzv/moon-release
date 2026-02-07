@@ -252,13 +252,13 @@ test "validate_prerelease_identifier - ending with hyphen invalid" {
 
 // Monorepo PR body tests
 
-test "build_pr_body_monorepo - empty packages" {
+test "build_pr_body_unified - empty packages" {
   let packages : Array[PackageReleaseInfo] = []
-  let result = build_pr_body_monorepo(packages)
+  let result = build_pr_body_unified(packages)
   assert_eq(result, "No packages to release.")
 }
 
-test "build_pr_body_monorepo - single package" {
+test "build_pr_body_unified - single package" {
   let feat = @conventional.parse("feat: add new feature")
   match feat {
     Some(c) => {
@@ -274,7 +274,7 @@ test "build_pr_body_monorepo - single package" {
               commits: [(c, "abc1234")],
             },
           ]
-          let result = build_pr_body_monorepo(packages)
+          let result = build_pr_body_unified(packages)
           // Check header
           assert_true(result.contains("## 🤖 New release"))
           // Check version list
@@ -294,7 +294,7 @@ test "build_pr_body_monorepo - single package" {
   }
 }
 
-test "build_pr_body_monorepo - multiple packages" {
+test "build_pr_body_unified - multiple packages" {
   let feat = @conventional.parse("feat: add feature")
   let fix = @conventional.parse("fix: fix bug")
   match (feat, fix) {
@@ -319,7 +319,7 @@ test "build_pr_body_monorepo - multiple packages" {
               commits: [(x, "2222222")],
             },
           ]
-          let result = build_pr_body_monorepo(packages)
+          let result = build_pr_body_unified(packages)
           // Check both packages in version list
           assert_true(result.contains("* `pkg-a`: 1.0.0 -> 1.1.0"))
           assert_true(result.contains("* `pkg-b`: 2.0.0 -> 2.0.1"))
@@ -336,7 +336,7 @@ test "build_pr_body_monorepo - multiple packages" {
   }
 }
 
-test "build_pr_body_monorepo - groups commits by type" {
+test "build_pr_body_unified - groups commits by type" {
   let feat = @conventional.parse("feat: feature one")
   let fix = @conventional.parse("fix: bug fix")
   let docs = @conventional.parse("docs: update readme")
@@ -354,7 +354,7 @@ test "build_pr_body_monorepo - groups commits by type" {
               commits: [(f, "1111111"), (x, "2222222"), (d, "3333333")],
             },
           ]
-          let result = build_pr_body_monorepo(packages)
+          let result = build_pr_body_unified(packages)
           // Check sections are present
           assert_true(result.contains("### Features"))
           assert_true(result.contains("### Bug Fixes"))

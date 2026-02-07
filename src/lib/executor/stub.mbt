@@ -73,3 +73,10 @@ pub fn CommandResult::check(
     raise ExecutorError(msg)
   }
 }
+
+/// Join command array into a display string for error messages
+pub fn join_command_args(cmd : Array[String]) -> String {
+  cmd.iter().fold(init="", fn(acc, s) {
+    if acc.is_empty() { s } else { acc + " " + s }
+  })
+}

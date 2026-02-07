@@ -484,6 +484,16 @@ pub async fn run_release_pr(
     _ => "this-package"
   } noraise { n => n }
 
+  // Single package info (used as fallback or for single-package mode)
+  let single_pkg_info = [
+    PackageReleaseInfo::{
+      name: pkg_name,
+      old_version: ctx.current_version,
+      new_version: ctx.new_version,
+      commits: ctx.commits,
+    },
+  ]
+
   // Generate PR body (unified release-plz style format)
   let pr_body = if not(ctx.config.packages.is_empty()) {
     // Monorepo mode: collect info for each package
@@ -491,34 +501,13 @@ pub async fn run_release_pr(
       println("Generating PR body for monorepo...")
     }
     let pkg_info = collect_package_release_info(ctx.config, ctx.repo, ctx.verbose)
-    if pkg_info.is_empty() {
-      // Fallback: create single package info from context
-      let single_pkg = [
-        PackageReleaseInfo::{
-          name: pkg_name,
-          old_version: ctx.current_version,
-          new_version: ctx.new_version,
-          commits: ctx.commits,
-        },
-      ]
-      build_pr_body_unified(single_pkg)
-    } else {
-      build_pr_body_unified(pkg_info)
-    }
+    build_pr_body_unified(if pkg_info.is_empty() { single_pkg_info } else { pkg_info })
   } else {
-    // Single-package mode: create PackageReleaseInfo from context
+    // Single-package mode
     if ctx.verbose {
       println("Generating PR body for single package...")
     }
-    let single_pkg = [
-      PackageReleaseInfo::{
-        name: pkg_name,
-        old_version: ctx.current_version,
-        new_version: ctx.new_version,
-        commits: ctx.commits,
-      },
-    ]
-    build_pr_body_unified(single_pkg)
+    build_pr_body_unified(single_pkg_info)
   }
 
   match existing_pr {
@@ -631,9 +620,7 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   let build_cmd = get_npm_build_command(ctx.config)
-  let build_cmd_str = build_cmd.iter().fold(init="", fn(acc, s) {
-    if acc.is_empty() { s } else { acc + " " + s }
-  })
+  let build_cmd_str = @executor.join_command_args(build_cmd)
 
   if ctx.dry_run {
     println("[dry-run] Would pre-build JS target: " + build_cmd_str)
@@ -826,9 +813,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   if ctx.dry_run {
-    println("[dry-run] Would run: " + publish_cmd.iter().fold(init="", fn(acc, s) {
-      if acc.is_empty() { s } else { acc + " " + s }
-    }))
+    println("[dry-run] Would run: " + @executor.join_command_args(publish_cmd))
     return
   }
 
@@ -889,9 +874,7 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   publish_cmd.push("--access")
   publish_cmd.push("public")
 
-  let publish_cmd_str = publish_cmd.iter().fold(init="", fn(acc, s) {
-    if acc.is_empty() { s } else { acc + " " + s }
-  })
+  let publish_cmd_str = @executor.join_command_args(publish_cmd)
 
   if ctx.dry_run {
     println("[dry-run] Would run: " + publish_cmd_str)
@@ -1008,13 +991,6 @@ pub fn build_pr_body_unified(
   sb.write_string("*This PR was automatically created by moon-release.*\n")
 
   sb.to_string()
-}
-
-/// Build PR body for monorepo (release-plz style) - alias for build_pr_body_unified
-pub fn build_pr_body_monorepo(
-  packages : Array[PackageReleaseInfo]
-) -> String {
-  build_pr_body_unified(packages)
 }
 
 /// Generate changelog for a single package
@@ -1595,8 +1571,8 @@ pub fn generate_release_notes(
     return "No changes."
   }
 
-  let lines : Array[String] = []
-  lines.push("## What's Changed\n")
+  let sb = StringBuilder::new()
+  sb.write_string("## What's Changed\n\n")
 
   for i = 0; i < commits.length(); i = i + 1 {
     let (commit, hash) = commits[i]
@@ -1607,18 +1583,18 @@ pub fn generate_release_notes(
     let short_hash = if hash.length() >= 7 {
       // Get first 7 characters
       let chars = hash.to_array()
-      let sb = StringBuilder::new()
+      let hsb = StringBuilder::new()
       for k = 0; k < 7; k = k + 1 {
-        sb.write_char(chars[k])
+        hsb.write_char(chars[k])
       }
-      sb.to_string()
+      hsb.to_string()
     } else {
       hash
     }
-    lines.push("- \{scope_str}\{commit.description} (\{short_hash})")
+    sb.write_string("- \{scope_str}\{commit.description} (\{short_hash})\n")
   }
 
-  lines.iter().fold(init="", fn(acc, line) { acc + line + "\n" })
+  sb.to_string()
 }
 
 /// Run semver check

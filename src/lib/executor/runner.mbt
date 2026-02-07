@@ -33,9 +33,7 @@ pub async fn run_command(cmd : Array[String]) -> CommandResult raise ExecutorErr
     args.push(cmd[i])
   }
 
-  let cmd_str = cmd.iter().fold(init="", fn(acc, s) {
-    if acc.is_empty() { s } else { acc + " " + s }
-  })
+  let cmd_str = join_command_args(cmd)
 
   // Execute command with try-catch-noraise pattern
   let (exit_code, stdout_data, stderr_data) = try @process.collect_output(program, args[:]) catch {
@@ -67,9 +65,7 @@ pub async fn run_command_simple(cmd : Array[String]) -> Int raise ExecutorError 
     args.push(cmd[i])
   }
 
-  let cmd_str = cmd.iter().fold(init="", fn(acc, s) {
-    if acc.is_empty() { s } else { acc + " " + s }
-  })
+  let cmd_str = join_command_args(cmd)
 
   // Execute command with try-catch-noraise pattern
   try @process.run(program, args[:]) catch {
@@ -153,9 +149,7 @@ pub async fn run_command_with_timeout(
     raise ExecutorError("Cannot execute empty command")
   }
 
-  let cmd_str = cmd.iter().fold(init="", fn(acc, s) {
-    if acc.is_empty() { s } else { acc + " " + s }
-  })
+  let cmd_str = join_command_args(cmd)
 
   // Cap timeout to prevent Int overflow when converting to milliseconds
   let safe_timeout_seconds = if timeout_seconds > max_timeout_seconds {
@@ -170,4 +164,11 @@ pub async fn run_command_with_timeout(
     ExecutorError(_) as e => raise e
     e => raise ExecutorError("Failed to execute '" + cmd_str + "': " + e.to_string())
   } noraise { r => r }
+}
+
+/// Join command array into a display string for error messages
+pub fn join_command_args(cmd : Array[String]) -> String {
+  cmd.iter().fold(init="", fn(acc, s) {
+    if acc.is_empty() { s } else { acc + " " + s }
+  })
 }

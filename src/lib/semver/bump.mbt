@@ -66,7 +66,9 @@ pub fn determine_bump_with_custom(
       return Some(Major)
     }
 
-    // Check custom major pattern
+    // Check custom major pattern (substring match against commit description).
+    // Use distinctive patterns (e.g., "BREAKING") to avoid unintended matches,
+    // since "feat" would also match descriptions like "refactored feature".
     match custom_major_pattern {
       Some(pattern) =>
         if commit.description.contains(pattern) {
@@ -75,7 +77,7 @@ pub fn determine_bump_with_custom(
       None => ()
     }
 
-    // Check custom minor pattern
+    // Check custom minor pattern (substring match against commit description)
     match custom_minor_pattern {
       Some(pattern) =>
         if commit.description.contains(pattern) {

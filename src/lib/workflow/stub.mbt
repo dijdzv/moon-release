@@ -100,8 +100,8 @@ pub fn generate_release_notes(
     return "No changes."
   }
 
-  let lines : Array[String] = []
-  lines.push("## What's Changed\n")
+  let sb = StringBuilder::new()
+  sb.write_string("## What's Changed\n\n")
 
   for i = 0; i < commits.length(); i = i + 1 {
     let (commit, hash) = commits[i]
@@ -111,18 +111,18 @@ pub fn generate_release_notes(
     }
     let short_hash = if hash.length() >= 7 {
       let chars = hash.to_array()
-      let sb = StringBuilder::new()
+      let hsb = StringBuilder::new()
       for k = 0; k < 7; k = k + 1 {
-        sb.write_char(chars[k])
+        hsb.write_char(chars[k])
       }
-      sb.to_string()
+      hsb.to_string()
     } else {
       hash
     }
-    lines.push("- \{scope_str}\{commit.description} (\{short_hash})")
+    sb.write_string("- \{scope_str}\{commit.description} (\{short_hash})\n")
   }
 
-  lines.iter().fold(init="", fn(acc, line) { acc + line + "\n" })
+  sb.to_string()
 }
 
 /// Package release info (for PR body generation)
@@ -175,13 +175,6 @@ pub fn build_pr_body_unified(
   sb.write_string("*This PR was automatically created by moon-release.*\n")
 
   sb.to_string()
-}
-
-/// Build PR body for monorepo (release-plz style) - alias for build_pr_body_unified
-pub fn build_pr_body_monorepo(
-  packages : Array[PackageReleaseInfo]
-) -> String {
-  build_pr_body_unified(packages)
 }
 
 /// Generate changelog for a single package
@@ -337,6 +330,11 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
       return Some(
         "prerelease identifier can only contain alphanumeric characters, hyphens, and dots",
       )
+    }
+
+    // Check for consecutive dots (empty segments)
+    if c == '.' && i + 1 < chars.length() && chars[i + 1] == '.' {
+      return Some("prerelease identifier cannot contain consecutive dots")
     }
   }
 
