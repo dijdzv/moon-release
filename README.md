@@ -150,7 +150,7 @@ Customize behavior with `release.json`.
   "npm_build_command": null,
   "npm_publish_provenance": true,
   "npm_publish_timeout": 300,
-  "semver_check": true,
+  "semver_check": false,
   "registry_check": false,
   "allow_dirty": false,
   "custom_major_increment_regex": null,
@@ -170,6 +170,7 @@ Customize behavior with `release.json`.
 | `pr_body` | - | PR body template |
 | `pr_branch_prefix` | `"release/"` | Release branch prefix |
 | `base_branch` | `"main"` | PR base branch |
+| `allow_prerelease` | `false` | Allow prerelease versions (e.g., `--prerelease alpha`) |
 | `git_tag_enable` | `true` | Whether to create Git tag |
 | `git_tag_name` | `"v{{ version }}"` | Tag name template |
 | `git_release_enable` | `true` | Whether to create GitHub Release |

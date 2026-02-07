@@ -612,6 +612,16 @@ async fn cmd_release(
     }
   } noraise { r => r }
 
+  // Check for empty commits (no forced bump and no commits)
+  if commits.is_empty() && get_bump_type(subcmd) is None {
+    output_error_with_hint(
+      "No commits found since last tag. Nothing to release.",
+      "Create new commits or use --bump to force a version bump",
+      json_output,
+    )
+    exit_error()
+  }
+
   // Determine bump type
   let forced_bump = get_bump_type(subcmd)
   let bump_type = match forced_bump {
@@ -623,7 +633,7 @@ async fn cmd_release(
         config.custom_minor_increment_regex,
       ) {
         Some(t) => t
-        None => @semver.Patch // default to patch
+        None => @semver.Patch // default to patch for non-conventional commits
       }
   }
 
@@ -749,20 +759,24 @@ fn generate_default_config_json() -> String {
     #|  "pr_title": "chore: release v{{ version }}",
     #|  "pr_draft": false,
     #|  "pr_labels": [],
-    #|  "pr_body": "## Release v{{ version }}\n\n---\n*This PR was automatically created by moon-release.*",
+    #|  "pr_body": "## Release v{{ version }}\n\n{{ changelog }}\n\n---\n*This PR was automatically created by moon-release.*",
+    #|  "pr_branch_prefix": "release/",
+    #|  "base_branch": "main",
     #|  "allow_prerelease": false,
     #|  "git_tag_enable": true,
     #|  "git_tag_name": "v{{ version }}",
     #|  "git_release_enable": true,
     #|  "git_release_draft": false,
     #|  "git_release_name": "Release v{{ version }}",
+    #|  "git_release_body": null,
+    #|  "git_release_latest": true,
     #|  "moon_publish": true,
     #|  "moon_publish_frozen": false,
+    #|  "moon_publish_timeout": 300,
     #|  "npm_publish": false,
     #|  "npm_publish_provenance": true,
+    #|  "npm_publish_timeout": 300,
     #|  "semver_check": false,
-    #|  "pr_branch_prefix": "release/",
-    #|  "base_branch": "main",
     #|  "registry_check": false,
     #|  "allow_dirty": false,
     #|  "packages": []
@@ -1057,12 +1071,12 @@ async fn load_config(path : String, verbose~ : Bool = false) -> @config.Config {
     }
   } noraise { r => r }
 
-  // Parse with try-catch-noraise pattern
+  // Parse config - fail if file exists but is invalid
   try @config.Config::parse(content) catch {
     e => {
-      println("Warning: Failed to parse config file: " + e.to_string())
-      println("Using default configuration.")
-      @config.Config::default()
+      println("Error: Failed to parse config file (" + path + "): " + e.to_string())
+      println("Fix the configuration file or delete it to use defaults.")
+      exit_error()
     }
   } noraise { r => r }
 }

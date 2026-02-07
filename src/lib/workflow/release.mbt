@@ -173,48 +173,62 @@ async fn update_package_json_version(
   }
 
   // Replace only the top-level "version" field by tracking brace nesting depth
+  // Process character-by-character across all lines for correct depth tracking
   let lines = content.split("\n")
   let updated_lines : Array[String] = []
   let mut depth = 0
+  let mut in_string = false
   let mut found = false
 
   for line_view in lines {
     let line = line_view.to_string()
 
-    if not(found) {
-      // Count braces to track nesting depth (before checking this line)
-      let chars = line.to_array()
-      let mut line_depth_delta = 0
-      let mut in_string = false
-      for i = 0; i < chars.length(); i = i + 1 {
-        let c = chars[i]
-        if c == '"' && (i == 0 || chars[i - 1] != '\\') {
-          in_string = not(in_string)
-        } else if not(in_string) {
-          if c == '{' {
-            line_depth_delta = line_depth_delta + 1
-          } else if c == '}' {
-            line_depth_delta = line_depth_delta - 1
+    if found {
+      updated_lines.push(line)
+      continue
+    }
+
+    // Scan each character to track depth and find "version" key at depth 1
+    let chars = line.to_array()
+    let mut version_at_depth_1 = false
+
+    for i = 0; i < chars.length(); i = i + 1 {
+      let c = chars[i]
+      if c == '"' && (i == 0 || chars[i - 1] != '\\') {
+        if not(in_string) {
+          // Opening quote - check if this is "version" key at depth 1
+          if depth == 1 && i + 8 < chars.length() &&
+             chars[i+1] == 'v' && chars[i+2] == 'e' && chars[i+3] == 'r' &&
+             chars[i+4] == 's' && chars[i+5] == 'i' && chars[i+6] == 'o' &&
+             chars[i+7] == 'n' && chars[i+8] == '"' {
+            // Check if followed by ':'
+            let mut k = i + 9
+            while k < chars.length() && (chars[k] == ' ' || chars[k] == '\t') {
+              k = k + 1
+            }
+            if k < chars.length() && chars[k] == ':' {
+              version_at_depth_1 = true
+            }
           }
         }
+        in_string = not(in_string)
+      } else if not(in_string) {
+        if c == '{' {
+          depth = depth + 1
+        } else if c == '}' {
+          depth = depth - 1
+        }
       }
+    }
 
-      // Only match "version" at depth 1 (inside the top-level object)
+    if version_at_depth_1 {
+      let indent = get_line_indent(line)
       let trimmed = line.trim_start()
-      if depth == 1 && trimmed.has_prefix("\"version\"") && trimmed.contains(":") {
-        // Extract the version value and replace it, preserving everything else on the line
-        let indent = get_line_indent(line)
-        // Reconstruct: preserve trailing comma if present
-        let has_trailing_comma = trimmed.has_suffix(",")
-        let new_line = indent + "\"version\": \"" + new_version.to_string() + "\"" +
-          (if has_trailing_comma { "," } else { "" })
-        updated_lines.push(new_line)
-        found = true
-      } else {
-        updated_lines.push(line)
-      }
-
-      depth = depth + line_depth_delta
+      let has_trailing_comma = trimmed.has_suffix(",")
+      let new_line = indent + "\"version\": \"" + new_version.to_string() + "\"" +
+        (if has_trailing_comma { "," } else { "" })
+      updated_lines.push(new_line)
+      found = true
     } else {
       updated_lines.push(line)
     }
