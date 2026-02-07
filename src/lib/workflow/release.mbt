@@ -86,19 +86,12 @@ async fn get_package_name() -> String {
   moon_mod.name
 }
 
-/// Read version from package.json using JSON parser
-pub async fn get_package_json_version() -> @semver.Version? raise WorkflowError {
-  // Try to read package.json
-  let content = try @fs.read_file("package.json").text() catch {
-    _ => return None  // File doesn't exist
-  } noraise { c => c }
-
-  // Parse as JSON to safely extract top-level "version" field
+/// Extract version from package.json content using JSON parser
+fn parse_package_json_version(content : String) -> @semver.Version? raise WorkflowError {
   let json = try @json.parse(content) catch {
     e => raise WorkflowError("Failed to parse package.json: " + e.to_string())
   } noraise { j => j }
 
-  // Extract version from top-level object
   match json {
     Object(map) =>
       match map.get("version") {
@@ -107,6 +100,15 @@ pub async fn get_package_json_version() -> @semver.Version? raise WorkflowError 
       }
     _ => raise WorkflowError("package.json is not a valid JSON object")
   }
+}
+
+/// Read version from package.json file
+pub async fn get_package_json_version() -> @semver.Version? raise WorkflowError {
+  let content = try @fs.read_file("package.json").text() catch {
+    _ => return None
+  } noraise { c => c }
+
+  parse_package_json_version(content)
 }
 
 /// Get current version from the appropriate source based on config
@@ -153,7 +155,8 @@ pub async fn get_current_version(
   }
 }
 
-/// Update package.json version field using string replacement
+/// Update package.json version field
+/// Uses line-based processing with nesting depth tracking to only replace the top-level "version"
 /// Returns the updated content, or None if file doesn't exist
 async fn update_package_json_version(
   new_version : @semver.Version
@@ -163,24 +166,81 @@ async fn update_package_json_version(
     _ => return None  // File doesn't exist, that's OK
   } noraise { c => c }
 
-  // First, parse JSON to get the current version string safely
-  let current_version_str = match get_package_json_version() {
-    Some(v) => v.to_string()
+  // Verify package.json has a valid version field
+  match parse_package_json_version(content) {
+    Some(_) => ()
     None => raise WorkflowError("package.json does not contain a valid 'version' field")
   }
 
-  // Replace "version": "current" with "version": "new" in the raw text
-  // This preserves the original formatting (indentation, trailing commas, etc.)
-  let old_pattern = "\"version\": \"" + current_version_str + "\""
-  let new_pattern = "\"version\": \"" + new_version.to_string() + "\""
+  // Replace only the top-level "version" field by tracking brace nesting depth
+  let lines = content.split("\n")
+  let updated_lines : Array[String] = []
+  let mut depth = 0
+  let mut found = false
 
-  let updated = content.to_string().replace(old=old_pattern, new=new_pattern)
+  for line_view in lines {
+    let line = line_view.to_string()
 
-  if updated == content.to_string() {
-    raise WorkflowError("Failed to update version in package.json")
+    if not(found) {
+      // Count braces to track nesting depth (before checking this line)
+      let chars = line.to_array()
+      let mut line_depth_delta = 0
+      let mut in_string = false
+      for i = 0; i < chars.length(); i = i + 1 {
+        let c = chars[i]
+        if c == '"' && (i == 0 || chars[i - 1] != '\\') {
+          in_string = not(in_string)
+        } else if not(in_string) {
+          if c == '{' {
+            line_depth_delta = line_depth_delta + 1
+          } else if c == '}' {
+            line_depth_delta = line_depth_delta - 1
+          }
+        }
+      }
+
+      // Only match "version" at depth 1 (inside the top-level object)
+      let trimmed = line.trim_start()
+      if depth == 1 && trimmed.has_prefix("\"version\"") && trimmed.contains(":") {
+        // Extract the version value and replace it, preserving everything else on the line
+        let indent = get_line_indent(line)
+        // Reconstruct: preserve trailing comma if present
+        let has_trailing_comma = trimmed.has_suffix(",")
+        let new_line = indent + "\"version\": \"" + new_version.to_string() + "\"" +
+          (if has_trailing_comma { "," } else { "" })
+        updated_lines.push(new_line)
+        found = true
+      } else {
+        updated_lines.push(line)
+      }
+
+      depth = depth + line_depth_delta
+    } else {
+      updated_lines.push(line)
+    }
   }
 
-  Some(updated)
+  if not(found) {
+    raise WorkflowError("package.json does not contain a 'version' field at the top level")
+  }
+
+  Some(updated_lines.iter().fold(init="", fn(acc, line) {
+    if acc.is_empty() { line } else { acc + "\n" + line }
+  }))
+}
+
+/// Get the leading whitespace of a line
+fn get_line_indent(line : String) -> String {
+  let chars = line.to_array()
+  let sb = StringBuilder::new()
+  for c in chars {
+    if c == ' ' || c == '\t' {
+      sb.write_char(c)
+    } else {
+      break
+    }
+  }
+  sb.to_string()
 }
 
 /// update command: local update only
@@ -301,16 +361,13 @@ pub async fn run_release_pr(
   run_update(ctx)
 
   // Stage changes - add relevant files based on publish configuration
+  // Note: get_current_version() ensures at least one of moon_publish/npm_publish is enabled
   let files_to_stage : Array[String] = ["add"]
   if ctx.config.moon_publish {
     files_to_stage.push("moon.mod.json")
   }
   if ctx.config.npm_publish {
     files_to_stage.push("package.json")
-  }
-  // Always add moon.mod.json as fallback (version source)
-  if not(ctx.config.moon_publish) && not(ctx.config.npm_publish) {
-    files_to_stage.push("moon.mod.json")
   }
   let stage_result = try @executor.run_git(ctx.repo, files_to_stage) catch {
     e => raise WorkflowError("Failed to stage files: " + e.to_string())

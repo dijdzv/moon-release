@@ -401,8 +401,8 @@ pub fn get_registry_version(
 
 /// Check if should release (stub)
 pub fn should_release(
-  _config : @config.Config,
-  _repo : @git.Repository,
+  _local_version : @semver.Version,
+  _package_name : String,
   _verbose : Bool
 ) -> Bool raise WorkflowError {
   raise WorkflowError("Workflow requires native target")
@@ -410,8 +410,9 @@ pub fn should_release(
 
 /// Run semver check (stub)
 pub fn run_semver_check(
-  _ctx : ReleaseContext
-) -> Unit raise WorkflowError {
+  _repo : @git.Repository,
+  _verbose : Bool
+) -> @semver_check.CheckResult raise WorkflowError {
   raise WorkflowError("Workflow requires native target")
 }
 
