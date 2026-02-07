@@ -16,6 +16,8 @@ pub fn bump_with_prerelease(
   typ : BumpType,
   prerelease : String?
 ) -> Version {
+  // Note: UInt overflow is theoretically possible (e.g., version 4294967295.0.0 + major bump)
+  // but impractical in real-world usage. No overflow check is performed.
   match typ {
     Major =>
       Version::{

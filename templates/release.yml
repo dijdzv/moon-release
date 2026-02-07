@@ -70,6 +70,8 @@ jobs:
 
   # Create release when release PR is merged
   # Triggered by commit message starting with "chore:" and containing "release v"
+  # Note: contains() does partial matching, so "release v" could match unintended
+  # commits. The startsWith('chore:') check narrows the scope significantly.
   release:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')
@@ -85,11 +87,14 @@ jobs:
       # Configure mooncakes credentials (only if publishing to mooncakes.io)
       # Remove this step if "publish": false in release.json
       - name: Configure mooncakes credentials
-        if: ${{ secrets.MOONCAKES_TOKEN != '' }}
         env:
           MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
           MOONCAKES_USERNAME: ${{ secrets.MOONCAKES_USERNAME }}
         run: |
+          if [ -z "$MOONCAKES_TOKEN" ]; then
+            echo "No mooncakes token configured, skipping credentials setup"
+            exit 0
+          fi
           mkdir -p ~/.moon
           jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
             '{"token": $token, "username": $username}' > ~/.moon/credentials.json

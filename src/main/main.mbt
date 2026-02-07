@@ -884,7 +884,7 @@ async fn cmd_check(
   subcmd : @clap.SimpleValue,
   _dry_run : Bool,
   verbose : Bool,
-  _config_path : String
+  config_path : String
 ) -> Unit {
   // Use try? + unwrap_or pattern for consistent error handling
   let output_format = (try? subcmd.get_one("output")).unwrap_or("text")
@@ -895,6 +895,9 @@ async fn cmd_check(
     println("")
     println("Analyzing commits since last tag...")
   }
+
+  // Load config for custom bump rules
+  let config = load_config(config_path, verbose~)
 
   // Get Git repository
   let repo = @git.Repository::current()
@@ -913,7 +916,7 @@ async fn cmd_check(
   let commits = try get_commits_since_last_tag(repo) catch {
     e => {
       if json_output {
-        println("{\"error\": \"" + escape_json_string(e.to_string()) + "\"}")
+        println("{\"error\": " + json_string(e.to_string()) + "}")
       } else {
         println("Error getting commits: " + e.to_string())
       }
@@ -921,9 +924,13 @@ async fn cmd_check(
     }
   } noraise { r => r }
 
-  // Determine bump type
+  // Determine bump type (uses custom bump rules from config if configured)
   let bump_type = if commits.length() > 0 {
-    @semver.determine_bump(commits.map(fn(c) { c.0 }))
+    @semver.determine_bump_with_custom(
+      commits.map(fn(c) { c.0 }),
+      config.custom_major_increment_regex,
+      config.custom_minor_increment_regex,
+    )
   } else {
     None
   }
@@ -1032,11 +1039,6 @@ fn commit_type_to_string(typ : @conventional.CommitType) -> String {
     @conventional.Revert => "revert"
     @conventional.Custom(s) => s
   }
-}
-
-/// Escape JSON string (wrapper for util module)
-fn escape_json_string(s : String) -> String {
-  @util.escape_json_string(s)
 }
 
 /// Create JSON string literal (with quotes)

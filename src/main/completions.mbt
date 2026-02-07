@@ -8,8 +8,7 @@ pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
     println("Error: shell argument is required")
     println("Usage: moon-release generate-completions <shell>")
     println("Supported shells: bash, zsh, fish")
-    c_exit(1)
-    panic()
+    exit_error()
   }
 
   match shell {
@@ -19,8 +18,7 @@ pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
     _ => {
       println("Error: unsupported shell: " + shell)
       println("Supported shells: bash, zsh, fish")
-      c_exit(1)
-      panic()
+      exit_error()
     }
   }
 }

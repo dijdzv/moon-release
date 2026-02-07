@@ -41,6 +41,18 @@ pub fn Version::parse(s : String) -> Version? {
     None => return None
   }
 
+  // Validate prerelease
+  match prerelease {
+    Some(pre) => if not(validate_prerelease(pre)) { return None }
+    None => ()
+  }
+
+  // Validate build metadata
+  match build_metadata {
+    Some(meta) => if not(validate_build_metadata(meta)) { return None }
+    None => ()
+  }
+
   Some(Version::{ major, minor, patch, prerelease, build_metadata })
 }
 
@@ -284,6 +296,36 @@ fn validate_prerelease_identifier(id : String) -> Bool {
   // Numeric-only identifiers cannot have leading zeros ("0" is allowed)
   if is_numeric && chars.length() > 1 && chars[0] == '0' {
     return false
+  }
+
+  true
+}
+
+/// Validate build metadata string (SemVer 2.0.0 compliant)
+/// - Only ASCII alphanumeric and hyphen [0-9A-Za-z-]
+/// - Dot-separated identifiers
+/// - Empty identifiers are not allowed
+/// - Unlike prerelease, leading zeros ARE allowed in numeric identifiers
+pub fn validate_build_metadata(metadata : String) -> Bool {
+  if metadata.is_empty() {
+    return false
+  }
+
+  let identifiers : Array[String] = metadata
+    .split(".")
+    .map(fn(sv) { sv.to_string() })
+    .collect()
+
+  for id in identifiers {
+    if id.is_empty() {
+      return false
+    }
+    let chars : Array[Char] = id.to_array()
+    for c in chars {
+      if not(is_alphanumeric_or_hyphen(c)) {
+        return false
+      }
+    }
   }
 
   true

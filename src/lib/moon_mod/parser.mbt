@@ -144,6 +144,7 @@ fn replace_json_field(
 
 /// Find JSON key position (skips occurrences inside string values)
 /// Returns the char index of the key pattern, only if followed by ':'
+/// Only matches keys at brace depth 1 (top-level keys inside the root object)
 fn find_json_key(haystack : String, needle : String) -> Int {
   let h_chars : Array[Char] = haystack.to_array()
   let n_chars : Array[Char] = needle.to_array()
@@ -153,6 +154,7 @@ fn find_json_key(haystack : String, needle : String) -> Int {
   }
 
   let mut in_string = false
+  let mut depth = 0
   let mut i = 0
   while i <= h_chars.length() - n_chars.length() {
     let c = h_chars[i]
@@ -183,9 +185,12 @@ fn find_json_key(haystack : String, needle : String) -> Int {
           k = k + 1
         }
         if k < h_chars.length() && h_chars[k] == ':' {
-          return i
+          // Only match at depth 1 (top-level keys inside root object)
+          if depth == 1 {
+            return i
+          }
         }
-        // Not a key - it's a string value, skip past the closing quote
+        // Not a match or wrong depth - it's a string value, skip past the closing quote
         // Move past the opening quote and into the string
         i = i + 1
         in_string = true
@@ -195,6 +200,13 @@ fn find_json_key(haystack : String, needle : String) -> Int {
         in_string = true
       }
       continue
+    }
+    if not(in_string) {
+      if c == '{' {
+        depth = depth + 1
+      } else if c == '}' {
+        depth = depth - 1
+      }
     }
     i = i + 1
   }

@@ -161,19 +161,43 @@ fn parse_body_and_footers(
     return (None, [])
   }
 
-  // Find footer start position
+  // Find footer start position by scanning backwards from the end
+  // Look for the last block of consecutive footer lines preceded by an empty line
   let mut footer_start = -1
-  for i = 0; i < rest.length(); i = i + 1 {
-    let line = rest[i]
-    if is_footer_line(line) {
-      // Verify there is an empty line before footer
-      if i > 0 && rest[i - 1].trim().is_empty() {
-        footer_start = i
-        break
-      } else if i == 0 {
-        // If footer starts from beginning (empty lines only, no body)
+  {
+    // Scan backwards to find the last footer line
+    let mut last_footer = -1
+    for i = rest.length() - 1; i >= 0; i = i - 1 {
+      if rest[i].trim().is_empty() {
+        // skip empty lines at the end
+        continue
+      }
+      if is_footer_line(rest[i]) {
+        last_footer = i
+      }
+      break
+    }
+    if last_footer >= 0 {
+      // Scan backwards from last_footer to find the start of the consecutive footer block
+      let mut block_start = last_footer
+      for i = last_footer - 1; i >= 0; i = i - 1 {
+        if rest[i].trim().is_empty() {
+          // Empty line means the block starts after this
+          break
+        }
+        if is_footer_line(rest[i]) {
+          block_start = i
+        } else {
+          // Non-footer, non-empty line — this isn't part of the footer block
+          block_start = last_footer
+          break
+        }
+      }
+      // Verify there is an empty line before the footer block, or it starts at index 0
+      if block_start == 0 {
         footer_start = 0
-        break
+      } else if block_start > 0 && rest[block_start - 1].trim().is_empty() {
+        footer_start = block_start
       }
     }
   }

@@ -58,6 +58,7 @@ pub fn json_string(s : String) -> String {
 
 /// Build JSON object
 /// Keys are escaped to prevent injection attacks
+/// Values must be pre-formatted JSON (use json_string() for strings, .to_string() for numbers/booleans)
 pub fn build_json_object(pairs : Array[(String, String)]) -> String {
   let result = StringBuilder::new()
   result.write_string("{")
@@ -76,6 +77,7 @@ pub fn build_json_object(pairs : Array[(String, String)]) -> String {
 }
 
 /// Build JSON array
+/// Items must be pre-formatted JSON (use json_string() for strings, .to_string() for numbers/booleans)
 pub fn build_json_array(items : Array[String]) -> String {
   let result = StringBuilder::new()
   result.write_string("[")

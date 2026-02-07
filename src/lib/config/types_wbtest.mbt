@@ -70,9 +70,9 @@ test "parse invalid json" {
   }
 }
 
-test "apply version template" {
+test "apply PR title template" {
   let config = Config::default()
-  let result = config.apply_version_template("1.2.3")
+  let result = config.apply_pr_title_template("1.2.3")
   assert_eq(result, "chore: release v1.2.3")
 }
 

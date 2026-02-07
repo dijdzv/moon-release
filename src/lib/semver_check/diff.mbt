@@ -366,6 +366,8 @@ fn diff_methods(
 
   // Added methods
   // For traits, adding a method is breaking (existing implementors must update)
+  // Note: Adding a method with a default implementation to a trait is not actually
+  // breaking, but we cannot distinguish this case without additional metadata.
   for m in new_methods {
     if old_map.get(m.name) is None {
       changes.push(

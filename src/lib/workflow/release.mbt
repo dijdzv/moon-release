@@ -1,4 +1,7 @@
 /// Get mooncakes credentials file path
+/// Note: On Windows, the fallback path ".moon/credentials.json" is relative to CWD,
+/// not the user's home directory. The correct Windows path would be
+/// %USERPROFILE%\.moon\credentials.json, but this is not currently implemented.
 async fn get_mooncakes_credentials_path() -> String {
   // ~/.moon/credentials.json
   let home = try @executor.run_command(["printenv", "HOME"]) catch {
@@ -174,6 +177,10 @@ async fn update_package_json_version(
 
   // Replace only the top-level "version" field by tracking brace nesting depth
   // Process character-by-character across all lines for correct depth tracking
+  // Note: Minified JSON (single-line) is not fully supported for package.json version
+  // replacement. When version_at_depth_1 is found, remaining chars on the same line
+  // don't update depth tracking. This is acceptable because package.json is typically
+  // formatted with one property per line.
   let lines = content.split("\n")
   let updated_lines : Array[String] = []
   let mut depth = 0
@@ -240,9 +247,14 @@ async fn update_package_json_version(
     raise WorkflowError("package.json does not contain a 'version' field at the top level")
   }
 
-  Some(updated_lines.iter().fold(init="", fn(acc, line) {
+  let result = updated_lines.iter().fold(init="", fn(acc, line) {
     if acc.is_empty() { line } else { acc + "\n" + line }
-  }))
+  })
+  if content.has_suffix("\n") && not(result.has_suffix("\n")) {
+    Some(result + "\n")
+  } else {
+    Some(result)
+  }
 }
 
 /// Get the leading whitespace of a line
@@ -373,8 +385,12 @@ pub async fn run_release_pr(
     }
   }
 
+  let branch_recovery_note = "\nNote: You may be on branch '" + branch_name + "'. Run 'git checkout " + base_branch + "' to return."
+
   // Run update (file updates)
-  run_update(ctx)
+  try run_update(ctx) catch {
+    e => raise WorkflowError(e.to_string() + branch_recovery_note)
+  } noraise { _ => () }
 
   // Stage changes - add relevant files based on publish configuration
   // Note: get_current_version() ensures at least one of moon_publish/npm_publish is enabled
@@ -386,10 +402,10 @@ pub async fn run_release_pr(
     files_to_stage.push("package.json")
   }
   let stage_result = try @executor.run_git(ctx.repo, files_to_stage) catch {
-    e => raise WorkflowError("Failed to stage files: " + e.to_string())
+    e => raise WorkflowError("Failed to stage files: " + e.to_string() + branch_recovery_note)
   } noraise { r => r }
   if not(stage_result.is_success()) {
-    raise WorkflowError("Failed to stage files: " + stage_result.stderr)
+    raise WorkflowError("Failed to stage files: " + stage_result.stderr + branch_recovery_note)
   }
 
   // Check if there are changes with try-catch-noraise pattern
@@ -421,12 +437,12 @@ pub async fn run_release_pr(
   }
 
   // Commit with try-catch-noraise pattern
-  let commit_msg = ctx.config.apply_version_template(ctx.new_version.to_string())
+  let commit_msg = ctx.config.apply_pr_title_template(ctx.new_version.to_string())
   let commit_result = try @executor.run_git(ctx.repo, ["commit", "-m", commit_msg]) catch {
-    e => raise WorkflowError("Failed to commit: " + e.to_string())
+    e => raise WorkflowError("Failed to commit: " + e.to_string() + branch_recovery_note)
   } noraise { r => r }
   if not(commit_result.is_success()) {
-    raise WorkflowError("Failed to commit: " + commit_result.stderr)
+    raise WorkflowError("Failed to commit: " + commit_result.stderr + branch_recovery_note)
   }
 
   // Push (force push to update)
@@ -436,7 +452,7 @@ pub async fn run_release_pr(
     println("Pushing with --force-with-lease (safe force push)...")
   }
   let push_result = try @executor.run_git(ctx.repo, ["push", "-u", "--force-with-lease", "origin", branch_name]) catch {
-    e => raise WorkflowError("Failed to push branch '" + branch_name + "' to origin: " + e.to_string())
+    e => raise WorkflowError("Failed to push branch '" + branch_name + "' to origin: " + e.to_string() + branch_recovery_note)
   } noraise { r => r }
   if not(push_result.is_success()) {
     let hint = if push_result.stderr.contains("permission") || push_result.stderr.contains("denied") {
@@ -446,7 +462,7 @@ pub async fn run_release_pr(
     } else {
       ""
     }
-    raise WorkflowError("Failed to push branch '" + branch_name + "' to origin: " + push_result.stderr + hint)
+    raise WorkflowError("Failed to push branch '" + branch_name + "' to origin: " + push_result.stderr + hint + branch_recovery_note)
   }
 
   // Return to original branch with try-catch-noraise pattern
@@ -509,7 +525,7 @@ pub async fn run_release_pr(
     Some((pr_num, _)) => {
       // Update existing PR with try-catch-noraise pattern
       let update_result = try @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body]) catch {
-        e => raise WorkflowError("Failed to update PR: " + e.to_string())
+        e => raise WorkflowError("Failed to update PR: " + e.to_string() + branch_recovery_note)
       } noraise { r => r }
       if not(update_result.is_success()) {
         println("Warning: Failed to update PR body: " + update_result.stderr)
@@ -536,7 +552,7 @@ pub async fn run_release_pr(
 
       // Create PR with try-catch-noraise pattern
       let pr_result = try @executor.run_gh(gh_args) catch {
-        e => raise WorkflowError("Failed to create pull request: " + e.to_string())
+        e => raise WorkflowError("Failed to create pull request: " + e.to_string() + branch_recovery_note)
       } noraise { r => r }
       if not(pr_result.is_success()) {
         let hint = if pr_result.stderr.contains("already exists") {
@@ -548,7 +564,7 @@ pub async fn run_release_pr(
         } else {
           ""
         }
-        raise WorkflowError("Failed to create pull request: " + pr_result.stderr + hint)
+        raise WorkflowError("Failed to create pull request: " + pr_result.stderr + hint + branch_recovery_note)
       }
 
       println("Created pull request: " + pr_result.stdout_trimmed())
@@ -588,7 +604,7 @@ async fn find_existing_release_pr(
 
   // Find PR with branch starting with release/
   for pr in prs {
-    if pr.head.has_prefix(branch_prefix) {
+    if pr.head.has_prefix(branch_prefix) && pr.number > 0U {
       return Some((pr.number, pr.head))
     }
   }
@@ -739,15 +755,21 @@ pub async fn run_release(
 
     // Create release with try-catch-noraise pattern
     let release_result = try @executor.run_gh(gh_args) catch {
-      e => raise WorkflowError("Failed to create release: " + e.to_string())
+      e => {
+        println("Warning: Failed to create GitHub release: " + e.to_string())
+        println("Tag '" + tag_name + "' was already pushed. Create the release manually.")
+        @executor.CommandResult::failed("release creation failed")
+      }
     } noraise { r => r }
     if not(release_result.is_success()) {
-      raise WorkflowError(
-        "Failed to create release: " + release_result.stderr,
-      )
+      if release_result.stderr != "release creation failed" {
+        println("Warning: Failed to create GitHub release: " + release_result.stderr)
+        println("Tag '" + tag_name + "' was already pushed. Create the release manually.")
+      }
+      // Continue to publish steps instead of raising
+    } else {
+      println("Created GitHub release: " + tag_name)
     }
-
-    println("Created GitHub release: " + tag_name)
   }
 
   // Publish to mooncakes.io
@@ -1147,7 +1169,7 @@ pub async fn collect_package_release_info(
     }
 
     // Determine bump type
-    let bump_type = match @semver.determine_bump(commits.map(fn(c) { c.0 })) {
+    let bump_type = match @semver.determine_bump_with_custom(commits.map(fn(c) { c.0 }), config.custom_major_increment_regex, config.custom_minor_increment_regex) {
       Some(t) => t
       None => {
         if verbose {
@@ -1298,7 +1320,7 @@ pub async fn run_update_packages(
     }
 
     // Determine bump type
-    let bump_type = match @semver.determine_bump(commits.map(fn(c) { c.0 })) {
+    let bump_type = match @semver.determine_bump_with_custom(commits.map(fn(c) { c.0 }), config.custom_major_increment_regex, config.custom_minor_increment_regex) {
       Some(t) => t
       None => {
         if verbose {

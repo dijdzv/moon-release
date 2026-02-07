@@ -394,7 +394,7 @@ fn parse_string_array(
   }
 }
 
-/// Apply version to title template
-pub fn Config::apply_version_template(self : Config, version : String) -> String {
+/// Apply version to PR title template
+pub fn Config::apply_pr_title_template(self : Config, version : String) -> String {
   self.pr_title.replace(old="{{ version }}", new=version)
 }

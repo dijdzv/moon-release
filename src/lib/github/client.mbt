@@ -271,6 +271,8 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
     _ => raise GitHubError("Expected JSON object in PR response")
   }
 
+  // Note: 0 is used as a sentinel value for parse failure.
+  // Callers should check for number == 0 before using the PR number.
   let number = match obj.get("number") {
     Some(Number(n, ..)) =>
       // Treat negative, non-integer, or overflow values as 0
@@ -325,8 +327,12 @@ pub fn parse_pull_request_list_json(
       Object(obj) => {
         let number = match obj.get("number") {
           Some(Number(n, ..)) =>
-            // Bounds check for UInt overflow
-            if n >= 0.0 && n <= uint_max_as_double { n.to_uint() } else { 0U }
+            // Treat negative, non-integer, or overflow values as 0
+            if n >= 0.0 && n <= uint_max_as_double && n % 1.0 == 0.0 {
+              n.to_uint()
+            } else {
+              0U
+            }
           _ => 0U
         }
         let title = match obj.get("title") {
