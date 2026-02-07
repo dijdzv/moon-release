@@ -37,7 +37,17 @@ pub async fn validate_publish_config(
       _ => ""
     } noraise { c => c }
 
-    if creds_result.is_empty() || not(creds_result.contains("token")) {
+    // Parse JSON and check for "token" field
+    let has_token = if creds_result.is_empty() {
+      false
+    } else {
+      match (try? @json.parse(creds_result)).to_option() {
+        Some(Object(map)) => not(map.get("token") is None)
+        _ => false
+      }
+    }
+
+    if not(has_token) {
       println("Warning: mooncakes credentials not found at " + creds_path)
       println("  moon publish may fail without authentication.")
       println("  Run 'moon login' to authenticate with mooncakes.io")
@@ -76,35 +86,27 @@ async fn get_package_name() -> String {
   moon_mod.name
 }
 
-/// Read version from package.json
-#warnings("-unused_error_type")
+/// Read version from package.json using JSON parser
 pub async fn get_package_json_version() -> @semver.Version? raise WorkflowError {
   // Try to read package.json
   let content = try @fs.read_file("package.json").text() catch {
     _ => return None  // File doesn't exist
   } noraise { c => c }
 
-  // Find the version field
-  let lines = content.split("\n")
-  for line_view in lines {
-    let line = line_view.to_string()
-    let trimmed = line.trim_start()
-    if trimmed.has_prefix("\"version\"") && trimmed.contains(":") {
-      // Extract version value between quotes
-      // Pattern: "version": "x.y.z"
-      let parts = trimmed.split("\"")
-      let part_array : Array[String] = []
-      for p in parts {
-        part_array.push(p.to_string())
+  // Parse as JSON to safely extract top-level "version" field
+  let json = try @json.parse(content) catch {
+    e => raise WorkflowError("Failed to parse package.json: " + e.to_string())
+  } noraise { j => j }
+
+  // Extract version from top-level object
+  match json {
+    Object(map) =>
+      match map.get("version") {
+        Some(String(version_str)) => @semver.Version::parse(version_str)
+        _ => None
       }
-      // parts[0] = "", parts[1] = "version", parts[2] = ": ", parts[3] = version
-      if part_array.length() >= 4 {
-        let version_str = part_array[3]
-        return @semver.Version::parse(version_str)
-      }
-    }
+    _ => raise WorkflowError("package.json is not a valid JSON object")
   }
-  None
 }
 
 /// Get current version from the appropriate source based on config
@@ -161,47 +163,24 @@ async fn update_package_json_version(
     _ => return None  // File doesn't exist, that's OK
   } noraise { c => c }
 
-  // Find and replace the version field using simple pattern matching
-  // Look for "version": "x.y.z" pattern
-  let lines = content.split("\n")
-  let updated_lines : Array[String] = []
-  let mut found = false
-
-  for line_view in lines {
-    let line = line_view.to_string()
-    let trimmed = line.trim_start()
-    if trimmed.has_prefix("\"version\"") && trimmed.contains(":") {
-      // This is the version line, replace the value
-      // Preserve indentation
-      let indent = get_line_indent(line)
-      updated_lines.push(indent + "\"version\": \"" + new_version.to_string() + "\",")
-      found = true
-    } else {
-      updated_lines.push(line)
-    }
+  // First, parse JSON to get the current version string safely
+  let current_version_str = match get_package_json_version() {
+    Some(v) => v.to_string()
+    None => raise WorkflowError("package.json does not contain a valid 'version' field")
   }
 
-  if not(found) {
-    raise WorkflowError("package.json does not contain a 'version' field")
+  // Replace "version": "current" with "version": "new" in the raw text
+  // This preserves the original formatting (indentation, trailing commas, etc.)
+  let old_pattern = "\"version\": \"" + current_version_str + "\""
+  let new_pattern = "\"version\": \"" + new_version.to_string() + "\""
+
+  let updated = content.to_string().replace(old=old_pattern, new=new_pattern)
+
+  if updated == content.to_string() {
+    raise WorkflowError("Failed to update version in package.json")
   }
 
-  Some(updated_lines.iter().fold(init="", fn(acc, line) {
-    if acc.is_empty() { line } else { acc + "\n" + line }
-  }))
-}
-
-/// Get the leading whitespace of a line
-fn get_line_indent(line : String) -> String {
-  let chars = line.to_array()
-  let sb = StringBuilder::new()
-  for c in chars {
-    if c == ' ' || c == '\t' {
-      sb.write_char(c)
-    } else {
-      break
-    }
-  }
-  sb.to_string()
+  Some(updated)
 }
 
 /// update command: local update only
@@ -321,8 +300,19 @@ pub async fn run_release_pr(
   // Run update (file updates)
   run_update(ctx)
 
-  // Stage changes with try-catch-noraise pattern
-  let stage_result = try @executor.run_git(ctx.repo, ["add", "moon.mod.json"]) catch {
+  // Stage changes - add relevant files based on publish configuration
+  let files_to_stage : Array[String] = ["add"]
+  if ctx.config.moon_publish {
+    files_to_stage.push("moon.mod.json")
+  }
+  if ctx.config.npm_publish {
+    files_to_stage.push("package.json")
+  }
+  // Always add moon.mod.json as fallback (version source)
+  if not(ctx.config.moon_publish) && not(ctx.config.npm_publish) {
+    files_to_stage.push("moon.mod.json")
+  }
+  let stage_result = try @executor.run_git(ctx.repo, files_to_stage) catch {
     e => raise WorkflowError("Failed to stage files: " + e.to_string())
   } noraise { r => r }
   if not(stage_result.is_success()) {
@@ -786,43 +776,29 @@ pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
   }
 }
 
-/// npm publish command: build JS target and publish to npm registry
+/// npm publish command: publish to npm registry
+/// Note: JS build is handled by pre_build_js() before tag creation
 pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   if ctx.verbose {
     println("Publishing to npm...")
   }
 
-  // Build JS target first
-  let build_cmd = get_npm_build_command(ctx.config)
-  let build_cmd_str = build_cmd.iter().fold(init="", fn(acc, s) {
+  // Build npm publish command
+  let publish_cmd : Array[String] = ["npm", "publish"]
+  if ctx.config.npm_publish_provenance {
+    publish_cmd.push("--provenance")
+  }
+  publish_cmd.push("--access")
+  publish_cmd.push("public")
+
+  let publish_cmd_str = publish_cmd.iter().fold(init="", fn(acc, s) {
     if acc.is_empty() { s } else { acc + " " + s }
   })
 
   if ctx.dry_run {
-    println("[dry-run] Would run: " + build_cmd_str)
-    println("[dry-run] Would run: npm publish --provenance --access public")
+    println("[dry-run] Would run: " + publish_cmd_str)
     return
   }
-
-  if ctx.verbose {
-    println("  Building JS target: " + build_cmd_str)
-  }
-
-  // Run build command - fail if build fails
-  let build_result = try @executor.run_command(build_cmd) catch {
-    e => raise WorkflowError("Failed to build JS target: " + e.to_string())
-  } noraise { r => r }
-
-  if not(build_result.is_success()) {
-    raise WorkflowError("Failed to build JS target: " + build_result.stderr)
-  }
-
-  if ctx.verbose {
-    println("  JS build successful")
-  }
-
-  // Build npm publish command with --provenance for Trusted Publishing
-  let publish_cmd = ["npm", "publish", "--provenance", "--access", "public"]
 
   // Use timeout from config (default 300 seconds = 5 minutes)
   let timeout = ctx.config.npm_publish_timeout

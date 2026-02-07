@@ -352,6 +352,69 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
   None
 }
 
+/// Validate publish configuration (stub)
+pub fn validate_publish_config(
+  _config : @config.Config,
+  verbose~ : Bool = false
+) -> Unit raise WorkflowError {
+  ignore(verbose)
+  raise WorkflowError("Workflow requires native target")
+}
+
+/// Read version from package.json (stub)
+pub fn get_package_json_version() -> @semver.Version? raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
+/// Get current version (stub)
+pub fn get_current_version(
+  _config : @config.Config
+) -> @semver.Version raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
+/// Pre-build JS target (stub)
+pub fn pre_build_js(_ctx : ReleaseContext) -> Unit raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
+/// npm publish (stub)
+pub fn run_npm_publish(_ctx : ReleaseContext) -> Unit raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
+/// Collect package release info (stub)
+pub fn collect_package_release_info(
+  _config : @config.Config,
+  _repo : @git.Repository,
+  _verbose : Bool
+) -> Array[PackageReleaseInfo] raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
+/// Get registry version (stub)
+pub fn get_registry_version(
+  _package_name : String
+) -> @semver.Version? raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
+/// Check if should release (stub)
+pub fn should_release(
+  _config : @config.Config,
+  _repo : @git.Repository,
+  _verbose : Bool
+) -> Bool raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
+/// Run semver check (stub)
+pub fn run_semver_check(
+  _ctx : ReleaseContext
+) -> Unit raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
 /// Get the npm build command (from config or default)
 pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
   match config.npm_build_command {

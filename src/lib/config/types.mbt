@@ -16,6 +16,7 @@ pub struct Config {
   moon_publish_frozen : Bool
   npm_publish : Bool
   npm_build_command : String?  // Command to build JS target before npm publish
+  npm_publish_provenance : Bool  // Use --provenance flag (requires GitHub Actions with id-token: write)
   semver_check : Bool
   pr_branch_prefix : String
   base_branch : String
@@ -70,6 +71,7 @@ pub fn Config::default() -> Config {
     moon_publish_frozen: false,
     npm_publish: false,  // Disabled by default
     npm_build_command: None,  // Default: "moon build --target js" when npm_publish is true
+    npm_publish_provenance: true,  // Enabled by default (for Trusted Publishing)
     semver_check: false,
     pr_branch_prefix: "release/",
     base_branch: "main",
@@ -138,6 +140,7 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     moon_publish_frozen: parse_bool(obj, "moon_publish_frozen", d.moon_publish_frozen),
     npm_publish: parse_bool(obj, "npm_publish", d.npm_publish),
     npm_build_command: parse_optional_string(obj, "npm_build_command", d.npm_build_command),
+    npm_publish_provenance: parse_bool(obj, "npm_publish_provenance", d.npm_publish_provenance),
     semver_check: parse_bool(obj, "semver_check", d.semver_check),
     pr_branch_prefix: parse_string(obj, "pr_branch_prefix", d.pr_branch_prefix),
     base_branch: parse_string(obj, "base_branch", d.base_branch),

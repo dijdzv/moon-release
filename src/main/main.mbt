@@ -759,6 +759,7 @@ fn generate_default_config_json() -> String {
     #|  "moon_publish": true,
     #|  "moon_publish_frozen": false,
     #|  "npm_publish": false,
+    #|  "npm_publish_provenance": true,
     #|  "semver_check": false,
     #|  "pr_branch_prefix": "release/",
     #|  "base_branch": "main",
@@ -1342,6 +1343,11 @@ fn cmd_generate_schema() -> Unit {
     #|      "type": ["string", "null"],
     #|      "description": "Command to build JS target before npm publish. Default: moon build --target js",
     #|      "default": null
+    #|    },
+    #|    "npm_publish_provenance": {
+    #|      "type": "boolean",
+    #|      "description": "Use --provenance flag for npm publish (requires GitHub Actions with id-token: write). Set to false for local or non-GitHub CI publishing.",
+    #|      "default": true
     #|    },
     #|    "npm_publish_timeout": {
     #|      "type": "integer",

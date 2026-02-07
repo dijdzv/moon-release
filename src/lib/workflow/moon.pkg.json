@@ -10,7 +10,8 @@
     "moon-release/src/lib/semver_check",
     "moon-release/src/lib/util",
     "moonbitlang/async/fs",
-    "moonbitlang/core/hashmap"
+    "moonbitlang/core/hashmap",
+    "moonbitlang/core/json"
   ],
   "targets": {
     "context.mbt": ["native"],

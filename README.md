@@ -148,6 +148,7 @@ Customize behavior with `release.json`.
   "moon_publish_timeout": 300,
   "npm_publish": false,
   "npm_build_command": null,
+  "npm_publish_provenance": true,
   "npm_publish_timeout": 300,
   "semver_check": true,
   "registry_check": false,
@@ -180,7 +181,8 @@ Customize behavior with `release.json`.
 | `moon_publish_frozen` | `false` | Use `moon publish --frozen` |
 | `moon_publish_timeout` | `300` | Publish timeout in seconds |
 | `npm_publish` | `false` | Whether to publish to npm registry |
-| `npm_build_command` | `null` | Custom build command before npm publish (default: `moon build --target js`) |
+| `npm_build_command` | `null` | Custom build command before npm publish (default: `moon build --target js`). Note: split by spaces, paths with spaces are not supported. |
+| `npm_publish_provenance` | `true` | Use `--provenance` flag for npm publish. Set to `false` for local or non-GitHub CI publishing. |
 | `npm_publish_timeout` | `300` | npm publish timeout in seconds |
 | `semver_check` | `false` | Run API compatibility check |
 | `registry_check` | `false` | Check registry version before publish |
