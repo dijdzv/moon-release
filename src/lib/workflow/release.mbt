@@ -331,58 +331,21 @@ pub async fn get_monorepo_representative_version(
   verbose : Bool,
   bump_all~ : Bool = false
 ) -> (@semver.Version, @semver.Version, Array[(@conventional.ConventionalCommit, String)]) raise WorkflowError {
+  let plans = resolve_version_plan(config, repo, forced_bump, verbose, bump_all~)
+
+  if plans.is_empty() {
+    raise WorkflowError("No releasable commits found across packages")
+  }
+
+  // Extract representative version (highest new_version) and deduplicated commits
   let mut max_new : @semver.Version? = None
   let mut max_current : @semver.Version? = None
   let all_commits : Array[(@conventional.ConventionalCommit, String)] = []
   let seen_hashes : @hashmap.HashMap[String, Bool] = @hashmap.new()
 
-  // When bump_all without forced_bump, determine max bump type first (2-pass)
-  let effective_bump = compute_effective_bump(config, repo, forced_bump, bump_all)
-
-  // When bump_all is set, we need a bump type to proceed
-  if bump_all && effective_bump is None {
-    raise WorkflowError("No releasable commits found across packages")
-  }
-
-  // Phase 1: Collect per-package info
-  let pkg_entries : Array[(
-    @config.PackageConfig,
-    @semver.Version,
-    @semver.BumpType,
-  )] = []
-
-  for pkg in config.packages {
-    // Path validation (prevent directory traversal)
-    if not(validate_path(pkg.path)) {
-      if verbose {
-        println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
-      }
-      continue
-    }
-
-    // Read package version
-    let current_version = match get_package_current_version(pkg) {
-      Some(v) => v
-      None => {
-        if verbose {
-          println("  Warning: Could not read version for " + pkg.name)
-        }
-        continue
-      }
-    }
-
-    // Get commits for this package
-    let commits = try get_package_commits(repo, pkg.path) catch {
-      e => {
-        if verbose {
-          println("  Warning: Could not get commits for " + pkg.name + ": " + e.to_string())
-        }
-        continue
-      }
-    } noraise { c => c }
-
+  for plan in plans {
     // Deduplicate commits by hash
-    for commit in commits {
+    for commit in plan.commits {
       let (_, hash) = commit
       if not(seen_hashes.contains(hash)) {
         seen_hashes.set(hash, true)
@@ -390,72 +353,16 @@ pub async fn get_monorepo_representative_version(
       }
     }
 
-    // bump_all controls which packages are included (all vs changed-only)
-    // forced_bump only controls the bump type, not which packages are bumped
-    if commits.is_empty() && not(bump_all) {
-      continue
-    }
-
-    // Determine bump type for this package
-    let bump_type = match effective_bump {
-      Some(fb) => fb
-      None =>
-        match @semver.determine_bump_with_custom(
-          commits.map(fn(c) { c.0 }),
-          config.custom_major_increment_regex,
-          config.custom_minor_increment_regex,
-        ) {
-          Some(t) => t
-          None => continue
-        }
-    }
-
-    pkg_entries.push((pkg, current_version, bump_type))
-  }
-
-  // Phase 2: Consolidate bump types by version_group
-  let group_bumps : @hashmap.HashMap[String, @semver.BumpType] = @hashmap.new()
-
-  for entry in pkg_entries {
-    let (pkg, _, bump_type) = entry
-    match pkg.version_group {
-      Some(group) => {
-        let should_update = match group_bumps.get(group) {
-          None => true
-          Some(existing) => bump_priority(bump_type) > bump_priority(existing)
-        }
-        if should_update {
-          group_bumps.set(group, bump_type)
-        }
-      }
-      None => ()
-    }
-  }
-
-  // Phase 3: Compute representative version using group-consolidated bump types
-  for entry in pkg_entries {
-    let (pkg, current_version, bump_type) = entry
-    let final_bump_type = match pkg.version_group {
-      Some(group) =>
-        match group_bumps.get(group) {
-          Some(group_bump) => group_bump
-          None => bump_type
-        }
-      None => bump_type
-    }
-
-    let new_version = @semver.bump(current_version, final_bump_type)
-
     match max_new {
       Some(mn) => {
-        if new_version.compare(mn) > 0 {
-          max_new = Some(new_version)
-          max_current = Some(current_version)
+        if plan.new_version.compare(mn) > 0 {
+          max_new = Some(plan.new_version)
+          max_current = Some(plan.old_version)
         }
       }
       None => {
-        max_new = Some(new_version)
-        max_current = Some(current_version)
+        max_new = Some(plan.new_version)
+        max_current = Some(plan.old_version)
       }
     }
   }
@@ -1373,13 +1280,152 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   println("Published to npm")
 }
 
-/// Package update info
-priv struct PackageUpdateInfo {
-  pkg : @config.PackageConfig
-  moon_mod_path : String?  // None for npm-only packages
-  moon_mod_content : String?  // None for npm-only packages
-  current_version : @semver.Version
+// ============================================================================
+// Shared monorepo version resolution pipeline (Phase 3 DDD)
+// ============================================================================
+
+/// Resolved version plan for a single package
+/// Output of the shared 3-phase pipeline: collect → consolidate → apply
+pub(all) struct PackageVersionPlan {
+  name : String
+  path : String
+  old_version : @semver.Version
+  new_version : @semver.Version
   bump_type : @semver.BumpType
+  commits : Array[(@conventional.ConventionalCommit, String)]
+}
+
+/// Shared 3-phase monorepo version resolution pipeline
+/// Phase 1: Collect per-package info (version, commits, raw bump)
+/// Phase 2: Consolidate bump types by version_group
+/// Phase 3: Compute final versions with consolidated bumps
+async fn resolve_version_plan(
+  config : @config.Config,
+  repo : @git.Repository,
+  forced_bump : @semver.BumpType?,
+  verbose : Bool,
+  bump_all~ : Bool = false
+) -> Array[PackageVersionPlan] raise WorkflowError {
+  if config.packages.is_empty() {
+    return []
+  }
+
+  // Pre-compute effective bump for bump_all mode
+  let effective_bump = compute_effective_bump(config, repo, forced_bump, bump_all)
+
+  if bump_all && effective_bump is None {
+    return []
+  }
+
+  // Phase 1: Collect per-package info
+  let entries : Array[(String, String, @semver.Version, @semver.BumpType, Array[(@conventional.ConventionalCommit, String)], String?)] = []
+
+  for pkg in config.packages {
+    if verbose {
+      println("  Analyzing package: " + pkg.name)
+    }
+
+    if not(validate_path(pkg.path)) {
+      if verbose {
+        println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
+      }
+      continue
+    }
+
+    let current_version = match get_package_current_version(pkg) {
+      Some(v) => v
+      None => {
+        if verbose {
+          println("  Warning: Could not determine version for " + pkg.name)
+        }
+        continue
+      }
+    }
+
+    let commits = try get_package_commits(repo, pkg.path) catch {
+      e => {
+        if verbose {
+          println("  Warning: Could not get commits for " + pkg.name + ": " + e.to_string())
+        }
+        continue
+      }
+    } noraise { c => c }
+
+    if commits.is_empty() && not(bump_all) {
+      if verbose {
+        println("    No changes in " + pkg.name)
+      }
+      continue
+    }
+
+    let bump_type = match effective_bump {
+      Some(fb) => fb
+      None =>
+        match @semver.determine_bump_with_custom(
+          commits.map(fn(c) { c.0 }),
+          config.custom_major_increment_regex,
+          config.custom_minor_increment_regex,
+        ) {
+          Some(t) => t
+          None => {
+            if verbose {
+              println("    No releasable changes in " + pkg.name)
+            }
+            continue
+          }
+        }
+    }
+
+    entries.push((pkg.name, pkg.path, current_version, bump_type, commits, pkg.version_group))
+  }
+
+  // Phase 2: Consolidate bump types by version_group
+  let group_bumps : @hashmap.HashMap[String, @semver.BumpType] = @hashmap.new()
+
+  for entry in entries {
+    let (_, _, _, bump_type, _, version_group) = entry
+    match version_group {
+      Some(group) => {
+        let should_update = match group_bumps.get(group) {
+          None => true
+          Some(existing) => bump_priority(bump_type) > bump_priority(existing)
+        }
+        if should_update {
+          group_bumps.set(group, bump_type)
+        }
+      }
+      None => ()
+    }
+  }
+
+  // Phase 3: Compute final versions
+  let plans : Array[PackageVersionPlan] = []
+
+  for entry in entries {
+    let (name, path, old_version, bump_type, commits, version_group) = entry
+    let final_bump = match version_group {
+      Some(group) =>
+        match group_bumps.get(group) {
+          Some(group_bump) => group_bump
+          None => bump_type
+        }
+      None => bump_type
+    }
+
+    let new_version = @semver.bump(old_version, final_bump)
+    plans.push(
+      PackageVersionPlan::{
+        name,
+        path,
+        old_version,
+        new_version,
+        bump_type: final_bump,
+        commits,
+      },
+    )
+  }
+
+  plans
 }
 
 /// Package release info (for PR body generation)
@@ -1391,8 +1437,7 @@ pub struct PackageReleaseInfo {
 }
 
 /// Collect package release info for monorepo PR body
-// Suppress: WorkflowError declared for API consistency with other workflow functions
-#warnings("-unused_error_type")
+/// Delegates to resolve_version_plan for the shared 3-phase pipeline
 pub async fn collect_package_release_info(
   config : @config.Config,
   repo : @git.Repository,
@@ -1400,147 +1445,21 @@ pub async fn collect_package_release_info(
   forced_bump~ : @semver.BumpType? = None,
   bump_all~ : Bool = false
 ) -> Array[PackageReleaseInfo] raise WorkflowError {
-  let packages : Array[PackageReleaseInfo] = []
+  let plans = resolve_version_plan(config, repo, forced_bump, verbose, bump_all~)
 
-  if config.packages.is_empty() {
-    return packages
-  }
-
-  // When bump_all without forced_bump, determine max bump type first (2-pass)
-  let effective_bump = compute_effective_bump(config, repo, forced_bump, bump_all)
-
-  if bump_all && effective_bump is None {
-    return packages
-  }
-
-  // Phase 1: Collect information for each package
-  let updates : Array[(String, @semver.Version, @semver.BumpType, Array[(@conventional.ConventionalCommit, String)])] = []
-
-  for pkg in config.packages {
-    if verbose {
-      println("  Analyzing package: " + pkg.name)
+  plans.map(fn(plan) {
+    PackageReleaseInfo::{
+      name: plan.name,
+      old_version: plan.old_version,
+      new_version: plan.new_version,
+      commits: plan.commits,
     }
-
-    // Path validation (prevent directory traversal)
-    if not(validate_path(pkg.path)) {
-      if verbose {
-        println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
-      }
-      continue
-    }
-
-    // Read package version (from moon.mod.json or package.json)
-    let current_version = match get_package_current_version(pkg) {
-      Some(v) => v
-      None => {
-        if verbose {
-          println("  Warning: Could not determine version for " + pkg.name)
-        }
-        continue
-      }
-    }
-
-    // Get commits with try-catch-noraise pattern
-    let commits = try get_package_commits(repo, pkg.path) catch {
-      e => {
-        if verbose {
-          println("  Warning: Could not get commits for " + pkg.name + ": " + e.to_string())
-        }
-        continue
-      }
-    } noraise { c => c }
-
-    // bump_all controls which packages are included (all vs changed-only)
-    // forced_bump only controls the bump type, not which packages are bumped
-    if commits.is_empty() && not(bump_all) {
-      if verbose {
-        println("    No changes in " + pkg.name)
-      }
-      continue
-    }
-
-    // Determine bump type
-    let bump_type = match effective_bump {
-      Some(fb) => fb
-      None =>
-        match @semver.determine_bump_with_custom(commits.map(fn(c) { c.0 }), config.custom_major_increment_regex, config.custom_minor_increment_regex) {
-          Some(t) => t
-          None => {
-            if verbose {
-              println("    No releasable changes in " + pkg.name)
-            }
-            continue
-          }
-        }
-    }
-
-    updates.push((pkg.name, current_version, bump_type, commits))
-  }
-
-  // Phase 2: Consolidate bump types by version_group (simplified - use max bump)
-  let group_bumps : @hashmap.HashMap[String, @semver.BumpType] = @hashmap.new()
-
-  for i = 0; i < updates.length(); i = i + 1 {
-    let (name, _, bump_type, _) = updates[i]
-    // Find the package config to get version_group
-    for pkg in config.packages {
-      if pkg.name == name {
-        match pkg.version_group {
-          Some(group) => {
-            let current_group_bump = group_bumps.get(group)
-            let should_update = match current_group_bump {
-              None => true
-              Some(existing) => bump_priority(bump_type) > bump_priority(existing)
-            }
-            if should_update {
-              group_bumps.set(group, bump_type)
-            }
-          }
-          None => ()
-        }
-        break
-      }
-    }
-  }
-
-  // Phase 3: Build PackageReleaseInfo with consolidated versions
-  for i = 0; i < updates.length(); i = i + 1 {
-    let (name, current_version, bump_type, commits) = updates[i]
-
-    // Find version_group for this package
-    let mut final_bump = bump_type
-    for pkg in config.packages {
-      if pkg.name == name {
-        match pkg.version_group {
-          Some(group) =>
-            match group_bumps.get(group) {
-              Some(group_bump) => final_bump = group_bump
-              None => ()
-            }
-          None => ()
-        }
-        break
-      }
-    }
-
-    let new_version = @semver.bump(current_version, final_bump)
-    packages.push(
-      PackageReleaseInfo::{
-        name,
-        old_version: current_version,
-        new_version,
-        commits,
-      },
-    )
-  }
-
-  packages
+  })
 }
 
 /// Monorepo: update multiple packages
-// Suppress: WorkflowError declared for API consistency. Errors are handled internally
-// with warnings printed to stdout, allowing partial success in monorepo scenarios.
-#warnings("-unused_error_type")
+/// Delegates to resolve_version_plan for the shared 3-phase pipeline,
+/// then applies file updates based on the resolved plan.
 pub async fn run_update_packages(
   config : @config.Config,
   repo : @git.Repository,
@@ -1560,242 +1479,103 @@ pub async fn run_update_packages(
     println("Updating \{config.packages.length()} packages...")
   }
 
-  // When bump_all without forced_bump, determine max bump type first (2-pass)
-  let effective_bump = compute_effective_bump(config, repo, forced_bump, bump_all)
+  let plans = resolve_version_plan(config, repo, forced_bump, verbose, bump_all~)
 
-  if bump_all && effective_bump is None {
+  if plans.is_empty() {
     if verbose {
       println("No releasable commits found across packages.")
     }
     return
   }
 
-  // Phase 1: Collect information for each package
-  let updates : Array[PackageUpdateInfo] = []
-
-  for pkg in config.packages {
-    if verbose {
-      println("  Analyzing package: " + pkg.name)
-    }
-
-    // Path validation (prevent directory traversal)
-    if not(validate_path(pkg.path)) {
-      if verbose {
-        println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
-      }
-      continue
-    }
-
-    let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
-
-    // Read version from moon.mod.json and/or package.json
-    // If both are enabled, use the higher version (consistent with get_current_version)
-    let mut moon_mod_path : String? = None
-    let mut moon_mod_content : String? = None
-    let mut moon_version : @semver.Version? = None
-    let mut npm_version : @semver.Version? = None
-
-    // Read moon.mod.json (if moon_publish is enabled)
-    if pkg.moon_publish {
-      let mmp = pkg_path + "moon.mod.json"
-      let content = try @fs.read_file(mmp).text() catch {
-        _ => {
-          println("  Warning: Could not read " + mmp)
-          ""
-        }
-      } noraise { c => c }
-
-      if not(content.is_empty()) {
-        let moon_mod = try @moon_mod.parse(content) catch {
-          e => {
-            println("  Warning: Could not parse " + mmp + ": " + e.to_string())
-            continue
-          }
-        } noraise { m => m }
-
-        moon_version = @semver.Version::parse(moon_mod.version)
-        if moon_version is Some(_) {
-          moon_mod_path = Some(mmp)
-          moon_mod_content = Some(content)
-        } else {
-          println("  Warning: Invalid version in " + mmp)
-        }
+  // Find package config by name (for publish target and version_group info)
+  fn find_pkg(name : String) -> @config.PackageConfig? {
+    for pkg in config.packages {
+      if pkg.name == name {
+        return Some(pkg)
       }
     }
-
-    // Read package.json (if npm_publish is enabled)
-    if pkg.npm_publish {
-      let pjp = pkg_path + "package.json"
-      let content = try @fs.read_file(pjp).text() catch {
-        _ => {
-          println("  Warning: Could not read " + pjp)
-          ""
-        }
-      } noraise { c => c }
-
-      if not(content.is_empty()) {
-        npm_version = try parse_package_json_version(content) catch {
-          e => {
-            println("  Warning: Could not parse " + pjp + ": " + e.to_string())
-            None
-          }
-        } noraise { v => v }
-      }
-    }
-
-    // Use the higher version if both are available
-    let current_version = match (moon_version, npm_version) {
-      (Some(mv), Some(nv)) => Some(if mv.compare(nv) >= 0 { mv } else { nv })
-      (Some(mv), None) => Some(mv)
-      (None, Some(nv)) => Some(nv)
-      (None, None) => None
-    }
-
-    let current_version = match current_version {
-      Some(v) => v
-      None => {
-        println("  Warning: Could not determine version for " + pkg.name)
-        continue
-      }
-    }
-
-    // Get commits with try-catch-noraise pattern
-    let commits = try get_package_commits(repo, pkg.path) catch {
-      e => {
-        println("  Warning: Could not get commits for " + pkg.name + ": " + e.to_string())
-        continue
-      }
-    } noraise { c => c }
-
-    // bump_all controls which packages are included (all vs changed-only)
-    // forced_bump only controls the bump type, not which packages are bumped
-    if commits.is_empty() && not(bump_all) {
-      if verbose {
-        println("    No changes in " + pkg.name)
-      }
-      continue
-    }
-
-    // Determine bump type
-    let bump_type = match effective_bump {
-      Some(fb) => fb
-      None =>
-        match @semver.determine_bump_with_custom(commits.map(fn(c) { c.0 }), config.custom_major_increment_regex, config.custom_minor_increment_regex) {
-          Some(t) => t
-          None => {
-            if verbose {
-              println("    No releasable changes in " + pkg.name)
-            }
-            continue
-          }
-        }
-    }
-
-    updates.push(
-      PackageUpdateInfo::{
-        pkg,
-        moon_mod_path,
-        moon_mod_content,
-        current_version,
-        bump_type,
-      },
-    )
+    None
   }
 
-  // Phase 2: Consolidate bump types by version_group
-  let group_bumps : @hashmap.HashMap[String, @semver.BumpType] = @hashmap.new()
-
-  for update in updates {
-    match update.pkg.version_group {
-      Some(group) => {
-        let current_group_bump = group_bumps.get(group)
-        let should_update = match current_group_bump {
-          None => true
-          Some(existing) => bump_priority(update.bump_type) > bump_priority(existing)
-        }
-        if should_update {
-          group_bumps.set(group, update.bump_type)
-        }
-      }
-      None => ()
-    }
-  }
-
-  // Phase 3: Execute updates
-  for update in updates {
-    // Use group bump type if version_group is specified
-    let final_bump_type = match update.pkg.version_group {
-      Some(group) =>
-        match group_bumps.get(group) {
-          Some(group_bump) => group_bump
-          None => update.bump_type
-        }
-      None => update.bump_type
+  // Apply updates based on plan
+  for plan in plans {
+    let pkg = match find_pkg(plan.name) {
+      Some(p) => p
+      None => continue
     }
 
-    let new_version = @semver.bump(update.current_version, final_bump_type)
+    let pkg_path = if plan.path == "." { "" } else { plan.path + "/" }
+    let group_info = match pkg.version_group {
+      Some(g) => " (group: " + g + ")"
+      None => ""
+    }
 
     if dry_run {
-      let group_info = match update.pkg.version_group {
-        Some(g) => " (group: " + g + ")"
-        None => ""
-      }
-      println("  [dry-run] Would update \{update.pkg.name}\{group_info}: \{update.current_version.to_string()} -> \{new_version.to_string()}")
-      match update.moon_mod_path {
-        Some(mmp) if update.pkg.moon_publish =>
-          println("  [dry-run] Would update " + mmp)
-        _ => ()
-      }
-      if update.pkg.npm_publish {
-        let pkg_path = if update.pkg.path == "." { "" } else { update.pkg.path + "/" }
-        println("  [dry-run] Would update " + pkg_path + "package.json")
+      println("  [dry-run] Would update \{plan.name}\{group_info}: \{plan.old_version.to_string()} -> \{plan.new_version.to_string()}")
+      match pkg.publish_target() {
+        MooncakesOnly => println("  [dry-run] Would update " + pkg_path + "moon.mod.json")
+        NpmOnly(_) => println("  [dry-run] Would update " + pkg_path + "package.json")
+        Both(_) => {
+          println("  [dry-run] Would update " + pkg_path + "moon.mod.json")
+          println("  [dry-run] Would update " + pkg_path + "package.json")
+        }
+        NoPublish => ()
       }
       continue
     }
 
-    // Update moon.mod.json if moon_publish is enabled and content is available
-    match (update.moon_mod_path, update.moon_mod_content) {
-      (Some(mmp), Some(mmc)) if update.pkg.moon_publish => {
-        let updated_content = try @moon_mod.update_version(mmc, new_version) catch {
-          e => {
-            println("  Warning: Could not update version in " + mmp + ": " + e.to_string())
-            continue
+    // Update moon.mod.json if mooncakes publishing is enabled
+    match pkg.publish_target() {
+      MooncakesOnly | Both(_) => {
+        let mmp = pkg_path + "moon.mod.json"
+        let content = try @fs.read_file(mmp).text() catch {
+          _ => {
+            println("  Warning: Could not read " + mmp)
+            ""
           }
         } noraise { c => c }
 
-        try @fs.write_file(mmp, updated_content, create=0o644) catch {
-          _ => {
-            println("  Warning: Could not write " + mmp)
-            continue
-          }
-        } noraise { _ => () }
+        if not(content.is_empty()) {
+          let updated_content = try @moon_mod.update_version(content, plan.new_version) catch {
+            e => {
+              println("  Warning: Could not update version in " + mmp + ": " + e.to_string())
+              continue
+            }
+          } noraise { c => c }
+
+          try @fs.write_file(mmp, updated_content, create=0o644) catch {
+            _ => {
+              println("  Warning: Could not write " + mmp)
+              continue
+            }
+          } noraise { _ => () }
+        }
       }
       _ => ()
     }
 
-    // Update package.json if npm_publish is enabled for this package
-    if update.pkg.npm_publish {
-      let pkg_path = if update.pkg.path == "." { "" } else { update.pkg.path + "/" }
-      let pkg_json_path = pkg_path + "package.json"
-      match update_package_json_version(new_version, path=pkg_json_path) {
-        Some(updated_pkg_json) => {
-          try @fs.write_file(pkg_json_path, updated_pkg_json, create=0o644) catch {
-            _ => {
-              println("  Warning: Could not write " + pkg_json_path)
-            }
-          } noraise { _ => () }
-          println("  Updated " + pkg_json_path)
+    // Update package.json if npm publishing is enabled
+    match pkg.publish_target() {
+      NpmOnly(_) | Both(_) => {
+        let pkg_json_path = pkg_path + "package.json"
+        match update_package_json_version(plan.new_version, path=pkg_json_path) {
+          Some(updated_pkg_json) => {
+            try @fs.write_file(pkg_json_path, updated_pkg_json, create=0o644) catch {
+              _ => {
+                println("  Warning: Could not write " + pkg_json_path)
+              }
+            } noraise { _ => () }
+            println("  Updated " + pkg_json_path)
+          }
+          None =>
+            println("  Warning: npm_publish enabled for " + plan.name + " but " + pkg_json_path + " not found")
         }
-        None =>
-          println("  Warning: npm_publish enabled for " + update.pkg.name + " but " + pkg_json_path + " not found")
       }
+      _ => ()
     }
 
-    let group_info = match update.pkg.version_group {
-      Some(g) => " (group: " + g + ")"
-      None => ""
-    }
-    println("  Updated \{update.pkg.name}\{group_info}: \{update.current_version.to_string()} -> \{new_version.to_string()}")
+    println("  Updated \{plan.name}\{group_info}: \{plan.old_version.to_string()} -> \{plan.new_version.to_string()}")
   }
 }
 
