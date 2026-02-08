@@ -29,65 +29,9 @@ pub fn validate_path(path : String) -> Bool {
 
 /// Validate git ref name (branch/tag) according to git-check-ref-format rules
 /// Returns None if valid, Some(reason) if invalid
+/// Delegates to util module for shared validation logic
 pub fn validate_git_ref_name(name : String) -> String? {
-  if name.is_empty() {
-    return Some("ref name cannot be empty")
-  }
-
-  let chars = name.to_array()
-  let len = chars.length()
-
-  // Cannot start with '/' or '.'
-  if chars[0] == '/' || chars[0] == '.' {
-    return Some("ref name cannot start with '/' or '.'")
-  }
-
-  // Cannot end with '/' or '.'
-  if chars[len - 1] == '/' || chars[len - 1] == '.' {
-    return Some("ref name cannot end with '/' or '.'")
-  }
-
-  // Cannot end with ".lock"
-  if name.has_suffix(".lock") {
-    return Some("ref name cannot end with '.lock'")
-  }
-
-  // Check for invalid characters and patterns
-  for i = 0; i < len; i = i + 1 {
-    let c = chars[i]
-
-    // Control characters (ASCII 0-31, 127)
-    if c.to_int() < 32 || c.to_int() == 127 {
-      return Some("ref name cannot contain control characters")
-    }
-
-    // Space
-    if c == ' ' {
-      return Some("ref name cannot contain spaces")
-    }
-
-    // Invalid special characters: ~ ^ : \ ? * [
-    if c == '~' || c == '^' || c == ':' || c == '\\' || c == '?' || c == '*' || c == '[' {
-      return Some("ref name cannot contain special characters (~^:\\?*[)")
-    }
-
-    // Check for ".." (two consecutive dots)
-    if c == '.' && i + 1 < len && chars[i + 1] == '.' {
-      return Some("ref name cannot contain '..'")
-    }
-
-    // Check for "//" (two consecutive slashes)
-    if c == '/' && i + 1 < len && chars[i + 1] == '/' {
-      return Some("ref name cannot contain '//'")
-    }
-
-    // Check for "@{" sequence
-    if c == '@' && i + 1 < len && chars[i + 1] == '{' {
-      return Some("ref name cannot contain '@{'")
-    }
-  }
-
-  None
+  @util.validate_git_ref_name_impl(name)
 }
 
 /// Validate semver prerelease identifier (alphanumeric and hyphens only)
