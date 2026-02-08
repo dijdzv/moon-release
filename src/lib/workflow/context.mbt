@@ -7,6 +7,8 @@ pub struct ReleaseContext {
   commits : Array[(@conventional.ConventionalCommit, String)]
   dry_run : Bool
   verbose : Bool
+  forced_bump : @semver.BumpType?
+  bump_all : Bool
 }
 
 /// Workflow error
@@ -29,7 +31,9 @@ pub fn ReleaseContext::new(
   new_version : @semver.Version,
   commits : Array[(@conventional.ConventionalCommit, String)],
   dry_run~ : Bool = false,
-  verbose~ : Bool = false
+  verbose~ : Bool = false,
+  forced_bump~ : @semver.BumpType? = None,
+  bump_all~ : Bool = false
 ) -> ReleaseContext {
   ReleaseContext::{
     config,
@@ -39,5 +43,7 @@ pub fn ReleaseContext::new(
     commits,
     dry_run,
     verbose,
+    forced_bump,
+    bump_all,
   }
 }

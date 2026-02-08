@@ -100,6 +100,71 @@ pub async fn run_gh(args : Array[String]) -> CommandResult raise ExecutorError {
   run_command(cmd)
 }
 
+/// Execute command in a specific directory and collect stdout
+pub async fn run_command_in_dir(
+  cmd : Array[String],
+  cwd : String
+) -> CommandResult raise ExecutorError {
+  if cmd.is_empty() {
+    raise ExecutorError("Cannot execute empty command")
+  }
+
+  let program = cmd[0]
+  let args : Array[String] = []
+  for i = 1; i < cmd.length(); i = i + 1 {
+    args.push(cmd[i])
+  }
+
+  let cmd_str = join_command_args(cmd)
+
+  // Execute command with cwd using try-catch-noraise pattern
+  let (exit_code, stdout_data, stderr_data) = try @process.collect_output(
+    program, args[:], cwd=cwd,
+  ) catch {
+    e => raise ExecutorError("Failed to execute '" + cmd_str + "' in '" + cwd + "': " + e.to_string())
+  } noraise { r => r }
+
+  // Decode stdout with try-catch-noraise pattern
+  let stdout_str = try stdout_data.text() catch {
+    e => raise ExecutorError("Failed to decode stdout from '" + program + "': " + e.to_string())
+  } noraise { r => r }
+
+  // Decode stderr with try-catch-noraise pattern
+  let stderr_str = try stderr_data.text() catch {
+    e => raise ExecutorError("Failed to decode stderr from '" + program + "': " + e.to_string())
+  } noraise { r => r }
+
+  CommandResult::{ exit_code, stdout: stdout_str, stderr: stderr_str }
+}
+
+/// Execute command in a specific directory with timeout (in seconds)
+/// Returns None if timed out, Some(result) otherwise
+pub async fn run_command_in_dir_with_timeout(
+  cmd : Array[String],
+  cwd : String,
+  timeout_seconds : UInt
+) -> CommandResult? raise ExecutorError {
+  if cmd.is_empty() {
+    raise ExecutorError("Cannot execute empty command")
+  }
+
+  let cmd_str = join_command_args(cmd)
+
+  // Cap timeout to prevent Int overflow when converting to milliseconds
+  let safe_timeout_seconds = if timeout_seconds > max_timeout_seconds {
+    max_timeout_seconds
+  } else {
+    timeout_seconds
+  }
+  let timeout_ms = safe_timeout_seconds.reinterpret_as_int() * 1000
+
+  // Execute with timeout using try-catch-noraise pattern
+  try @async.with_timeout_opt(timeout_ms, async fn() { run_command_in_dir(cmd, cwd) }) catch {
+    ExecutorError(_) as e => raise e
+    e => raise ExecutorError("Failed to execute '" + cmd_str + "' in '" + cwd + "': " + e.to_string())
+  } noraise { r => r }
+}
+
 /// Run command with timeout (in seconds)
 /// Returns None if timed out, Some(result) otherwise
 ///

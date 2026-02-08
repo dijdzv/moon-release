@@ -30,6 +30,7 @@ pub struct Config {
   max_analyze_commits : UInt?
   moon_publish_timeout : UInt  // In seconds
   npm_publish_timeout : UInt   // In seconds
+  bump_all_packages : Bool  // Bump all packages uniformly (fixed versioning for monorepo)
 } derive(Show, Eq)
 
 /// Package configuration (for monorepo)
@@ -85,6 +86,7 @@ pub fn Config::default() -> Config {
     max_analyze_commits: None,
     moon_publish_timeout: 300,  // Default 5 minutes
     npm_publish_timeout: 300,   // Default 5 minutes
+    bump_all_packages: false,
   }
 }
 
@@ -130,6 +132,7 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     "packages", "registry_check", "allow_dirty",
     "custom_major_increment_regex", "custom_minor_increment_regex",
     "max_analyze_commits", "moon_publish_timeout", "npm_publish_timeout",
+    "bump_all_packages",
   ]
   for key, _ in obj {
     let mut found = false
@@ -193,6 +196,7 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
     ),
     moon_publish_timeout: parse_uint(obj, "moon_publish_timeout", d.moon_publish_timeout),
     npm_publish_timeout: parse_uint(obj, "npm_publish_timeout", d.npm_publish_timeout),
+    bump_all_packages: parse_bool(obj, "bump_all_packages", d.bump_all_packages),
   }
 }
 

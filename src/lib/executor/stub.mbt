@@ -36,6 +36,23 @@ pub fn run_gh(_args : Array[String]) -> CommandResult raise ExecutorError {
   raise ExecutorError("Executor requires native target")
 }
 
+/// Execute command in a specific directory (stub)
+pub fn run_command_in_dir(
+  _cmd : Array[String],
+  _cwd : String
+) -> CommandResult raise ExecutorError {
+  raise ExecutorError("Executor requires native target")
+}
+
+/// Execute command in a specific directory with timeout (stub)
+pub fn run_command_in_dir_with_timeout(
+  _cmd : Array[String],
+  _cwd : String,
+  _timeout_seconds : UInt
+) -> CommandResult? raise ExecutorError {
+  raise ExecutorError("Executor requires native target")
+}
+
 /// Execute command with timeout (stub)
 pub fn run_command_with_timeout(
   _cmd : Array[String],

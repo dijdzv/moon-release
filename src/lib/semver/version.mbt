@@ -126,6 +126,26 @@ fn parse_uint(s : String) -> UInt? {
   Some(result)
 }
 
+/// Create a new version with a prerelease identifier set
+/// Returns None if the prerelease identifier is invalid
+pub fn Version::with_prerelease(
+  self : Version,
+  prerelease : String
+) -> Version? {
+  if not(validate_prerelease(prerelease)) {
+    return None
+  }
+  Some(
+    Version::{
+      major: self.major,
+      minor: self.minor,
+      patch: self.patch,
+      prerelease: Some(prerelease),
+      build_metadata: self.build_metadata,
+    },
+  )
+}
+
 /// Convert version to string
 pub fn Version::to_string(self : Version) -> String {
   let base = "\{self.major}.\{self.minor}.\{self.patch}"

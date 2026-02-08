@@ -40,13 +40,13 @@ fn print_bash_completion() -> Unit {
     #|
     #|    case "${COMP_WORDS[1]}" in
     #|        update)
-    #|            opts="-n --dry-run -b --bump -p --packages -o --output"
+    #|            opts="-n --dry-run -b --bump --bump-all -p --packages -o --output"
     #|            ;;
     #|        release-pr)
-    #|            opts="-n --dry-run -b --bump"
+    #|            opts="-n --dry-run -b --bump --bump-all"
     #|            ;;
     #|        release)
-    #|            opts="-n --dry-run -b --bump -p --prerelease"
+    #|            opts="-n --dry-run -b --bump --bump-all -p --prerelease"
     #|            ;;
     #|        init)
     #|            opts="-f --force"
@@ -131,6 +131,7 @@ fn print_zsh_completion() -> Unit {
     #|                        '--dry-run[Show what would be done]' \
     #|                        '-b[Force version bump]:bump:(major minor patch)' \
     #|                        '--bump[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump-all[Force bump ALL packages]' \
     #|                        '-p[Update all packages]' \
     #|                        '--packages[Update all packages]' \
     #|                        '-o[Output format]:format:(text json)' \
@@ -141,7 +142,8 @@ fn print_zsh_completion() -> Unit {
     #|                        '-n[Show what would be done]' \
     #|                        '--dry-run[Show what would be done]' \
     #|                        '-b[Force version bump]:bump:(major minor patch)' \
-    #|                        '--bump[Force version bump]:bump:(major minor patch)'
+    #|                        '--bump[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump-all[Force bump ALL packages]'
     #|                    ;;
     #|                release)
     #|                    _arguments \
@@ -149,6 +151,7 @@ fn print_zsh_completion() -> Unit {
     #|                        '--dry-run[Show what would be done]' \
     #|                        '-b[Force version bump]:bump:(major minor patch)' \
     #|                        '--bump[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump-all[Force bump ALL packages]' \
     #|                        '-p[Prerelease identifier]:prerelease:' \
     #|                        '--prerelease[Prerelease identifier]:prerelease:'
     #|                    ;;
@@ -212,16 +215,19 @@ fn print_fish_completion() -> Unit {
     #|# update options
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s n -l dry-run -d 'Show what would be done'
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -l bump-all -d 'Force bump ALL packages'
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s p -l packages -d 'Update all packages'
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s o -l output -r -a 'text json' -d 'Output format'
     #|
     #|# release-pr options
     #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -s n -l dry-run -d 'Show what would be done'
     #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -l bump-all -d 'Force bump ALL packages'
     #|
     #|# release options
     #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s n -l dry-run -d 'Show what would be done'
     #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release' -l bump-all -d 'Force bump ALL packages'
     #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s p -l prerelease -r -d 'Prerelease identifier'
     #|
     #|# init options

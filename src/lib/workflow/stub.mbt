@@ -10,6 +10,8 @@ pub struct ReleaseContext {
   commits : Array[(@conventional.ConventionalCommit, String)]
   dry_run : Bool
   verbose : Bool
+  forced_bump : @semver.BumpType?
+  bump_all : Bool
 }
 
 /// Workflow error
@@ -25,7 +27,9 @@ pub fn ReleaseContext::new(
   new_version : @semver.Version,
   commits : Array[(@conventional.ConventionalCommit, String)],
   dry_run~ : Bool = false,
-  verbose~ : Bool = false
+  verbose~ : Bool = false,
+  forced_bump~ : @semver.BumpType? = None,
+  bump_all~ : Bool = false
 ) -> ReleaseContext {
   ReleaseContext::{
     config,
@@ -35,6 +39,8 @@ pub fn ReleaseContext::new(
     commits,
     dry_run,
     verbose,
+    forced_bump,
+    bump_all,
   }
 }
 
@@ -69,8 +75,12 @@ pub fn run_update_packages(
   _config : @config.Config,
   _repo : @git.Repository,
   _dry_run : Bool,
-  _verbose : Bool
+  _verbose : Bool,
+  forced_bump~ : @semver.BumpType? = None,
+  bump_all~ : Bool = false
 ) -> Unit raise WorkflowError {
+  ignore(forced_bump)
+  ignore(bump_all)
   raise WorkflowError("Workflow requires native target")
 }
 
@@ -126,8 +136,12 @@ pub fn run_npm_publish(_ctx : ReleaseContext) -> Unit raise WorkflowError {
 pub fn collect_package_release_info(
   _config : @config.Config,
   _repo : @git.Repository,
-  _verbose : Bool
+  _verbose : Bool,
+  forced_bump~ : @semver.BumpType? = None,
+  bump_all~ : Bool = false
 ) -> Array[PackageReleaseInfo] raise WorkflowError {
+  ignore(forced_bump)
+  ignore(bump_all)
   raise WorkflowError("Workflow requires native target")
 }
 

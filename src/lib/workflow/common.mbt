@@ -139,6 +139,17 @@ pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
   }
 }
 
+/// Get the npm build command for a package (from package config or default)
+/// Note: Simple space-based splitting is used. Commands with quoted arguments
+/// containing spaces (e.g., 'echo "hello world"') are not supported.
+/// Use a wrapper script for complex commands.
+pub fn get_pkg_npm_build_command(pkg : @config.PackageConfig) -> Array[String] {
+  match pkg.npm_build_command {
+    Some(cmd) => cmd.split(" ").map(fn(s) { s.to_string() }).collect()
+    None => ["moon", "build", "--target", "js"]
+  }
+}
+
 /// Generate release notes (from commit summary)
 pub fn generate_release_notes(
   commits : Array[(@conventional.ConventionalCommit, String)]

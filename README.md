@@ -64,7 +64,9 @@ Update the version in `moon.mod.json` (no commit/push).
 
 ```bash
 moon-release update              # Auto-determine
-moon-release update --bump major # Force major bump
+moon-release update --bump major # Force major bump (changed packages only)
+moon-release update --bump-all   # Bump all packages (monorepo)
+moon-release update --bump major --bump-all  # Force major bump on all packages
 moon-release update --dry-run    # Preview only
 moon-release update -o json      # Output in JSON format
 ```
@@ -75,6 +77,9 @@ Create or update a release Pull Request.
 
 ```bash
 moon-release release-pr
+moon-release release-pr --bump major           # Force major bump
+moon-release release-pr --bump-all             # Include all packages
+moon-release release-pr --bump major --bump-all # Force major on all packages
 moon-release release-pr --dry-run
 ```
 
@@ -84,7 +89,10 @@ Create Git tag and GitHub Release, and publish to mooncakes.io.
 
 ```bash
 moon-release release
-moon-release release --prerelease alpha  # Prerelease
+moon-release release --bump major           # Force major bump
+moon-release release --bump-all             # Include all packages
+moon-release release --bump major --bump-all # Force major on all packages
+moon-release release --prerelease alpha     # Prerelease
 moon-release release --dry-run
 ```
 
@@ -156,6 +164,7 @@ Customize behavior with `release.json`.
   "custom_major_increment_regex": null,
   "custom_minor_increment_regex": null,
   "max_analyze_commits": null,
+  "bump_all_packages": false,
   "packages": []
 }
 ```
@@ -191,6 +200,7 @@ Customize behavior with `release.json`.
 | `custom_major_increment_regex` | `null` | Custom regex for major bump |
 | `custom_minor_increment_regex` | `null` | Custom regex for minor bump |
 | `max_analyze_commits` | `null` | Maximum number of commits to analyze |
+| `bump_all_packages` | `false` | Bump all packages uniformly in monorepo mode (fixed versioning) |
 
 ### Template Variables
 
@@ -268,6 +278,51 @@ For monorepos with multiple packages, configure each package individually with `
   ]
 }
 ```
+
+### Versioning Strategies
+
+#### Independent (default)
+
+Only packages with changes are bumped. Each package gets its own bump type based on its commits.
+
+```bash
+# Only changed packages are bumped
+moon-release update
+
+# Force major bump on changed packages only
+moon-release update --bump major
+```
+
+#### Fixed (`bump_all_packages` or `--bump-all`)
+
+All packages are bumped uniformly using the highest bump type found across changed packages.
+
+```json
+{
+  "bump_all_packages": true
+}
+```
+
+Or use the CLI flag for one-time override:
+
+```bash
+# Bump all packages (uses max bump type from changed packages)
+moon-release update --bump-all
+
+# Force major bump on ALL packages
+moon-release update --bump major --bump-all
+```
+
+| Config `bump_all_packages` | CLI | Behavior |
+|---|---|---|
+| `false` | (none) | Changed packages only, auto bump type |
+| `false` | `--bump major` | Changed packages only, forced major |
+| `false` | `--bump-all` | All packages, max bump type from changes |
+| `false` | `--bump major --bump-all` | All packages, forced major |
+| `true` | (none) | All packages, max bump type from changes |
+| `true` | `--bump major` | All packages, forced major |
+
+> **Note:** `--bump` controls the bump **type** (major/minor/patch), while `--bump-all` controls the bump **scope** (changed-only vs all packages).
 
 ### version_group
 

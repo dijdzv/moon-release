@@ -125,6 +125,9 @@ fn create_parser() -> @clap.Parser {
             nargs=@clap.AtMost(1),
             help="Force a specific version bump (major, minor, patch)",
           ),
+          "bump-all": @clap.Arg::flag(
+            help="Force bump ALL packages including unchanged ones",
+          ),
           "packages": @clap.Arg::flag(
             short='p',
             help="Update all packages in monorepo mode",
@@ -149,6 +152,9 @@ fn create_parser() -> @clap.Parser {
             nargs=@clap.AtMost(1),
             help="Force a specific version bump (major, minor, patch)",
           ),
+          "bump-all": @clap.Arg::flag(
+            help="Force bump ALL packages including unchanged ones",
+          ),
         },
       ),
       "release": @clap.SubCommand::new(
@@ -162,6 +168,9 @@ fn create_parser() -> @clap.Parser {
             short='b',
             nargs=@clap.AtMost(1),
             help="Force a specific version bump (major, minor, patch)",
+          ),
+          "bump-all": @clap.Arg::flag(
+            help="Force bump ALL packages including unchanged ones",
           ),
           "prerelease": @clap.Arg::named(
             short='p',
@@ -308,6 +317,14 @@ async fn cmd_update(
     exit_error()
   }
 
+  // Parse bump options before monorepo branching
+  let forced_bump = get_bump_type(subcmd)
+  let cli_bump_all = match subcmd.get_flag("bump-all") {
+    Some(v) => v
+    None => false
+  }
+  let bump_all = config.bump_all_packages || cli_bump_all
+
   // Check if monorepo mode
   let packages_mode = match subcmd.get_flag("packages") {
     Some(v) => v
@@ -316,7 +333,11 @@ async fn cmd_update(
 
   // In monorepo mode, update each package separately with try-catch-noraise pattern
   if packages_mode || not(config.packages.is_empty()) {
-    try @workflow.run_update_packages(config, repo, dry_run, verbose) catch {
+    // Hint: --bump only controls bump type, not scope
+    if forced_bump is Some(_) && not(bump_all) && not(json_output) {
+      println("Note: --bump applies only to packages with changes. Use --bump-all to include all packages.")
+    }
+    try @workflow.run_update_packages(config, repo, dry_run, verbose, forced_bump~, bump_all~) catch {
       e => {
         output_error(e.to_string(), json_output)
         exit_error()
@@ -325,25 +346,17 @@ async fn cmd_update(
     return
   }
 
-  // Get current version with try-catch-noraise pattern
-  let moon_mod = try load_moon_mod("moon.mod.json") catch {
+  // Get current version from appropriate source (moon.mod.json or package.json)
+  let current_version = try @workflow.get_current_version(config) catch {
     e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
-  } noraise { r => r }
-
-  let current_version = match @semver.Version::parse(moon_mod.version) {
-    Some(v) => v
-    None => {
       output_error_with_hint(
-        "Invalid version in moon.mod.json: " + moon_mod.version,
+        e.to_string(),
         "Version should follow semver format (e.g., 1.2.3 or 1.2.3-alpha)",
         json_output,
       )
       exit_error()
     }
-  }
+  } noraise { v => v }
 
   // Parse commits with try-catch-noraise pattern
   let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
@@ -367,7 +380,6 @@ async fn cmd_update(
   }
 
   // Determine bump type
-  let forced_bump = get_bump_type(subcmd)
   let bump_type = match forced_bump {
     Some(t) => t
     None =>
@@ -393,19 +405,36 @@ async fn cmd_update(
 
   // Registry check (if enabled) with try-catch-noraise pattern
   if config.registry_check {
-    let should_rel = try @workflow.should_release(new_version, moon_mod.name, verbose) catch {
-      e => {
-        output_warning("Registry check failed: " + e.to_string(), json_output)
-        true // Continue release on error
-      }
-    } noraise { r => r }
+    // Get package name: try moon.mod.json first, then package.json
+    let pkg_name = match (try? load_moon_mod("moon.mod.json")).to_option() {
+      Some(m) => m.name
+      None =>
+        match (try? load_package_json_name("package.json")).to_option().bind(fn(x) { x }) {
+          Some(name) => name
+          None => {
+            output_warning(
+              "Registry check skipped: could not determine package name from moon.mod.json or package.json",
+              json_output,
+            )
+            ""
+          }
+        }
+    }
+    if not(pkg_name.is_empty()) {
+      let should_rel = try @workflow.should_release(new_version, pkg_name, verbose) catch {
+        e => {
+          output_warning("Registry check failed: " + e.to_string(), json_output)
+          true // Continue release on error
+        }
+      } noraise { r => r }
 
-    if not(should_rel) {
-      output_error(
-        "Version " + new_version.to_string() + " is not newer than registry version. Nothing to update.",
-        json_output,
-      )
-      exit_error()
+      if not(should_rel) {
+        output_error(
+          "Version " + new_version.to_string() + " is not newer than registry version. Nothing to update.",
+          json_output,
+        )
+        exit_error()
+      }
     }
   }
 
@@ -439,7 +468,18 @@ async fn cmd_update(
         ("bump_type", @util.json_string(bump_str)),
         ("commits_count", commits.length().to_string()),
         ("dry_run", dry_run.to_string()),
-        ("updated_files", "[\"moon.mod.json\"]"),
+        ("updated_files", {
+          let files : Array[String] = []
+          if config.moon_publish {
+            files.push("\"moon.mod.json\"")
+          }
+          if config.npm_publish {
+            files.push("\"package.json\"")
+          }
+          "[" + files.iter().fold(init="", fn(acc, s) {
+            if acc.is_empty() { s } else { acc + "," + s }
+          }) + "]"
+        }),
       ])
       println(json_str)
     }
@@ -478,59 +518,80 @@ async fn cmd_release_pr(
     exit_error()
   }
 
-  // Get current version from appropriate source (moon.mod.json or package.json)
-  let current_version = try @workflow.get_current_version(config) catch {
-    e => {
-      output_error_with_hint(
-        e.to_string(),
-        "Version should follow semver format (e.g., 1.2.3)",
-        json_output,
-      )
-      exit_error()
-    }
-  } noraise { v => v }
-
-  // Parse commits with try-catch-noraise pattern
-  let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
-    e => {
-      output_error_with_hint(
-        "Error getting commits: " + e.to_string(),
-        "Make sure you are in a git repository with at least one commit",
-        json_output,
-      )
-      exit_error()
-    }
-  } noraise { r => r }
-
-  if commits.is_empty() {
-    output_error("No commits found since last tag. Nothing to release.", json_output)
-    exit_error()
-  }
-
-  // Determine bump type
+  let is_monorepo = not(config.packages.is_empty())
   let forced_bump = get_bump_type(subcmd)
-  let bump_type = match forced_bump {
-    Some(t) => t
-    None =>
-      match @semver.determine_bump_with_custom(
-        commits.map(fn(c) { c.0 }),
-        config.custom_major_increment_regex,
-        config.custom_minor_increment_regex,
-      ) {
-        Some(t) => t
-        None => {
-          output_error_with_hint(
-            "No releasable commits found",
-            "Use Conventional Commits or --bump to force a version bump",
-            json_output,
-          )
-          exit_error()
-        }
-      }
+  let cli_bump_all = match subcmd.get_flag("bump-all") {
+    Some(v) => v
+    None => false
+  }
+  let bump_all = config.bump_all_packages || cli_bump_all
+
+  // Hint: --bump only controls bump type, not scope
+  if is_monorepo && forced_bump is Some(_) && not(bump_all) {
+    println("Note: --bump applies only to packages with changes. Use --bump-all to include all packages.")
   }
 
-  // Calculate new version
-  let new_version = @semver.bump(current_version, bump_type)
+  // Get current version and new version
+  let (current_version, new_version, commits) = if is_monorepo {
+    // Monorepo: compute representative version from packages
+    try @workflow.get_monorepo_representative_version(config, repo, forced_bump, verbose, bump_all~) catch {
+      e => {
+        output_error(e.to_string(), json_output)
+        exit_error()
+      }
+    } noraise { r => r }
+  } else {
+    // Single package: use root files
+    let current_version = try @workflow.get_current_version(config) catch {
+      e => {
+        output_error_with_hint(
+          e.to_string(),
+          "Version should follow semver format (e.g., 1.2.3)",
+          json_output,
+        )
+        exit_error()
+      }
+    } noraise { v => v }
+
+    let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
+      e => {
+        output_error_with_hint(
+          "Error getting commits: " + e.to_string(),
+          "Make sure you are in a git repository with at least one commit",
+          json_output,
+        )
+        exit_error()
+      }
+    } noraise { r => r }
+
+    if commits.is_empty() {
+      output_error("No commits found since last tag. Nothing to release.", json_output)
+      exit_error()
+    }
+
+    let bump_type = match forced_bump {
+      Some(t) => t
+      None =>
+        match @semver.determine_bump_with_custom(
+          commits.map(fn(c) { c.0 }),
+          config.custom_major_increment_regex,
+          config.custom_minor_increment_regex,
+        ) {
+          Some(t) => t
+          None => {
+            output_error_with_hint(
+              "No releasable commits found",
+              "Use Conventional Commits or --bump to force a version bump",
+              json_output,
+            )
+            exit_error()
+          }
+        }
+    }
+
+    let new_version = @semver.bump(current_version, bump_type)
+    (current_version, new_version, commits)
+  }
 
   // Create context
   let ctx = @workflow.ReleaseContext::new(
@@ -541,6 +602,8 @@ async fn cmd_release_pr(
     commits,
     dry_run~,
     verbose~,
+    forced_bump~,
+    bump_all~,
   )
 
   // Get GitHub client with try-catch-noraise pattern
@@ -596,54 +659,13 @@ async fn cmd_release(
     exit_error()
   }
 
-  // Get current version from appropriate source (moon.mod.json or package.json)
-  let current_version = try @workflow.get_current_version(config) catch {
-    e => {
-      output_error_with_hint(
-        e.to_string(),
-        "Version should follow semver format (e.g., 1.2.3)",
-        json_output,
-      )
-      exit_error()
-    }
-  } noraise { v => v }
-
-  // Parse commits with try-catch-noraise pattern
-  let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
-    e => {
-      output_error_with_hint(
-        "Error getting commits: " + e.to_string(),
-        "Make sure you are in a git repository",
-        json_output,
-      )
-      exit_error()
-    }
-  } noraise { r => r }
-
-  // Determine bump type
+  let is_monorepo = not(config.packages.is_empty())
   let forced_bump = get_bump_type(subcmd)
-
-  // Check for empty commits (no forced bump and no commits)
-  if commits.is_empty() && forced_bump is None {
-    output_error_with_hint(
-      "No commits found since last tag. Nothing to release.",
-      "Create new commits or use --bump to force a version bump",
-      json_output,
-    )
-    exit_error()
+  let cli_bump_all = match subcmd.get_flag("bump-all") {
+    Some(v) => v
+    None => false
   }
-  let bump_type = match forced_bump {
-    Some(t) => t
-    None =>
-      match @semver.determine_bump_with_custom(
-        commits.map(fn(c) { c.0 }),
-        config.custom_major_increment_regex,
-        config.custom_minor_increment_regex,
-      ) {
-        Some(t) => t
-        None => @semver.Patch // default to patch for non-conventional commits
-      }
-  }
+  let bump_all = config.bump_all_packages || cli_bump_all
 
   // Get prerelease identifier with try? + to_option pattern
   let prerelease = (try? subcmd.get_one("prerelease")).to_option()
@@ -675,17 +697,88 @@ async fn cmd_release(
     exit_error()
   }
 
-  // Calculate new version
-  let new_version = match @semver.bump_with_prerelease(current_version, bump_type, prerelease) {
-    Some(v) => v
-    None => {
+  // Hint: --bump only controls bump type, not scope
+  if is_monorepo && forced_bump is Some(_) && not(bump_all) {
+    println("Note: --bump applies only to packages with changes. Use --bump-all to include all packages.")
+  }
+
+  // Get current version and new version
+  let (current_version, new_version, commits) = if is_monorepo {
+    // Monorepo: compute representative version from packages
+    try @workflow.get_monorepo_representative_version(config, repo, forced_bump, verbose, bump_all~) catch {
+      e => {
+        output_error(e.to_string(), json_output)
+        exit_error()
+      }
+    } noraise { r => r }
+  } else {
+    // Single package: use root files
+    let current_version = try @workflow.get_current_version(config) catch {
+      e => {
+        output_error_with_hint(
+          e.to_string(),
+          "Version should follow semver format (e.g., 1.2.3)",
+          json_output,
+        )
+        exit_error()
+      }
+    } noraise { v => v }
+
+    let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
+      e => {
+        output_error_with_hint(
+          "Error getting commits: " + e.to_string(),
+          "Make sure you are in a git repository",
+          json_output,
+        )
+        exit_error()
+      }
+    } noraise { r => r }
+
+    // Check for empty commits (no forced bump and no commits)
+    if commits.is_empty() && forced_bump is None {
       output_error_with_hint(
-        "Invalid prerelease identifier: " + prerelease.unwrap_or(""),
-        "Prerelease must contain only ASCII alphanumerics and hyphens [0-9A-Za-z-]",
+        "No commits found since last tag. Nothing to release.",
+        "Create new commits or use --bump to force a version bump",
         json_output,
       )
       exit_error()
     }
+    let bump_type = match forced_bump {
+      Some(t) => t
+      None =>
+        match @semver.determine_bump_with_custom(
+          commits.map(fn(c) { c.0 }),
+          config.custom_major_increment_regex,
+          config.custom_minor_increment_regex,
+        ) {
+          Some(t) => t
+          None => @semver.Patch // default to patch for non-conventional commits
+        }
+    }
+
+    let new_version = @semver.bump(current_version, bump_type)
+    (current_version, new_version, commits)
+  }
+
+  // Apply prerelease if specified
+  // In monorepo mode, the prerelease suffix is applied to the representative version only
+  // (used for tag name and release title). Individual package versions are not modified
+  // with the prerelease suffix, as version updates are handled by release-pr/update commands.
+  let new_version = match prerelease {
+    Some(pre_str) =>
+      match new_version.with_prerelease(pre_str) {
+        Some(v) => v
+        None => {
+          output_error_with_hint(
+            "Invalid prerelease identifier: " + pre_str,
+            "Prerelease must contain only ASCII alphanumerics and hyphens [0-9A-Za-z-]",
+            json_output,
+          )
+          exit_error()
+        }
+      }
+    None => new_version
   }
 
   // Create context
@@ -697,6 +790,8 @@ async fn cmd_release(
     commits,
     dry_run~,
     verbose~,
+    forced_bump~,
+    bump_all~,
   )
 
   // Get GitHub client with try-catch-noraise pattern
@@ -1090,6 +1185,20 @@ async fn load_moon_mod(path : String) -> @moon_mod.MoonMod raise {
   @moon_mod.parse(content)
 }
 
+/// Read package name from package.json (best effort)
+async fn load_package_json_name(path : String) -> String? raise {
+  let content = @fs.read_file(path).text()
+  let json = @json.parse(content)
+  match json {
+    Object(map) =>
+      match map.get("name") {
+        Some(String(name)) => Some(name)
+        _ => None
+      }
+    _ => None
+  }
+}
+
 /// Get commits from latest tag to current
 async fn get_commits_since_last_tag(
   repo : @git.Repository,
@@ -1455,6 +1564,11 @@ fn cmd_generate_schema() -> Unit {
     #|      "minimum": 1,
     #|      "description": "Maximum number of commits to analyze for version determination",
     #|      "default": null
+    #|    },
+    #|    "bump_all_packages": {
+    #|      "type": "boolean",
+    #|      "description": "Bump all packages uniformly using the highest bump type from changed packages (fixed versioning for monorepo)",
+    #|      "default": false
     #|    }
     #|  },
     #|  "additionalProperties": false
