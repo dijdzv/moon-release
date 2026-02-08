@@ -57,7 +57,7 @@ fn prefix_methods(methods : Array[MethodInfo], prefix : String) -> Array[MethodI
   }
   let result : Array[MethodInfo] = []
   for m in methods {
-    result.push(MethodInfo::{ name: m.name, signature: m.signature })
+    result.push(MethodInfo::{ name: prefix + m.name, signature: m.signature })
   }
   result
 }

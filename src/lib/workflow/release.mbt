@@ -1,19 +1,37 @@
 /// Get mooncakes credentials file path
-/// Note: On Windows, the fallback path ".moon/credentials.json" is relative to CWD,
-/// not the user's home directory. The correct Windows path would be
-/// %USERPROFILE%\.moon\credentials.json, but this is not currently implemented.
+/// Tries HOME (Unix), then USERPROFILE (Windows), then falls back to CWD-relative path.
 async fn get_mooncakes_credentials_path() -> String {
-  // ~/.moon/credentials.json
+  // Try HOME first (Unix / macOS / Linux)
   let home = try @executor.run_command(["printenv", "HOME"]) catch {
     _ => @executor.CommandResult::failed("printenv failed")
   } noraise { r => r }
 
   if home.is_success() {
-    home.stdout.trim().to_string() + "/.moon/credentials.json"
-  } else {
-    // Fallback for Windows or other systems
-    ".moon/credentials.json"
+    return home.stdout.trim().to_string() + "/.moon/credentials.json"
   }
+
+  // Try USERPROFILE (Windows)
+  let userprofile = try @executor.run_command(["printenv", "USERPROFILE"]) catch {
+    _ => @executor.CommandResult::failed("printenv failed")
+  } noraise { r => r }
+
+  if userprofile.is_success() {
+    return userprofile.stdout.trim().to_string() + "/.moon/credentials.json"
+  }
+
+  // Fallback: CWD-relative path
+  ".moon/credentials.json"
+}
+
+/// Build the npm publish command array with standard flags
+fn build_npm_publish_command(provenance : Bool) -> Array[String] {
+  let cmd : Array[String] = ["npm", "publish"]
+  if provenance {
+    cmd.push("--provenance")
+  }
+  cmd.push("--access")
+  cmd.push("public")
+  cmd
 }
 
 /// Validate publish configuration
@@ -241,6 +259,49 @@ async fn get_package_current_version(
 /// Returns (max_current_version, max_new_version, all_commits) across packages
 /// The representative version is the highest new_version among target packages.
 /// When bump_all is false, only changed packages are targeted.
+/// Determine the effective bump type for bump_all mode (2-pass).
+/// Pass 1 scans all packages to find the max bump type, which is then applied uniformly.
+/// Returns forced_bump directly if provided, or None if bump_all is false.
+async fn compute_effective_bump(
+  config : @config.Config,
+  repo : @git.Repository,
+  forced_bump : @semver.BumpType?,
+  bump_all : Bool
+) -> @semver.BumpType? raise WorkflowError {
+  if not(bump_all) || forced_bump is Some(_) {
+    return forced_bump
+  }
+  // Pass 1: find the max bump type across changed packages
+  let mut max_bump_priority = 0
+  let mut max_bump : @semver.BumpType? = None
+  for pkg in config.packages {
+    if not(validate_path(pkg.path)) {
+      continue
+    }
+    let commits = try get_package_commits(repo, pkg.path) catch {
+      _ => continue
+    } noraise { c => c }
+    if commits.is_empty() {
+      continue
+    }
+    match @semver.determine_bump_with_custom(
+      commits.map(fn(c) { c.0 }),
+      config.custom_major_increment_regex,
+      config.custom_minor_increment_regex,
+    ) {
+      Some(t) => {
+        let p = bump_priority(t)
+        if p > max_bump_priority {
+          max_bump_priority = p
+          max_bump = Some(t)
+        }
+      }
+      None => ()
+    }
+  }
+  max_bump
+}
+
 /// When bump_all is true, all packages are targeted (unchanged packages use the max bump type).
 /// Used for tag names, branch names, and release titles in monorepo mode
 ///
@@ -259,42 +320,8 @@ pub async fn get_monorepo_representative_version(
   let all_commits : Array[(@conventional.ConventionalCommit, String)] = []
   let seen_hashes : @hashmap.HashMap[String, Bool] = @hashmap.new()
 
-  // When bump_all without forced_bump, we need 2 passes:
-  // Pass 1: determine max bump type from changed packages
-  // Pass 2: apply that bump type to all packages
-  let effective_bump : @semver.BumpType? = if bump_all && forced_bump is None {
-    // Pass 1: find the max bump type across changed packages
-    let mut max_bump_priority = 0
-    let mut max_bump : @semver.BumpType? = None
-    for pkg in config.packages {
-      if not(validate_path(pkg.path)) {
-        continue
-      }
-      let commits = try get_package_commits(repo, pkg.path) catch {
-        _ => continue
-      } noraise { c => c }
-      if commits.is_empty() {
-        continue
-      }
-      match @semver.determine_bump_with_custom(
-        commits.map(fn(c) { c.0 }),
-        config.custom_major_increment_regex,
-        config.custom_minor_increment_regex,
-      ) {
-        Some(t) => {
-          let p = bump_priority(t)
-          if p > max_bump_priority {
-            max_bump_priority = p
-            max_bump = Some(t)
-          }
-        }
-        None => ()
-      }
-    }
-    max_bump
-  } else {
-    forced_bump
-  }
+  // When bump_all without forced_bump, determine max bump type first (2-pass)
+  let effective_bump = compute_effective_bump(config, repo, forced_bump, bump_all)
 
   // When bump_all is set, we need a bump type to proceed
   if bump_all && effective_bump is None {
@@ -309,7 +336,11 @@ pub async fn get_monorepo_representative_version(
   )] = []
 
   for pkg in config.packages {
+    // Path validation (prevent directory traversal)
     if not(validate_path(pkg.path)) {
+      if verbose {
+        println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
+      }
       continue
     }
 
@@ -326,7 +357,12 @@ pub async fn get_monorepo_representative_version(
 
     // Get commits for this package
     let commits = try get_package_commits(repo, pkg.path) catch {
-      _ => continue
+      e => {
+        if verbose {
+          println("  Warning: Could not get commits for " + pkg.name + ": " + e.to_string())
+        }
+        continue
+      }
     } noraise { c => c }
 
     // Deduplicate commits by hash
@@ -424,6 +460,18 @@ pub async fn get_monorepo_representative_version(
 /// Update package.json version field
 /// Uses line-based processing with nesting depth tracking to only replace the top-level "version"
 /// Returns the updated content, or None if file doesn't exist
+/// Count consecutive backslashes before position `pos` in a char array.
+/// Returns true if the count is even (meaning the character at `pos` is NOT escaped).
+fn is_unescaped_at(chars : Array[Char], pos : Int) -> Bool {
+  let mut bs = 0
+  let mut k = pos - 1
+  while k >= 0 && chars[k] == '\\' {
+    bs = bs + 1
+    k = k - 1
+  }
+  bs % 2 == 0
+}
+
 async fn update_package_json_version(
   new_version : @semver.Version,
   path~ : String = "package.json"
@@ -467,7 +515,7 @@ async fn update_package_json_version(
       let c = chars[i]
       // Count consecutive backslashes before this character
       // An even number means the quote is NOT escaped
-      if c == '"' && ({ let mut bs = 0; let mut k = i - 1; while k >= 0 && chars[k] == '\\' { bs = bs + 1; k = k - 1 }; bs % 2 == 0 }) {
+      if c == '"' && is_unescaped_at(chars, i) {
         if not(in_string) {
           // Opening quote - check if this is "version" key at depth 1
           if depth == 1 && i + 8 < chars.length() &&
@@ -676,31 +724,7 @@ pub async fn run_release_pr(
   }
 
   // Stage changes - add relevant files based on publish configuration
-  // Note: get_current_version() ensures at least one of moon_publish/npm_publish is enabled
-  let files_to_stage : Array[String] = ["add"]
-  if is_monorepo {
-    // Monorepo: stage each package's files
-    for pkg in ctx.config.packages {
-      if not(validate_path(pkg.path)) {
-        continue
-      }
-      let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
-      if pkg.moon_publish {
-        files_to_stage.push(pkg_path + "moon.mod.json")
-      }
-      if pkg.npm_publish {
-        files_to_stage.push(pkg_path + "package.json")
-      }
-    }
-  } else {
-    // Single package: stage root files
-    if ctx.config.moon_publish {
-      files_to_stage.push("moon.mod.json")
-    }
-    if ctx.config.npm_publish {
-      files_to_stage.push("package.json")
-    }
-  }
+  let files_to_stage = collect_files_to_stage(ctx)
   let stage_result = try @executor.run_git(ctx.repo, files_to_stage) catch {
     e => raise WorkflowError("Failed to stage files: " + e.to_string() + branch_recovery_note)
   } noraise { r => r }
@@ -779,35 +803,8 @@ pub async fn run_release_pr(
     println("[WARN] You may need to manually checkout: git checkout " + base_branch)
   }
 
-  // Get package name for single-package mode (with error fallback)
-  let pkg_name = try get_package_name() catch {
-    _ => "this-package"
-  } noraise { n => n }
-
-  // Single package info (used as fallback or for single-package mode)
-  let single_pkg_info = [
-    PackageReleaseInfo::{
-      name: pkg_name,
-      old_version: ctx.current_version,
-      new_version: ctx.new_version,
-      commits: ctx.commits,
-    },
-  ]
-
   // Generate PR body (unified release-plz style format)
-  let pr_body = if not(ctx.config.packages.is_empty()) {
-    // Monorepo mode: use pre-collected info (collected before file updates)
-    if ctx.verbose {
-      println("Generating PR body for monorepo...")
-    }
-    build_pr_body_unified(if monorepo_pkg_info.is_empty() { single_pkg_info } else { monorepo_pkg_info })
-  } else {
-    // Single-package mode
-    if ctx.verbose {
-      println("Generating PR body for single package...")
-    }
-    build_pr_body_unified(single_pkg_info)
-  }
+  let pr_body = generate_pr_body(ctx, monorepo_pkg_info)
 
   match existing_pr {
     Some((pr_num, _)) => {
@@ -857,6 +854,67 @@ pub async fn run_release_pr(
 
       println("Created pull request: " + pr_result.stdout_trimmed())
     }
+  }
+}
+
+/// Collect files to stage based on publish configuration
+fn collect_files_to_stage(ctx : ReleaseContext) -> Array[String] {
+  let files : Array[String] = ["add"]
+  let is_monorepo = not(ctx.config.packages.is_empty())
+  if is_monorepo {
+    for pkg in ctx.config.packages {
+      if not(validate_path(pkg.path)) {
+        continue
+      }
+      let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
+      if pkg.moon_publish {
+        files.push(pkg_path + "moon.mod.json")
+      }
+      if pkg.npm_publish {
+        files.push(pkg_path + "package.json")
+      }
+    }
+  } else {
+    if ctx.config.moon_publish {
+      files.push("moon.mod.json")
+    }
+    if ctx.config.npm_publish {
+      files.push("package.json")
+    }
+  }
+  files
+}
+
+/// Generate PR body from release context and package info
+async fn generate_pr_body(
+  ctx : ReleaseContext,
+  monorepo_pkg_info : Array[PackageReleaseInfo]
+) -> String raise WorkflowError {
+  let is_monorepo = not(ctx.config.packages.is_empty())
+
+  let pkg_name = try get_package_name() catch {
+    _ => "this-package"
+  } noraise { n => n }
+
+  let single_pkg_info = [
+    PackageReleaseInfo::{
+      name: pkg_name,
+      old_version: ctx.current_version,
+      new_version: ctx.new_version,
+      commits: ctx.commits,
+    },
+  ]
+
+  if is_monorepo {
+    if ctx.verbose {
+      println("Generating PR body for monorepo...")
+    }
+    build_pr_body_unified(if monorepo_pkg_info.is_empty() { single_pkg_info } else { monorepo_pkg_info })
+  } else {
+    if ctx.verbose {
+      println("Generating PR body for single package...")
+    }
+    build_pr_body_unified(single_pkg_info)
   }
 }
 
@@ -1211,13 +1269,7 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   // Build npm publish command
-  let publish_cmd : Array[String] = ["npm", "publish"]
-  if ctx.config.npm_publish_provenance {
-    publish_cmd.push("--provenance")
-  }
-  publish_cmd.push("--access")
-  publish_cmd.push("public")
-
+  let publish_cmd = build_npm_publish_command(ctx.config.npm_publish_provenance)
   let publish_cmd_str = @executor.join_command_args(publish_cmd)
 
   if ctx.dry_run {
@@ -1310,38 +1362,7 @@ pub async fn collect_package_release_info(
   }
 
   // When bump_all without forced_bump, determine max bump type first (2-pass)
-  let effective_bump : @semver.BumpType? = if bump_all && forced_bump is None {
-    let mut max_bump_priority = 0
-    let mut max_bump : @semver.BumpType? = None
-    for pkg in config.packages {
-      if not(validate_path(pkg.path)) {
-        continue
-      }
-      let commits = try get_package_commits(repo, pkg.path) catch {
-        _ => continue
-      } noraise { c => c }
-      if commits.is_empty() {
-        continue
-      }
-      match @semver.determine_bump_with_custom(
-        commits.map(fn(c) { c.0 }),
-        config.custom_major_increment_regex,
-        config.custom_minor_increment_regex,
-      ) {
-        Some(t) => {
-          let p = bump_priority(t)
-          if p > max_bump_priority {
-            max_bump_priority = p
-            max_bump = Some(t)
-          }
-        }
-        None => ()
-      }
-    }
-    max_bump
-  } else {
-    forced_bump
-  }
+  let effective_bump = compute_effective_bump(config, repo, forced_bump, bump_all)
 
   if bump_all && effective_bump is None {
     return packages
@@ -1495,38 +1516,7 @@ pub async fn run_update_packages(
   }
 
   // When bump_all without forced_bump, determine max bump type first (2-pass)
-  let effective_bump : @semver.BumpType? = if bump_all && forced_bump is None {
-    let mut max_bump_priority = 0
-    let mut max_bump : @semver.BumpType? = None
-    for pkg in config.packages {
-      if not(validate_path(pkg.path)) {
-        continue
-      }
-      let commits = try get_package_commits(repo, pkg.path) catch {
-        _ => continue
-      } noraise { c => c }
-      if commits.is_empty() {
-        continue
-      }
-      match @semver.determine_bump_with_custom(
-        commits.map(fn(c) { c.0 }),
-        config.custom_major_increment_regex,
-        config.custom_minor_increment_regex,
-      ) {
-        Some(t) => {
-          let p = bump_priority(t)
-          if p > max_bump_priority {
-            max_bump_priority = p
-            max_bump = Some(t)
-          }
-        }
-        None => ()
-      }
-    }
-    max_bump
-  } else {
-    forced_bump
-  }
+  let effective_bump = compute_effective_bump(config, repo, forced_bump, bump_all)
 
   if bump_all && effective_bump is None {
     if verbose {
@@ -1545,7 +1535,9 @@ pub async fn run_update_packages(
 
     // Path validation (prevent directory traversal)
     if not(validate_path(pkg.path)) {
-      println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
+      if verbose {
+        println("  Warning: Invalid path for " + pkg.name + ": " + pkg.path)
+      }
       continue
     }
 
@@ -1899,12 +1891,7 @@ pub async fn run_npm_publish_packages(
     // Per-package provenance configuration is not currently supported.
 
     // npm publish (run in package directory)
-    let publish_cmd : Array[String] = ["npm", "publish"]
-    if config.npm_publish_provenance {
-      publish_cmd.push("--provenance")
-    }
-    publish_cmd.push("--access")
-    publish_cmd.push("public")
+    let publish_cmd = build_npm_publish_command(config.npm_publish_provenance)
 
     if verbose {
       println("Publishing " + pkg.name + " to npm...")

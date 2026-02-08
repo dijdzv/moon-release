@@ -1,4 +1,8 @@
 /// Shell completion script generation
+///
+/// IMPORTANT: These completion scripts are hand-maintained and must be manually
+/// synced with the CLI parser definition in main.mbt whenever commands, subcommands,
+/// or flags are added/removed/changed.
 
 /// generate-completions command
 pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {

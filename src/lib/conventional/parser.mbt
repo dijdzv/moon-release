@@ -1,3 +1,6 @@
+/// Length of "BREAKING CHANGE:" and "BREAKING-CHANGE:" (both 16 characters)
+let breaking_change_prefix_len : Int = 16
+
 /// Parse commit message and return ConventionalCommit
 pub fn parse(message : String) -> ConventionalCommit? {
   let lines : Array[String] = message
@@ -328,13 +331,13 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
 
     // "BREAKING CHANGE: value" format
     if trimmed.has_prefix("BREAKING CHANGE:") {
-      let value = substr(trimmed, 16, trimmed.length()).trim().to_string()
+      let value = substr(trimmed, breaking_change_prefix_len, trimmed.length()).trim().to_string()
       footers.push(("BREAKING CHANGE", value))
       continue
     }
 
     if trimmed.has_prefix("BREAKING-CHANGE:") {
-      let value = substr(trimmed, 16, trimmed.length()).trim().to_string()
+      let value = substr(trimmed, breaking_change_prefix_len, trimmed.length()).trim().to_string()
       footers.push(("BREAKING-CHANGE", value))
       continue
     }

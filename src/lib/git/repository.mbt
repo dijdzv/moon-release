@@ -31,13 +31,19 @@ fn validate_ref_param(ref_name : String) -> Bool {
   let chars = ref_name.to_array()
   for i = 0; i < chars.length(); i = i + 1 {
     let c = chars[i]
-    // Reject shell metacharacters and git option prefix
-    if c == ' ' || c == '\n' || c == '\r' || c == '\u0000' || c == '|' || c == ';' || c == '`' {
+    // Reject shell metacharacters, git special chars, and control characters
+    if c == ' ' || c == '\n' || c == '\r' || c == '\u0000' || c == '|' || c == ';' || c == '`' ||
+      c == '$' || c == '&' || c == '>' || c == '<' || c == '(' || c == ')' || c == '{' || c == '}' ||
+      c == '~' || c == '^' || c == ':' || c == '?' || c == '*' || c == '[' || c == '\\' {
       return false
     }
   }
   // Reject option-like arguments
   if ref_name.has_prefix("--") {
+    return false
+  }
+  // Reject directory traversal sequences
+  if ref_name.contains("..") {
     return false
   }
   true
@@ -207,9 +213,14 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
       for j = 1; j < parts.length() - 2; j = j + 1 {
         message_parts.push(parts[j])
       }
-      let message = message_parts.iter().fold(init="", fn(acc, s) {
-        if acc.is_empty() { s } else { acc + "\u001e" + s }
-      })
+      let sb = StringBuilder::new()
+      for j2, part in message_parts {
+        if j2 > 0 {
+          sb.write_string("\u001e")
+        }
+        sb.write_string(part)
+      }
+      let message = sb.to_string()
       let commit = GitCommit::{ hash, message, author, date }
       commits.push(commit)
     } else if parts.length() == 3 {

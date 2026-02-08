@@ -2,6 +2,16 @@
 /// 2147483 * 1000 = 2147483000 < Int.MAX (2147483647)
 let max_timeout_seconds : UInt = 2147483U
 
+/// Extract program and arguments from a command array
+fn split_program_args(cmd : Array[String]) -> (String, Array[String]) {
+  let program = cmd[0]
+  let args : Array[String] = []
+  for i = 1; i < cmd.length(); i = i + 1 {
+    args.push(cmd[i])
+  }
+  (program, args)
+}
+
 /// Command execution result
 pub struct CommandResult {
   exit_code : Int
@@ -27,12 +37,7 @@ pub async fn run_command(cmd : Array[String]) -> CommandResult raise ExecutorErr
     raise ExecutorError("Cannot execute empty command")
   }
 
-  let program = cmd[0]
-  let args : Array[String] = []
-  for i = 1; i < cmd.length(); i = i + 1 {
-    args.push(cmd[i])
-  }
-
+  let (program, args) = split_program_args(cmd)
   let cmd_str = join_command_args(cmd)
 
   // Execute command with try-catch-noraise pattern
@@ -59,12 +64,7 @@ pub async fn run_command_simple(cmd : Array[String]) -> Int raise ExecutorError 
     raise ExecutorError("Cannot execute empty command")
   }
 
-  let program = cmd[0]
-  let args : Array[String] = []
-  for i = 1; i < cmd.length(); i = i + 1 {
-    args.push(cmd[i])
-  }
-
+  let (program, args) = split_program_args(cmd)
   let cmd_str = join_command_args(cmd)
 
   // Execute command with try-catch-noraise pattern
@@ -109,12 +109,7 @@ pub async fn run_command_in_dir(
     raise ExecutorError("Cannot execute empty command")
   }
 
-  let program = cmd[0]
-  let args : Array[String] = []
-  for i = 1; i < cmd.length(); i = i + 1 {
-    args.push(cmd[i])
-  }
-
+  let (program, args) = split_program_args(cmd)
   let cmd_str = join_command_args(cmd)
 
   // Execute command with cwd using try-catch-noraise pattern

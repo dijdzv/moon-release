@@ -30,7 +30,12 @@ pub fn CommandResult::check(
 
 /// Join command array into a display string for error messages
 pub fn join_command_args(cmd : Array[String]) -> String {
-  cmd.iter().fold(init="", fn(acc, s) {
-    if acc.is_empty() { s } else { acc + " " + s }
-  })
+  let sb = StringBuilder::new()
+  for i, s in cmd {
+    if i > 0 {
+      sb.write_string(" ")
+    }
+    sb.write_string(s)
+  }
+  sb.to_string()
 }

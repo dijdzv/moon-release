@@ -222,6 +222,11 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
         let npm_build_command_raw = try parse_pkg_optional_string(pkg_obj, "npm_build_command", None) catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }
+        // Validate package path (prevent directory traversal and absolute paths)
+        match @util.validate_path_full(path, allow_absolute=false).error_message() {
+          Some(reason) => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': invalid path '" + path + "': " + reason)
+          None => ()
+        }
         let npm_build_command = try validate_optional_command(npm_build_command_raw, "npm_build_command") catch {
           e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
         } noraise { r => r }

@@ -31,12 +31,25 @@ pub suberror GitHubError {
 }
 
 /// Validate a GitHub repository component (owner or repo name)
-/// Only allows alphanumeric, hyphen, underscore, and dot characters
+/// Only allows alphanumeric, hyphen, underscore, and dot characters.
+/// Rejects: empty, starting with hyphen, "." or ".." only, longer than 100 chars.
 fn validate_repo_component(s : String) -> Bool {
   if s.is_empty() {
     return false
   }
+  // Length limit (GitHub allows up to ~100 characters)
+  if s.length() > 100 {
+    return false
+  }
+  // Cannot start with a hyphen
   let chars = s.to_array()
+  if chars[0] == '-' {
+    return false
+  }
+  // Reject "." and ".." (directory traversal)
+  if s == "." || s == ".." {
+    return false
+  }
   for i = 0; i < chars.length(); i = i + 1 {
     let c = chars[i]
     if not((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {

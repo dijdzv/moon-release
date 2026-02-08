@@ -4,6 +4,9 @@
 /// Version extracted from embedded moon.mod.json (generated at build time)
 let version : String = extract_version(embedded_moon_mod_json)
 
+/// Maximum number of commits to display in verbose output
+let max_verbose_commits : Int = 10
+
 /// Extract version from embedded moon.mod.json content
 fn extract_version(json_str : String) -> String {
   // Use try? + to_option for consistent error handling
@@ -486,6 +489,47 @@ async fn cmd_update(
   }
 }
 
+/// Load config, validate publish settings, and check for dirty state.
+/// Shared setup for release-pr and release commands.
+async fn prepare_release_config(
+  config_path : String,
+  verbose : Bool,
+  json_output : Bool
+) -> (@config.Config, @git.Repository) {
+  let config = load_config(config_path, verbose~)
+  let repo = @git.Repository::current()
+
+  try @workflow.validate_publish_config(config, verbose~) catch {
+    e => {
+      output_error(e.to_string(), json_output)
+      exit_error()
+    }
+  } noraise { _ => () }
+
+  if should_abort_dirty(config, repo, verbose) {
+    if json_output {
+      output_error("uncommitted changes in working directory", json_output)
+    }
+    exit_error()
+  }
+
+  (config, repo)
+}
+
+/// Extract bump flags from subcmd (shared by release-pr and release commands).
+fn get_bump_flags(
+  subcmd : @clap.SimpleValue,
+  config : @config.Config
+) -> (@semver.BumpType?, Bool) {
+  let forced_bump = get_bump_type(subcmd)
+  let cli_bump_all = match subcmd.get_flag("bump-all") {
+    Some(v) => v
+    None => false
+  }
+  let bump_all = config.bump_all_packages || cli_bump_all
+  (forced_bump, bump_all)
+}
+
 /// release-pr command
 async fn cmd_release_pr(
   subcmd : @clap.SimpleValue,
@@ -498,33 +542,9 @@ async fn cmd_release_pr(
 
   print_verbose_header("release-pr", config_path, dry_run, verbose, json_output)
 
-  // Load config and repo
-  let config = load_config(config_path, verbose~)
-  let repo = @git.Repository::current()
-
-  // Validate publish configuration
-  try @workflow.validate_publish_config(config, verbose~) catch {
-    e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
-  } noraise { _ => () }
-
-  // Dirty check
-  if should_abort_dirty(config, repo, verbose) {
-    if json_output {
-      output_error("uncommitted changes in working directory", json_output)
-    }
-    exit_error()
-  }
-
+  let (config, repo) = prepare_release_config(config_path, verbose, json_output)
+  let (forced_bump, bump_all) = get_bump_flags(subcmd, config)
   let is_monorepo = not(config.packages.is_empty())
-  let forced_bump = get_bump_type(subcmd)
-  let cli_bump_all = match subcmd.get_flag("bump-all") {
-    Some(v) => v
-    None => false
-  }
-  let bump_all = config.bump_all_packages || cli_bump_all
 
   // Hint: --bump only controls bump type, not scope
   if is_monorepo && forced_bump is Some(_) && not(bump_all) {
@@ -639,33 +659,9 @@ async fn cmd_release(
 
   print_verbose_header("release", config_path, dry_run, verbose, json_output)
 
-  // Load config and repo
-  let config = load_config(config_path, verbose~)
-  let repo = @git.Repository::current()
-
-  // Validate publish configuration
-  try @workflow.validate_publish_config(config, verbose~) catch {
-    e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
-  } noraise { _ => () }
-
-  // Dirty check
-  if should_abort_dirty(config, repo, verbose) {
-    if json_output {
-      output_error("uncommitted changes in working directory", json_output)
-    }
-    exit_error()
-  }
-
+  let (config, repo) = prepare_release_config(config_path, verbose, json_output)
+  let (forced_bump, bump_all) = get_bump_flags(subcmd, config)
   let is_monorepo = not(config.packages.is_empty())
-  let forced_bump = get_bump_type(subcmd)
-  let cli_bump_all = match subcmd.get_flag("bump-all") {
-    Some(v) => v
-    None => false
-  }
-  let bump_all = config.bump_all_packages || cli_bump_all
 
   // Get prerelease identifier with try? + to_option pattern
   let prerelease = (try? subcmd.get_one("prerelease")).to_option()
@@ -1099,7 +1095,7 @@ async fn cmd_check(
   if verbose && commits.length() > 0 {
     println("")
     println("Commits:")
-    for i = 0; i < commits.length() && i < 10; i = i + 1 {
+    for i = 0; i < commits.length() && i < max_verbose_commits; i = i + 1 {
       let (cc, hash) = commits[i]
       let typ_str = commit_type_to_string(cc.typ)
       let scope_str = match cc.scope {
@@ -1110,8 +1106,8 @@ async fn cmd_check(
       let short_hash = substr_hash(hash, 7)
       println("  \{short_hash} \{typ_str}\{scope_str}\{breaking_str}: \{cc.description}")
     }
-    if commits.length() > 10 {
-      println("  ... and \{commits.length() - 10} more")
+    if commits.length() > max_verbose_commits {
+      println("  ... and \{commits.length() - max_verbose_commits} more")
     }
   }
 
@@ -1261,8 +1257,8 @@ fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
         "minor" => Some(@semver.Minor)
         "patch" => Some(@semver.Patch)
         bump_value => {
-          println("Warning: Invalid bump value '\{bump_value}'. Expected 'major', 'minor', or 'patch'. Ignoring --bump flag.")
-          None
+          println("Error: Invalid bump value '\{bump_value}'. Expected 'major', 'minor', or 'patch'.")
+          exit_error()
         }
       }
     _ => None

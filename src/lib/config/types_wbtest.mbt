@@ -563,3 +563,40 @@ test "parse config with packages - npm_build_command rejects injection" {
     _ => fail("Wrong error type")
   }
 }
+
+// This test ensures that the hardcoded JSON in generate_default_config_json (main.mbt)
+// stays in sync with Config::default(). If a new field is added to Config::default()
+// but not reflected in the init JSON, the parsed config will differ.
+test "init JSON produces config matching defaults" {
+  // This JSON mirrors generate_default_config_json() in main.mbt.
+  // If Config::default() changes, update both this test and generate_default_config_json().
+  let init_json =
+    #|{
+    #|  "pr_title": "chore: release v{{ version }}",
+    #|  "pr_draft": false,
+    #|  "pr_labels": [],
+    #|  "pr_body": "## Release v{{ version }}\n\n{{ changelog }}\n\n---\n*This PR was automatically created by moon-release.*",
+    #|  "pr_branch_prefix": "release/",
+    #|  "base_branch": "main",
+    #|  "allow_prerelease": false,
+    #|  "git_tag_enable": true,
+    #|  "git_tag_name": "v{{ version }}",
+    #|  "git_release_enable": true,
+    #|  "git_release_draft": false,
+    #|  "git_release_name": "Release v{{ version }}",
+    #|  "git_release_body": null,
+    #|  "git_release_latest": true,
+    #|  "moon_publish": true,
+    #|  "moon_publish_frozen": false,
+    #|  "moon_publish_timeout": 300,
+    #|  "npm_publish": false,
+    #|  "npm_publish_provenance": true,
+    #|  "npm_publish_timeout": 300,
+    #|  "semver_check": false,
+    #|  "registry_check": false,
+    #|  "allow_dirty": false,
+    #|  "packages": []
+    #|}
+  let parsed = try { Config::parse(init_json) } catch { _ => fail("Parse failed") }
+  assert_eq(parsed, Config::default())
+}

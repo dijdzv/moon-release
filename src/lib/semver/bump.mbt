@@ -91,7 +91,11 @@ pub fn determine_bump_with_custom(
       None => ()
     }
 
-    // Check custom minor pattern (substring match against commit description)
+    // Check custom minor pattern (substring match against commit description).
+    // Unlike custom_major_pattern (which returns immediately), custom_minor sets
+    // has_feat = true and continues the loop. This allows a later commit's breaking
+    // change to still escalate to Major, matching standard Conventional Commits
+    // behavior where "feat" doesn't short-circuit.
     match custom_minor_pattern {
       Some(pattern) =>
         if commit.description.contains(pattern) {

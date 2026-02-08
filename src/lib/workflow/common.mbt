@@ -128,26 +128,26 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
   None
 }
 
-/// Get the npm build command (from config or default)
+/// Parse an npm build command string into an argument array.
+/// Falls back to the default "moon build --target js" if None.
 /// Note: Simple space-based splitting is used. Commands with quoted arguments
 /// containing spaces (e.g., 'echo "hello world"') are not supported.
 /// Use a wrapper script for complex commands.
-pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
-  match config.npm_build_command {
-    Some(cmd) => cmd.split(" ").map(fn(s) { s.to_string() }).collect()
+fn parse_npm_build_command(cmd : String?) -> Array[String] {
+  match cmd {
+    Some(c) => c.split(" ").map(fn(s) { s.to_string() }).collect()
     None => ["moon", "build", "--target", "js"]
   }
 }
 
+/// Get the npm build command (from config or default)
+pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
+  parse_npm_build_command(config.npm_build_command)
+}
+
 /// Get the npm build command for a package (from package config or default)
-/// Note: Simple space-based splitting is used. Commands with quoted arguments
-/// containing spaces (e.g., 'echo "hello world"') are not supported.
-/// Use a wrapper script for complex commands.
 pub fn get_pkg_npm_build_command(pkg : @config.PackageConfig) -> Array[String] {
-  match pkg.npm_build_command {
-    Some(cmd) => cmd.split(" ").map(fn(s) { s.to_string() }).collect()
-    None => ["moon", "build", "--target", "js"]
-  }
+  parse_npm_build_command(pkg.npm_build_command)
 }
 
 /// Generate release notes (from commit summary)
