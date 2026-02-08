@@ -45,56 +45,60 @@ pub async fn validate_publish_config(
   // Root-level validation: only for single-package mode
   // In monorepo mode, validation is done per-package below
   if not(is_monorepo) {
-    // Check moon.mod.json exists if moon_publish is enabled
-    if config.moon_publish {
-      let content = try @fs.read_file("moon.mod.json").text() catch {
-        _ => raise WorkflowError("moon_publish is enabled but moon.mod.json not found")
-      } noraise { c => c }
-      // Validate it's parseable
-      try @moon_mod.parse(content) catch {
-        e => raise WorkflowError("moon_publish is enabled but moon.mod.json is invalid: " + e.to_string())
-      } noraise { _ => () }
+    let publish_target = config.publish_target()
 
-      // Check if mooncakes credentials exist (warning only, not error)
-      let creds_path = try get_mooncakes_credentials_path() catch {
-        _ => ".moon/credentials.json"
-      } noraise { p => p }
-      let creds_result = try @fs.read_file(creds_path).text() catch {
-        _ => ""
-      } noraise { c => c }
+    // Validate mooncakes publishing requirements
+    match publish_target {
+      MooncakesOnly | Both(_) => {
+        let content = try @fs.read_file("moon.mod.json").text() catch {
+          _ => raise WorkflowError("moon_publish is enabled but moon.mod.json not found")
+        } noraise { c => c }
+        try @moon_mod.parse(content) catch {
+          e => raise WorkflowError("moon_publish is enabled but moon.mod.json is invalid: " + e.to_string())
+        } noraise { _ => () }
 
-      // Parse JSON and check for "token" field
-      let has_token = if creds_result.is_empty() {
-        false
-      } else {
-        match (try? @json.parse(creds_result)).to_option() {
-          Some(Object(map)) => not(map.get("token") is None)
-          _ => false
+        // Check if mooncakes credentials exist (warning only, not error)
+        let creds_path = try get_mooncakes_credentials_path() catch {
+          _ => ".moon/credentials.json"
+        } noraise { p => p }
+        let creds_result = try @fs.read_file(creds_path).text() catch {
+          _ => ""
+        } noraise { c => c }
+
+        let has_token = if creds_result.is_empty() {
+          false
+        } else {
+          match (try? @json.parse(creds_result)).to_option() {
+            Some(Object(map)) => not(map.get("token") is None)
+            _ => false
+          }
+        }
+
+        if not(has_token) {
+          println("Warning: mooncakes credentials not found at " + creds_path)
+          println("  moon publish may fail without authentication.")
+          println("  Run 'moon login' to authenticate with mooncakes.io")
+          if verbose {
+            println("  Or set MOONCAKES_TOKEN and MOONCAKES_USERNAME in CI environment")
+          }
         }
       }
-
-      if not(has_token) {
-        println("Warning: mooncakes credentials not found at " + creds_path)
-        println("  moon publish may fail without authentication.")
-        println("  Run 'moon login' to authenticate with mooncakes.io")
-        if verbose {
-          println("  Or set MOONCAKES_TOKEN and MOONCAKES_USERNAME in CI environment")
-        }
-      }
+      _ => ()
     }
 
-    // Check package.json exists if npm_publish is enabled
-    if config.npm_publish {
-      try @fs.read_file("package.json").text() catch {
-        _ => raise WorkflowError("npm_publish is enabled but package.json not found")
-      } noraise { _ => () }
+    // Validate npm publishing requirements
+    match publish_target {
+      NpmOnly(_) | Both(_) => {
+        try @fs.read_file("package.json").text() catch {
+          _ => raise WorkflowError("npm_publish is enabled but package.json not found")
+        } noraise { _ => () }
 
-      // Note: npm Trusted Publishing uses OIDC, no token check needed
-      // Authentication is handled by GitHub Actions id-token permission
-      if verbose {
-        println("npm_publish enabled: using Trusted Publishing (OIDC)")
-        println("  Make sure 'id-token: write' permission is set in workflow")
+        if verbose {
+          println("npm_publish enabled: using Trusted Publishing (OIDC)")
+          println("  Make sure 'id-token: write' permission is set in workflow")
+        }
       }
+      _ => ()
     }
   }
 
@@ -106,21 +110,27 @@ pub async fn validate_publish_config(
 
     let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
 
-    if pkg.moon_publish {
-      let moon_mod_path = pkg_path + "moon.mod.json"
-      let content = try @fs.read_file(moon_mod_path).text() catch {
-        _ => raise WorkflowError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " not found")
-      } noraise { c => c }
-      try @moon_mod.parse(content) catch {
-        e => raise WorkflowError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " is invalid: " + e.to_string())
-      } noraise { _ => () }
+    match pkg.publish_target() {
+      MooncakesOnly | Both(_) => {
+        let moon_mod_path = pkg_path + "moon.mod.json"
+        let content = try @fs.read_file(moon_mod_path).text() catch {
+          _ => raise WorkflowError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " not found")
+        } noraise { c => c }
+        try @moon_mod.parse(content) catch {
+          e => raise WorkflowError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " is invalid: " + e.to_string())
+        } noraise { _ => () }
+      }
+      _ => ()
     }
 
-    if pkg.npm_publish {
-      let pkg_json_path = pkg_path + "package.json"
-      try @fs.read_file(pkg_json_path).text() catch {
-        _ => raise WorkflowError("npm_publish is enabled for " + pkg.name + " but " + pkg_json_path + " not found")
-      } noraise { _ => () }
+    match pkg.publish_target() {
+      NpmOnly(_) | Both(_) => {
+        let pkg_json_path = pkg_path + "package.json"
+        try @fs.read_file(pkg_json_path).text() catch {
+          _ => raise WorkflowError("npm_publish is enabled for " + pkg.name + " but " + pkg_json_path + " not found")
+        } noraise { _ => () }
+      }
+      _ => ()
     }
   }
 }
@@ -169,31 +179,37 @@ pub async fn get_package_json_version() -> @semver.Version? raise WorkflowError 
 pub async fn get_current_version(
   config : @config.Config
 ) -> @semver.Version raise WorkflowError {
+  let publish_target = config.publish_target()
   let mut moon_version : @semver.Version? = None
   let mut npm_version : @semver.Version? = None
 
-  // Read from moon.mod.json if moon_publish is enabled
-  if config.moon_publish {
-    let content = try @fs.read_file("moon.mod.json").text() catch {
-      e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string())
-    } noraise { c => c }
+  // Read from moon.mod.json if mooncakes publishing is enabled
+  match publish_target {
+    MooncakesOnly | Both(_) => {
+      let content = try @fs.read_file("moon.mod.json").text() catch {
+        e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string())
+      } noraise { c => c }
 
-    let moon_mod = try @moon_mod.parse(content) catch {
-      e => raise WorkflowError("Failed to parse moon.mod.json: " + e.to_string())
-    } noraise { m => m }
+      let moon_mod = try @moon_mod.parse(content) catch {
+        e => raise WorkflowError("Failed to parse moon.mod.json: " + e.to_string())
+      } noraise { m => m }
 
-    match @semver.Version::parse(moon_mod.version) {
-      Some(v) => moon_version = Some(v)
-      None => raise WorkflowError("Invalid version in moon.mod.json: " + moon_mod.version)
+      match @semver.Version::parse(moon_mod.version) {
+        Some(v) => moon_version = Some(v)
+        None => raise WorkflowError("Invalid version in moon.mod.json: " + moon_mod.version)
+      }
     }
+    _ => ()
   }
 
-  // Read from package.json if npm_publish is enabled
-  if config.npm_publish {
-    match get_package_json_version() {
-      Some(v) => npm_version = Some(v)
-      None => raise WorkflowError("Failed to read version from package.json")
-    }
+  // Read from package.json if npm publishing is enabled
+  match publish_target {
+    NpmOnly(_) | Both(_) =>
+      match get_package_json_version() {
+        Some(v) => npm_version = Some(v)
+        None => raise WorkflowError("Failed to read version from package.json")
+      }
+    _ => ()
   }
 
   // Return the higher version if both are available
@@ -592,46 +608,55 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
     println("  Commits: \{ctx.commits.length()}")
   }
 
+  let publish_target = ctx.config.publish_target()
+
   if ctx.dry_run {
-    if ctx.config.moon_publish {
-      println("[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}")
-    }
-    if ctx.config.npm_publish {
-      println("[dry-run] Would update package.json to version \{ctx.new_version.to_string()}")
+    match publish_target {
+      MooncakesOnly => println("[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}")
+      NpmOnly(_) => println("[dry-run] Would update package.json to version \{ctx.new_version.to_string()}")
+      Both(_) => {
+        println("[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}")
+        println("[dry-run] Would update package.json to version \{ctx.new_version.to_string()}")
+      }
+      NoPublish => ()
     }
     return
   }
 
-  // Update moon.mod.json if moon_publish is enabled
-  if ctx.config.moon_publish {
-    let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
-      e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string() + ". Make sure the file exists and is readable.")
-    } noraise { c => c }
+  // Update moon.mod.json if mooncakes publishing is enabled
+  match publish_target {
+    MooncakesOnly | Both(_) => {
+      let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
+        e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string() + ". Make sure the file exists and is readable.")
+      } noraise { c => c }
 
-    let updated_content = try @moon_mod.update_version(moon_mod_content, ctx.new_version) catch {
-      e => raise WorkflowError("Failed to update version in moon.mod.json: " + e.to_string())
-    } noraise { c => c }
+      let updated_content = try @moon_mod.update_version(moon_mod_content, ctx.new_version) catch {
+        e => raise WorkflowError("Failed to update version in moon.mod.json: " + e.to_string())
+      } noraise { c => c }
 
-    try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
-      e => raise WorkflowError("Failed to write moon.mod.json: " + e.to_string() + ". Check file permissions.")
-    } noraise { _ => () }
+      try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
+        e => raise WorkflowError("Failed to write moon.mod.json: " + e.to_string() + ". Check file permissions.")
+      } noraise { _ => () }
 
-    println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
+      println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
+    }
+    _ => ()
   }
 
-  // Update package.json if npm_publish is enabled
-  if ctx.config.npm_publish {
-    match update_package_json_version(ctx.new_version) {
-      Some(updated_pkg_json) => {
-        try @fs.write_file("package.json", updated_pkg_json, create=0o644) catch {
-          e => raise WorkflowError("Failed to write package.json: " + e.to_string())
-        } noraise { _ => () }
-        println("Updated package.json to version \{ctx.new_version.to_string()}")
+  // Update package.json if npm publishing is enabled
+  match publish_target {
+    NpmOnly(_) | Both(_) =>
+      match update_package_json_version(ctx.new_version) {
+        Some(updated_pkg_json) => {
+          try @fs.write_file("package.json", updated_pkg_json, create=0o644) catch {
+            e => raise WorkflowError("Failed to write package.json: " + e.to_string())
+          } noraise { _ => () }
+          println("Updated package.json to version \{ctx.new_version.to_string()}")
+        }
+        None =>
+          raise WorkflowError("npm_publish is enabled but package.json not found")
       }
-      None =>
-        // This shouldn't happen because validate_publish_config already checked
-        raise WorkflowError("npm_publish is enabled but package.json not found")
-    }
+    _ => ()
   }
 }
 
@@ -867,19 +892,25 @@ fn collect_files_to_stage(ctx : ReleaseContext) -> Array[String] {
         continue
       }
       let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
-      if pkg.moon_publish {
-        files.push(pkg_path + "moon.mod.json")
-      }
-      if pkg.npm_publish {
-        files.push(pkg_path + "package.json")
+      match pkg.publish_target() {
+        MooncakesOnly => files.push(pkg_path + "moon.mod.json")
+        NpmOnly(_) => files.push(pkg_path + "package.json")
+        Both(_) => {
+          files.push(pkg_path + "moon.mod.json")
+          files.push(pkg_path + "package.json")
+        }
+        NoPublish => ()
       }
     }
   } else {
-    if ctx.config.moon_publish {
-      files.push("moon.mod.json")
-    }
-    if ctx.config.npm_publish {
-      files.push("package.json")
+    match ctx.config.publish_target() {
+      MooncakesOnly => files.push("moon.mod.json")
+      NpmOnly(_) => files.push("package.json")
+      Both(_) => {
+        files.push("moon.mod.json")
+        files.push("package.json")
+      }
+      NoPublish => ()
     }
   }
   files
@@ -1064,121 +1095,135 @@ pub async fn run_release(
     new=ctx.new_version.to_string(),
   )
 
-  // Validate tag name
-  if ctx.config.git_tag_enable {
-    match validate_git_ref_name(tag_name) {
-      Some(reason) =>
-        raise WorkflowError("Invalid tag name '\{tag_name}': \{reason}")
-      None => ()
-    }
+  // Determine release mode via ADT
+  let release_mode = ctx.config.git_release_mode()
+
+  // Validate tag name (when tag creation is enabled)
+  match release_mode {
+    GitHubRelease(..) | TagOnly =>
+      match validate_git_ref_name(tag_name) {
+        Some(reason) =>
+          raise WorkflowError("Invalid tag name '\{tag_name}': \{reason}")
+        None => ()
+      }
+    NoGitRelease => ()
   }
 
   if ctx.dry_run {
-    if ctx.config.git_tag_enable {
-      println("[dry-run] Would create tag: " + tag_name)
+    // Dry-run: tag/release info
+    match release_mode {
+      GitHubRelease(..) => {
+        println("[dry-run] Would create tag: " + tag_name)
+        println("[dry-run] Would create GitHub release: " + release_title)
+      }
+      TagOnly => println("[dry-run] Would create tag: " + tag_name)
+      NoGitRelease => ()
     }
-    if ctx.config.git_release_enable {
-      println("[dry-run] Would create GitHub release: " + release_title)
-    }
+    // Dry-run: publish info
     if not(ctx.config.packages.is_empty()) {
-      // Monorepo: show per-package publish actions
       for pkg in ctx.config.packages {
-        if pkg.moon_publish {
-          println("[dry-run] Would publish " + pkg.name + " to mooncakes.io")
-        }
-        if pkg.npm_publish {
-          println("[dry-run] Would npm publish " + pkg.name)
+        match pkg.publish_target() {
+          MooncakesOnly => println("[dry-run] Would publish " + pkg.name + " to mooncakes.io")
+          NpmOnly(_) => println("[dry-run] Would npm publish " + pkg.name)
+          Both(_) => {
+            println("[dry-run] Would publish " + pkg.name + " to mooncakes.io")
+            println("[dry-run] Would npm publish " + pkg.name)
+          }
+          NoPublish => ()
         }
       }
     } else {
-      // Single package
-      if ctx.config.moon_publish {
-        println("[dry-run] Would publish to mooncakes.io")
-      }
-      if ctx.config.npm_publish {
-        println("[dry-run] Would publish to npm")
+      match ctx.config.publish_target() {
+        MooncakesOnly => println("[dry-run] Would publish to mooncakes.io")
+        NpmOnly(_) => println("[dry-run] Would publish to npm")
+        Both(_) => {
+          println("[dry-run] Would publish to mooncakes.io")
+          println("[dry-run] Would publish to npm")
+        }
+        NoPublish => ()
       }
     }
     return
   }
 
-  // Create tag (only if git_tag_enable is true)
-  if ctx.config.git_tag_enable {
-    let tag_msg = release_title
-    // Create tag with try-catch-noraise pattern
-    let tag_result = try @executor.run_git(ctx.repo, ["tag", "-a", tag_name, "-m", tag_msg]) catch {
-      e => raise WorkflowError("Failed to create tag: " + e.to_string())
-    } noraise { r => r }
-    if not(tag_result.is_success()) {
-      raise WorkflowError("Failed to create tag: " + tag_result.stderr)
-    }
+  // Create tag (when tag creation is enabled)
+  match release_mode {
+    GitHubRelease(..) | TagOnly => {
+      let tag_msg = release_title
+      let tag_result = try @executor.run_git(ctx.repo, ["tag", "-a", tag_name, "-m", tag_msg]) catch {
+        e => raise WorkflowError("Failed to create tag: " + e.to_string())
+      } noraise { r => r }
+      if not(tag_result.is_success()) {
+        raise WorkflowError("Failed to create tag: " + tag_result.stderr)
+      }
 
-    // Push tag with try-catch-noraise pattern
-    let push_result = try @executor.run_git(ctx.repo, ["push", "origin", tag_name]) catch {
-      e => raise WorkflowError("Failed to push tag: " + e.to_string())
-    } noraise { r => r }
-    if not(push_result.is_success()) {
-      raise WorkflowError("Failed to push tag: " + push_result.stderr)
-    }
+      let push_result = try @executor.run_git(ctx.repo, ["push", "origin", tag_name]) catch {
+        e => raise WorkflowError("Failed to push tag: " + e.to_string())
+      } noraise { r => r }
+      if not(push_result.is_success()) {
+        raise WorkflowError("Failed to push tag: " + push_result.stderr)
+      }
 
-    println("Created and pushed tag: " + tag_name)
+      println("Created and pushed tag: " + tag_name)
+    }
+    NoGitRelease => ()
   }
 
-  // Create GitHub Release
-  if ctx.config.git_release_enable {
-    // Release notes: use custom template if available, otherwise auto-generate
-    let release_notes = match ctx.config.git_release_body {
-      Some(template) =>
-        template
-        .replace(old="{{ version }}", new=ctx.new_version.to_string())
-        .replace(old="{{ changelog }}", new=generate_release_notes(ctx.commits))
-      None => generate_release_notes(ctx.commits)
-    }
-    let release_cmd = github.create_release_command(
-      tag_name,
-      release_title,
-      release_notes,
-      draft=ctx.config.git_release_draft,
-      latest=ctx.config.git_release_latest,
-    )
-
-    // Extract gh command arguments
-    let gh_args : Array[String] = []
-    for i = 1; i < release_cmd.length(); i = i + 1 {
-      gh_args.push(release_cmd[i])
-    }
-
-    // Create release with try-catch-noraise pattern
-    let mut release_caught_error = false
-    let release_result = try @executor.run_gh(gh_args) catch {
-      e => {
-        println("Warning: Failed to create GitHub release: " + e.to_string())
-        println("Tag '" + tag_name + "' was already pushed. Create the release manually.")
-        release_caught_error = true
-        @executor.CommandResult::failed("release creation failed")
+  // Create GitHub Release (only for GitHubRelease mode)
+  match release_mode {
+    GitHubRelease(draft~, latest~) => {
+      let release_notes = match ctx.config.git_release_body {
+        Some(template) =>
+          template
+          .replace(old="{{ version }}", new=ctx.new_version.to_string())
+          .replace(old="{{ changelog }}", new=generate_release_notes(ctx.commits))
+        None => generate_release_notes(ctx.commits)
       }
-    } noraise { r => r }
-    if not(release_result.is_success()) && not(release_caught_error) {
-      println("Warning: Failed to create GitHub release: " + release_result.stderr)
-      println("Tag '" + tag_name + "' was already pushed. Create the release manually.")
-      // Continue to publish steps instead of raising
-    } else if release_result.is_success() {
-      println("Created GitHub release: " + tag_name)
+      let release_cmd = github.create_release_command(
+        tag_name,
+        release_title,
+        release_notes,
+        draft~,
+        latest~,
+      )
+
+      let gh_args : Array[String] = []
+      for i = 1; i < release_cmd.length(); i = i + 1 {
+        gh_args.push(release_cmd[i])
+      }
+
+      let mut release_caught_error = false
+      let release_result = try @executor.run_gh(gh_args) catch {
+        e => {
+          println("Warning: Failed to create GitHub release: " + e.to_string())
+          println("Tag '" + tag_name + "' was already pushed. Create the release manually.")
+          release_caught_error = true
+          @executor.CommandResult::failed("release creation failed")
+        }
+      } noraise { r => r }
+      if not(release_result.is_success()) && not(release_caught_error) {
+        println("Warning: Failed to create GitHub release: " + release_result.stderr)
+        println("Tag '" + tag_name + "' was already pushed. Create the release manually.")
+      } else if release_result.is_success() {
+        println("Created GitHub release: " + tag_name)
+      }
     }
+    _ => ()
   }
 
   // Publish packages
   if not(ctx.config.packages.is_empty()) {
-    // Monorepo: publish each package
     run_publish_packages(ctx.config, ctx.dry_run, ctx.verbose)
     run_npm_publish_packages(ctx.config, ctx.dry_run, ctx.verbose)
   } else {
-    // Single package
-    if ctx.config.moon_publish {
-      run_publish(ctx)
-    }
-    if ctx.config.npm_publish {
-      run_npm_publish(ctx)
+    match ctx.config.publish_target() {
+      MooncakesOnly => run_publish(ctx)
+      NpmOnly(_) => run_npm_publish(ctx)
+      Both(_) => {
+        run_publish(ctx)
+        run_npm_publish(ctx)
+      }
+      NoPublish => ()
     }
   }
 }

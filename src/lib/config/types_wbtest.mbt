@@ -600,3 +600,147 @@ test "init JSON produces config matching defaults" {
   let parsed = try { Config::parse(init_json) } catch { _ => fail("Parse failed") }
   assert_eq(parsed, Config::default())
 }
+
+// ============================================================================
+// Phase 2: ADT accessor method tests
+// ============================================================================
+
+test "Config::publish_target - default is MooncakesOnly" {
+  let config = Config::default()
+  assert_true(config.publish_target() is MooncakesOnly)
+}
+
+test "Config::publish_target - both enabled" {
+  let content =
+    #|{
+    #|  "moon_publish": true,
+    #|  "npm_publish": true,
+    #|  "npm_build_command": "npm run build",
+    #|  "npm_publish_provenance": false,
+    #|  "npm_publish_timeout": 120
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  match config.publish_target() {
+    Both(npm) => {
+      assert_eq(npm.build_command, Some("npm run build"))
+      assert_eq(npm.provenance, false)
+      assert_eq(npm.timeout, 120U)
+    }
+    _ => fail("expected Both")
+  }
+}
+
+test "Config::publish_target - npm only" {
+  let content =
+    #|{
+    #|  "moon_publish": false,
+    #|  "npm_publish": true
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_true(config.publish_target() is NpmOnly(_))
+}
+
+test "Config::publish_target - no publish" {
+  let content =
+    #|{
+    #|  "moon_publish": false,
+    #|  "npm_publish": false
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_true(config.publish_target() is NoPublish)
+}
+
+test "Config::git_release_mode - default is GitHubRelease" {
+  let config = Config::default()
+  match config.git_release_mode() {
+    GitHubRelease(draft~, latest~) => {
+      assert_eq(draft, false)
+      assert_eq(latest, true)
+    }
+    _ => fail("expected GitHubRelease")
+  }
+}
+
+test "Config::git_release_mode - tag only" {
+  let content =
+    #|{
+    #|  "git_tag_enable": true,
+    #|  "git_release_enable": false
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_true(config.git_release_mode() is TagOnly)
+}
+
+test "Config::git_release_mode - no git release" {
+  let content =
+    #|{
+    #|  "git_tag_enable": false,
+    #|  "git_release_enable": false
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_true(config.git_release_mode() is NoGitRelease)
+}
+
+test "Config::git_release_mode - draft release" {
+  let content =
+    #|{
+    #|  "git_release_draft": true,
+    #|  "git_release_latest": false
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  match config.git_release_mode() {
+    GitHubRelease(draft~, latest~) => {
+      assert_eq(draft, true)
+      assert_eq(latest, false)
+    }
+    _ => fail("expected GitHubRelease")
+  }
+}
+
+test "Config::pr_config - default values" {
+  let config = Config::default()
+  let pr = config.pr_config()
+  assert_eq(pr.title, "chore: release v{{ version }}")
+  assert_eq(pr.draft, false)
+  assert_eq(pr.labels, [])
+  assert_eq(pr.branch_prefix, "release/")
+  assert_eq(pr.base_branch, "main")
+}
+
+test "Config::pr_config - custom values" {
+  let content =
+    #|{
+    #|  "pr_title": "release: {{ version }}",
+    #|  "pr_draft": true,
+    #|  "pr_labels": ["release"],
+    #|  "pr_branch_prefix": "rel/",
+    #|  "base_branch": "develop"
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let pr = config.pr_config()
+  assert_eq(pr.title, "release: {{ version }}")
+  assert_eq(pr.draft, true)
+  assert_eq(pr.labels, ["release"])
+  assert_eq(pr.branch_prefix, "rel/")
+  assert_eq(pr.base_branch, "develop")
+}
+
+test "PackageConfig::publish_target - mooncakes only" {
+  let pkg = PackageConfig::default("pkg", ".")
+  assert_true(pkg.publish_target() is MooncakesOnly)
+}
+
+test "PackageConfig::publish_target - npm only" {
+  let pkg = PackageConfig::{ name: "pkg", path: ".", moon_publish: false, npm_publish: true, npm_build_command: None, version_group: None }
+  assert_true(pkg.publish_target() is NpmOnly(_))
+}
+
+test "NpmConfig::build_args - default" {
+  let npm = NpmConfig::{ build_command: None, provenance: true, timeout: 300 }
+  assert_eq(npm.build_args(), ["moon", "build", "--target", "js"])
+}
+
+test "NpmConfig::build_args - custom" {
+  let npm = NpmConfig::{ build_command: Some("npm run build"), provenance: true, timeout: 300 }
+  assert_eq(npm.build_args(), ["npm", "run", "build"])
+}

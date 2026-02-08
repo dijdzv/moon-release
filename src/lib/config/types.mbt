@@ -1,3 +1,43 @@
+// ============================================================================
+// ADT types for type-safe config access
+// ============================================================================
+
+/// Publish target — represents which registries to publish to
+pub enum PublishTarget {
+  MooncakesOnly       // Only mooncakes.io
+  NpmOnly(NpmConfig)  // Only npm
+  Both(NpmConfig)     // Both mooncakes.io and npm
+  NoPublish           // No publishing
+} derive(Show, Eq)
+
+/// npm-specific configuration
+pub(all) struct NpmConfig {
+  build_command : String?    // Custom build command (None = default "moon build --target js")
+  provenance : Bool          // Use --provenance flag for Trusted Publishing
+  timeout : UInt             // Publish timeout in seconds
+} derive(Show, Eq)
+
+/// Git release mode — how releases are created
+pub enum GitReleaseMode {
+  GitHubRelease(draft~ : Bool, latest~ : Bool)  // Full GitHub release
+  TagOnly                                         // Create tag only (no GitHub release)
+  NoGitRelease                                    // No tag, no release
+} derive(Show, Eq)
+
+/// PR configuration (grouped)
+pub(all) struct PrConfig {
+  title : String
+  body : String
+  labels : Array[String]
+  draft : Bool
+  branch_prefix : String
+  base_branch : String
+} derive(Show, Eq)
+
+// ============================================================================
+// Config struct
+// ============================================================================
+
 /// Configuration
 pub struct Config {
   pr_title : String
@@ -473,4 +513,70 @@ fn parse_string_array(
 /// Apply version to PR title template
 pub fn Config::apply_pr_title_template(self : Config, version : String) -> String {
   self.pr_title.replace(old="{{ version }}", new=version)
+}
+
+// ============================================================================
+// ADT accessor methods — derive typed values from flat config fields
+// ============================================================================
+
+/// Get the publish target as a typed ADT
+pub fn Config::publish_target(self : Config) -> PublishTarget {
+  let npm_config = NpmConfig::{
+    build_command: self.npm_build_command,
+    provenance: self.npm_publish_provenance,
+    timeout: self.npm_publish_timeout,
+  }
+  match (self.moon_publish, self.npm_publish) {
+    (true, true) => Both(npm_config)
+    (true, false) => MooncakesOnly
+    (false, true) => NpmOnly(npm_config)
+    (false, false) => NoPublish
+  }
+}
+
+/// Get the git release mode as a typed ADT
+pub fn Config::git_release_mode(self : Config) -> GitReleaseMode {
+  match (self.git_tag_enable, self.git_release_enable) {
+    (true, true) =>
+      GitHubRelease(draft=self.git_release_draft, latest=self.git_release_latest)
+    (true, false) => TagOnly
+    // git_release_enable without git_tag_enable doesn't make sense,
+    // but we treat it as NoGitRelease
+    (false, _) => NoGitRelease
+  }
+}
+
+/// Get PR configuration as a grouped struct
+pub fn Config::pr_config(self : Config) -> PrConfig {
+  PrConfig::{
+    title: self.pr_title,
+    body: self.pr_body,
+    labels: self.pr_labels,
+    draft: self.pr_draft,
+    branch_prefix: self.pr_branch_prefix,
+    base_branch: self.base_branch,
+  }
+}
+
+/// Get package-level publish target
+pub fn PackageConfig::publish_target(self : PackageConfig) -> PublishTarget {
+  let npm_config = NpmConfig::{
+    build_command: self.npm_build_command,
+    provenance: true,  // default for packages
+    timeout: 300,       // default for packages
+  }
+  match (self.moon_publish, self.npm_publish) {
+    (true, true) => Both(npm_config)
+    (true, false) => MooncakesOnly
+    (false, true) => NpmOnly(npm_config)
+    (false, false) => NoPublish
+  }
+}
+
+/// Get the npm build command as an argument array
+pub fn NpmConfig::build_args(self : NpmConfig) -> Array[String] {
+  match self.build_command {
+    Some(c) => c.split(" ").map(fn(s) { s.to_string() }).collect()
+    None => ["moon", "build", "--target", "js"]
+  }
 }
