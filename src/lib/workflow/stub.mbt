@@ -84,6 +84,15 @@ pub fn run_update_packages(
   raise WorkflowError("Workflow requires native target")
 }
 
+/// Monorepo: npm publish multiple packages (stub)
+pub fn run_npm_publish_packages(
+  _config : @config.Config,
+  _dry_run : Bool,
+  _verbose : Bool
+) -> Unit raise WorkflowError {
+  raise WorkflowError("Workflow requires native target")
+}
+
 /// Monorepo: publish multiple packages (stub)
 pub fn run_publish_packages(
   _config : @config.Config,

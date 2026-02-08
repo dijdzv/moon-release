@@ -197,8 +197,8 @@ Customize behavior with `release.json`.
 | `semver_check` | `false` | Run API compatibility check |
 | `registry_check` | `false` | Check registry version before publish |
 | `allow_dirty` | `false` | Allow uncommitted changes |
-| `custom_major_increment_regex` | `null` | Custom regex for major bump |
-| `custom_minor_increment_regex` | `null` | Custom regex for minor bump |
+| `custom_major_increment_regex` | `null` | Custom substring pattern for major bump (matched against commit description) |
+| `custom_minor_increment_regex` | `null` | Custom substring pattern for minor bump (matched against commit description) |
 | `max_analyze_commits` | `null` | Maximum number of commits to analyze |
 | `bump_all_packages` | `false` | Bump all packages uniformly in monorepo mode (fixed versioning) |
 
@@ -438,9 +438,13 @@ Add the release job that runs when a release PR is merged:
         uses: hustcer/setup-moonbit@v1
 
       - name: Configure mooncakes credentials
+        env:
+          MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
+          MOONCAKES_USERNAME: ${{ secrets.MOONCAKES_USERNAME }}
         run: |
           mkdir -p ~/.moon
-          echo '{"token": "${{ secrets.MOONCAKES_TOKEN }}", "username": "${{ secrets.MOONCAKES_USERNAME }}"}' > ~/.moon/credentials.json
+          jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
+            '{"token": $token, "username": $username}' > ~/.moon/credentials.json
 
       - name: Download moon-release
         run: |

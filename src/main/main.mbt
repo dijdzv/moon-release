@@ -1405,7 +1405,7 @@ fn cmd_generate_schema() -> Unit {
     #|    "pr_body": {
     #|      "type": "string",
     #|      "description": "Body template for release PR. Use {{ version }} placeholder.",
-    #|      "default": "## Release v{{ version }}\n\n---\n*This PR was automatically created by moon-release.*"
+    #|      "default": "## Release v{{ version }}\n\n{{ changelog }}\n\n---\n*This PR was automatically created by moon-release.*"
     #|    },
     #|    "allow_prerelease": {
     #|      "type": "boolean",

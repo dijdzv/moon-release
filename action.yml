@@ -23,6 +23,14 @@ inputs:
     description: 'Path to configuration file'
     required: false
     default: 'release.json'
+  bump:
+    description: 'Force bump type: major, minor, or patch'
+    required: false
+    default: ''
+  bump-all:
+    description: 'Bump all packages including unchanged ones (monorepo)'
+    required: false
+    default: 'false'
   dry-run:
     description: 'Show what would be done without making changes'
     required: false
@@ -76,12 +84,22 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         INPUT_COMMAND: ${{ inputs.command }}
         INPUT_CONFIG: ${{ inputs.config-file }}
+        INPUT_BUMP: ${{ inputs.bump }}
+        INPUT_BUMP_ALL: ${{ inputs.bump-all }}
         INPUT_DRY_RUN: ${{ inputs.dry-run }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
+        BUMP_FLAG=""
+        BUMP_ALL_FLAG=""
         DRY_RUN_FLAG=""
         VERBOSE_FLAG=""
+        if [ -n "$INPUT_BUMP" ]; then
+          BUMP_FLAG="--bump $INPUT_BUMP"
+        fi
+        if [ "$INPUT_BUMP_ALL" = "true" ]; then
+          BUMP_ALL_FLAG="--bump-all"
+        fi
         if [ "$INPUT_DRY_RUN" = "true" ]; then
           DRY_RUN_FLAG="--dry-run"
         fi
@@ -93,6 +111,8 @@ runs:
         OUTPUT=$("$ACTION_PATH/target/native/release/build/src/main/main.exe" \
           "$INPUT_COMMAND" \
           --config "$INPUT_CONFIG" \
+          $BUMP_FLAG \
+          $BUMP_ALL_FLAG \
           $DRY_RUN_FLAG \
           $VERBOSE_FLAG 2>&1)
         EXIT_CODE=$?

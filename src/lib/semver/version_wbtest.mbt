@@ -299,3 +299,34 @@ test "parse rejects empty build metadata" {
 test "parse rejects empty prerelease with build metadata" {
   assert_true(Version::parse("1.2.3-+build") is None)
 }
+
+test "with_prerelease sets prerelease" {
+  let v = Version::parse("1.2.3").unwrap()
+  match v.with_prerelease("alpha.1") {
+    Some(vp) => {
+      assert_eq(vp.major, 1)
+      assert_eq(vp.minor, 2)
+      assert_eq(vp.patch, 3)
+      assert_eq(vp.prerelease, Some("alpha.1"))
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "with_prerelease preserves build metadata" {
+  let v = Version::parse("1.2.3+build.42").unwrap()
+  match v.with_prerelease("rc.1") {
+    Some(vp) => {
+      assert_eq(vp.prerelease, Some("rc.1"))
+      assert_eq(vp.build_metadata, Some("build.42"))
+    }
+    None => fail("Expected Some, got None")
+  }
+}
+
+test "with_prerelease rejects invalid prerelease" {
+  let v = Version::parse("1.2.3").unwrap()
+  assert_true(v.with_prerelease("") is None)
+  assert_true(v.with_prerelease("alpha_1") is None)
+  assert_true(v.with_prerelease("01") is None)
+}

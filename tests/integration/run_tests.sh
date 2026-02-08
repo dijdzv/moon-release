@@ -733,6 +733,99 @@ EOF
   rm -rf "$TEST_DIR"
 }
 
+test_monorepo_bump_all() {
+  log_info "Testing: --bump-all bumps all packages including unchanged"
+
+  local TEST_DIR
+  TEST_DIR=$(create_monorepo_test_repo "1.0.0" "" "1.0.0")
+
+  cd "$TEST_DIR"
+
+  # release.json with two packages (no version_group)
+  cat > release.json << 'EOF'
+{
+  "packages": [
+    { "name": "pkg-a", "path": "packages/pkg-a", "moon_publish": true, "npm_publish": false },
+    { "name": "pkg-b", "path": "packages/pkg-b", "moon_publish": true, "npm_publish": false }
+  ]
+}
+EOF
+
+  # Only change pkg-a
+  echo "// change" > packages/pkg-a/main.mbt
+  git add .
+  git commit -q -m "feat: add feature to pkg-a"
+
+  # Without --bump-all: only pkg-a should be bumped
+  output=$($BINARY update --dry-run 2>&1)
+  if echo "$output" | grep "pkg-a" | grep -q "1.0.0 -> 1.1.0"; then
+    log_pass "without --bump-all: pkg-a bumped (1.0.0 -> 1.1.0)"
+  else
+    log_fail "without --bump-all: pkg-a should be bumped: $output"
+  fi
+
+  if echo "$output" | grep -q "pkg-b"; then
+    log_fail "without --bump-all: pkg-b should NOT appear: $output"
+  else
+    log_pass "without --bump-all: pkg-b not bumped (no changes)"
+  fi
+
+  # With --bump-all: both packages should be bumped
+  output=$($BINARY update --bump-all --dry-run 2>&1)
+  if echo "$output" | grep "pkg-a" | grep -q "1.0.0 -> 1.1.0"; then
+    log_pass "--bump-all: pkg-a bumped (1.0.0 -> 1.1.0)"
+  else
+    log_fail "--bump-all: pkg-a should be bumped: $output"
+  fi
+
+  if echo "$output" | grep "pkg-b" | grep -q "1.0.0 -> 1.1.0"; then
+    log_pass "--bump-all: pkg-b also bumped (1.0.0 -> 1.1.0)"
+  else
+    log_fail "--bump-all: pkg-b should also be bumped: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_monorepo_bump_major_all() {
+  log_info "Testing: --bump major --bump-all forces major bump on all packages"
+
+  local TEST_DIR
+  TEST_DIR=$(create_monorepo_test_repo "1.0.0" "" "2.0.0")
+
+  cd "$TEST_DIR"
+
+  cat > release.json << 'EOF'
+{
+  "packages": [
+    { "name": "pkg-a", "path": "packages/pkg-a", "moon_publish": true, "npm_publish": false },
+    { "name": "pkg-b", "path": "packages/pkg-b", "moon_publish": true, "npm_publish": false }
+  ]
+}
+EOF
+
+  # Only change pkg-a with a minor feat
+  echo "// change" > packages/pkg-a/main.mbt
+  git add .
+  git commit -q -m "feat: add feature to pkg-a"
+
+  # --bump major --bump-all: all packages get major bump
+  output=$($BINARY update --bump major --bump-all --dry-run 2>&1)
+  if echo "$output" | grep "pkg-a" | grep -q "1.0.0 -> 2.0.0"; then
+    log_pass "--bump major --bump-all: pkg-a major bumped (1.0.0 -> 2.0.0)"
+  else
+    log_fail "--bump major --bump-all: pkg-a should be major bumped: $output"
+  fi
+
+  if echo "$output" | grep "pkg-b" | grep -q "2.0.0 -> 3.0.0"; then
+    log_pass "--bump major --bump-all: pkg-b major bumped (2.0.0 -> 3.0.0)"
+  else
+    log_fail "--bump major --bump-all: pkg-b should be major bumped: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
 # ===== Main =====
 
 main() {
@@ -776,6 +869,8 @@ main() {
   test_max_analyze_commits
   test_monorepo_dual_publish_version_max
   test_monorepo_version_group_representative
+  test_monorepo_bump_all
+  test_monorepo_bump_major_all
 
   echo ""
   echo "================================"

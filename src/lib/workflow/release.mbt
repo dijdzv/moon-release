@@ -255,7 +255,7 @@ pub async fn get_monorepo_representative_version(
   bump_all~ : Bool = false
 ) -> (@semver.Version, @semver.Version, Array[(@conventional.ConventionalCommit, String)]) raise WorkflowError {
   let mut max_new : @semver.Version? = None
-  let mut max_current_of_changed : @semver.Version? = None
+  let mut max_current : @semver.Version? = None
   let all_commits : Array[(@conventional.ConventionalCommit, String)] = []
   let seen_hashes : @hashmap.HashMap[String, Bool] = @hashmap.new()
 
@@ -398,17 +398,17 @@ pub async fn get_monorepo_representative_version(
       Some(mn) => {
         if new_version.compare(mn) > 0 {
           max_new = Some(new_version)
-          max_current_of_changed = Some(current_version)
+          max_current = Some(current_version)
         }
       }
       None => {
         max_new = Some(new_version)
-        max_current_of_changed = Some(current_version)
+        max_current = Some(current_version)
       }
     }
   }
 
-  let current = match max_current_of_changed {
+  let current = match max_current {
     Some(v) => v
     None => raise WorkflowError("No releasable commits found across packages")
   }
@@ -649,8 +649,22 @@ pub async fn run_release_pr(
 
   let branch_recovery_note = "\nNote: You may be on branch '" + branch_name + "'. Run 'git checkout " + base_branch + "' to return."
 
-  // Run update (file updates)
+  // Collect package release info BEFORE file updates (so old_version is accurate)
   let is_monorepo = not(ctx.config.packages.is_empty())
+  let monorepo_pkg_info : Array[PackageReleaseInfo] = if is_monorepo {
+    try collect_package_release_info(ctx.config, ctx.repo, ctx.verbose, forced_bump=ctx.forced_bump, bump_all=ctx.bump_all) catch {
+      e => {
+        if ctx.verbose {
+          println("[WARN] Failed to collect package info: " + e.to_string())
+        }
+        []
+      }
+    } noraise { r => r }
+  } else {
+    []
+  }
+
+  // Run update (file updates)
   if is_monorepo {
     try run_update_packages(ctx.config, ctx.repo, ctx.dry_run, ctx.verbose, forced_bump=ctx.forced_bump, bump_all=ctx.bump_all) catch {
       e => raise WorkflowError(e.to_string() + branch_recovery_note)
@@ -782,12 +796,11 @@ pub async fn run_release_pr(
 
   // Generate PR body (unified release-plz style format)
   let pr_body = if not(ctx.config.packages.is_empty()) {
-    // Monorepo mode: collect info for each package
+    // Monorepo mode: use pre-collected info (collected before file updates)
     if ctx.verbose {
       println("Generating PR body for monorepo...")
     }
-    let pkg_info = collect_package_release_info(ctx.config, ctx.repo, ctx.verbose, forced_bump=ctx.forced_bump, bump_all=ctx.bump_all)
-    build_pr_body_unified(if pkg_info.is_empty() { single_pkg_info } else { pkg_info })
+    build_pr_body_unified(if monorepo_pkg_info.is_empty() { single_pkg_info } else { monorepo_pkg_info })
   } else {
     // Single-package mode
     if ctx.verbose {

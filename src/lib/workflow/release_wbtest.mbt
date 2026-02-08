@@ -418,3 +418,35 @@ test "get_npm_build_command - handles complex command" {
   assert_eq(cmd[4], "--output-dir")
   assert_eq(cmd[5], "dist")
 }
+
+test "get_pkg_npm_build_command - default" {
+  let content =
+    #|{
+    #|  "packages": [
+    #|    { "name": "test", "path": "packages/test", "moon_publish": true, "npm_publish": true }
+    #|  ]
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let cmd = get_pkg_npm_build_command(config.packages[0])
+  assert_eq(cmd.length(), 4)
+  assert_eq(cmd[0], "moon")
+  assert_eq(cmd[1], "build")
+  assert_eq(cmd[2], "--target")
+  assert_eq(cmd[3], "js")
+}
+
+test "get_pkg_npm_build_command - custom" {
+  let content =
+    #|{
+    #|  "packages": [
+    #|    { "name": "test", "path": "packages/test", "moon_publish": false, "npm_publish": true, "npm_build_command": "npx tsc --outDir lib" }
+    #|  ]
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let cmd = get_pkg_npm_build_command(config.packages[0])
+  assert_eq(cmd.length(), 4)
+  assert_eq(cmd[0], "npx")
+  assert_eq(cmd[1], "tsc")
+  assert_eq(cmd[2], "--outDir")
+  assert_eq(cmd[3], "lib")
+}
