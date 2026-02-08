@@ -5,6 +5,7 @@
     "moonbitlang/async/process",
     "moonbitlang/async/io"
   ],
+  "native-stub": ["getenv_stub.c"],
   "targets": {
     "runner.mbt": ["native"],
     "runner_wbtest.mbt": ["native"],

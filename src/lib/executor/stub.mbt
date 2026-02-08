@@ -61,3 +61,8 @@ pub fn run_command_with_timeout(
   raise ExecutorError("Executor requires native target")
 }
 
+/// Get environment variable value (stub)
+pub fn get_env_var(_name : String) -> String? {
+  None
+}
+

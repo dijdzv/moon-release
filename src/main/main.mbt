@@ -309,7 +309,7 @@ async fn cmd_update(
   print_verbose_header("update", config_path, dry_run, verbose, json_output)
 
   // Load config and repo
-  let config = load_config(config_path, verbose~)
+  let config = load_config(config_path, verbose~, json_output~)
   let repo = @git.Repository::current()
 
   // Dirty check
@@ -496,7 +496,7 @@ async fn prepare_release_config(
   verbose : Bool,
   json_output : Bool
 ) -> (@config.Config, @git.Repository) {
-  let config = load_config(config_path, verbose~)
+  let config = load_config(config_path, verbose~, json_output~)
   let repo = @git.Repository::current()
 
   try @workflow.validate_publish_config(config, verbose~) catch {
@@ -1006,7 +1006,7 @@ async fn cmd_check(
   }
 
   // Load config for custom bump rules
-  let config = load_config(config_path, verbose~)
+  let config = load_config(config_path, verbose~, json_output~)
 
   // Get Git repository
   let repo = @git.Repository::current()
@@ -1153,26 +1153,42 @@ fn commit_type_to_string(typ : @conventional.CommitType) -> String {
 // ======== Helper functions ========
 
 /// Load configuration with try-catch-noraise pattern
-async fn load_config(path : String, verbose~ : Bool = false) -> @config.Config {
+async fn load_config(
+  path : String,
+  verbose~ : Bool = false,
+  json_output~ : Bool = false
+) -> @config.Config {
   // Check if file exists with try-catch-noraise pattern
   let content = try @fs.read_file(path).text() catch {
     e => {
       if verbose {
-        println("Note: Config file not found or unreadable (" + path + "): " + e.to_string())
-        println("Using default configuration.")
+        output_warning(
+          "Config file not found or unreadable (" + path + "): " + e.to_string() + ". Using default configuration.",
+          json_output,
+        )
       }
       return @config.Config::default()
     }
   } noraise { r => r }
 
   // Parse config - fail if file exists but is invalid
-  try @config.Config::parse(content) catch {
+  let warnings : Array[String] = []
+  let config = try @config.Config::parse(content, warnings~) catch {
     e => {
-      println("Error: Failed to parse config file (" + path + "): " + e.to_string())
-      println("Fix the configuration file or delete it to use defaults.")
+      output_error(
+        "Failed to parse config file (" + path + "): " + e.to_string() + ". Fix the configuration file or delete it to use defaults.",
+        json_output,
+      )
       exit_error()
     }
   } noraise { r => r }
+
+  // Display warnings (suppressed in JSON mode)
+  for w in warnings {
+    output_warning(w, json_output)
+  }
+
+  config
 }
 
 /// Load moon.mod.json
@@ -1229,6 +1245,16 @@ async fn get_commits_since_last_tag(
       }
       @executor.run_command(cmd)
     }
+  }
+
+  // Verify git log succeeded
+  if not(log_result.is_success()) {
+    let detail = if log_result.stderr.is_empty() {
+      "exit code " + log_result.exit_code.to_string()
+    } else {
+      log_result.stderr.trim().to_string()
+    }
+    fail("Failed to read git log: " + detail)
   }
 
   // Parse

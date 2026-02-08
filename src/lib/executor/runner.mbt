@@ -2,6 +2,66 @@
 /// 2147483 * 1000 = 2147483000 < Int.MAX (2147483647)
 let max_timeout_seconds : UInt = 2147483U
 
+/// C FFI: read environment variable into buffer (returns length, 0 if not found)
+#borrow(name, buf)
+extern "C" fn c_getenv(name : Bytes, buf : Bytes, buf_size : Int) -> Int = "moon_release_getenv"
+
+/// Get environment variable value (portable, uses libc getenv)
+/// Returns None if the variable is not set or empty.
+/// TODO: Replace with moonbitlang/core/env API when getenv support is added upstream.
+pub fn get_env_var(name : String) -> String? {
+  // Encode name as null-terminated UTF-8 bytes
+  let name_chars = name.to_array()
+  let byte_arr : Array[Byte] = Array::new(capacity=name_chars.length() + 1)
+  for c in name_chars {
+    byte_arr.push(c.to_int().to_byte())
+  }
+  byte_arr.push(b'\x00')
+  let name_bytes = Bytes::from_array(byte_arr[:])
+
+  // Read value into buffer
+  let buf = Bytes::new(4096)
+  let len = c_getenv(name_bytes, buf, buf.length())
+  if len == 0 {
+    return None
+  }
+
+  // Decode UTF-8 bytes to string
+  let sb = StringBuilder::new()
+  let mut i = 0
+  while i < len {
+    let c = buf[i].to_int()
+    if c == 0 {
+      break
+    } else if c < 0x80 {
+      sb.write_char(c.unsafe_to_char())
+      i += 1
+    } else if c < 0xE0 {
+      if i + 1 >= len { break }
+      let c2 = ((c & 0x1F) << 6) | (buf[i + 1].to_int() & 0x3F)
+      sb.write_char(c2.unsafe_to_char())
+      i += 2
+    } else if c < 0xF0 {
+      if i + 2 >= len { break }
+      let c2 = ((c & 0x0F) << 12) |
+        ((buf[i + 1].to_int() & 0x3F) << 6) |
+        (buf[i + 2].to_int() & 0x3F)
+      sb.write_char(c2.unsafe_to_char())
+      i += 3
+    } else {
+      if i + 3 >= len { break }
+      let c2 = ((c & 0x07) << 18) |
+        ((buf[i + 1].to_int() & 0x3F) << 12) |
+        ((buf[i + 2].to_int() & 0x3F) << 6) |
+        (buf[i + 3].to_int() & 0x3F)
+      sb.write_char(c2.unsafe_to_char())
+      i += 4
+    }
+  }
+  let result = sb.to_string()
+  if result.is_empty() { None } else { Some(result) }
+}
+
 /// Extract program and arguments from a command array
 fn split_program_args(cmd : Array[String]) -> (String, Array[String]) {
   let program = cmd[0]

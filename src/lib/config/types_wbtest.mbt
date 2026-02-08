@@ -744,3 +744,29 @@ test "NpmConfig::build_args - custom" {
   let npm = NpmConfig::{ build_command: Some("npm run build"), provenance: true, timeout: 300 }
   assert_eq(npm.build_args(), ["npm", "run", "build"])
 }
+
+test "Config::parse collects unknown key warnings" {
+  let content =
+    #|{
+    #|  "pr_title": "release: v{{ version }}",
+    #|  "unknown_field": true,
+    #|  "another_unknown": 42
+    #|}
+  let warnings : Array[String] = []
+  let config = try { Config::parse(content, warnings~) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.pr_title, "release: v{{ version }}")
+  assert_eq(warnings.length(), 2)
+  assert_true(warnings[0].contains("unknown_field"))
+  assert_true(warnings[1].contains("another_unknown"))
+}
+
+test "Config::parse no warnings for valid keys" {
+  let content =
+    #|{
+    #|  "pr_title": "test",
+    #|  "git_tag_enable": true
+    #|}
+  let warnings : Array[String] = []
+  let _ = try { Config::parse(content, warnings~) } catch { _ => fail("Unexpected error") }
+  assert_eq(warnings.length(), 0)
+}

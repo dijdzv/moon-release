@@ -143,7 +143,12 @@ pub fn PackageConfig::default(name : String, path : String) -> PackageConfig {
 }
 
 /// Parse configuration from JSON (merge with defaults)
-pub fn Config::parse(content : String) -> Config raise ConfigError {
+/// Warnings about unknown keys are collected into the `warnings` array instead of printing.
+/// Callers can display them as appropriate (e.g., suppress in JSON output mode).
+pub fn Config::parse(
+  content : String,
+  warnings~ : Array[String] = []
+) -> Config raise ConfigError {
   let d = Config::default()
 
   if content.trim().is_empty() {
@@ -183,7 +188,7 @@ pub fn Config::parse(content : String) -> Config raise ConfigError {
       }
     }
     if not(found) {
-      println("Warning: unknown config key '\{key}' in release.json")
+      warnings.push("unknown config key '\{key}' in release.json")
     }
   }
 

@@ -92,3 +92,14 @@ test "repo_git_command - empty args" {
   assert_eq(cmd[1], "-C")
   assert_eq(cmd[2], ".")
 }
+
+test "get_env_var - HOME is set" {
+  // HOME should always be set on Unix-like systems
+  let home = get_env_var("HOME")
+  assert_true(home is Some(_))
+}
+
+test "get_env_var - nonexistent var returns None" {
+  let result = get_env_var("MOON_RELEASE_NONEXISTENT_VAR_12345")
+  assert_true(result is None)
+}

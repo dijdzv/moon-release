@@ -1,22 +1,17 @@
 /// Get mooncakes credentials file path
 /// Tries HOME (Unix), then USERPROFILE (Windows), then falls back to CWD-relative path.
-async fn get_mooncakes_credentials_path() -> String {
+/// Uses libc getenv for cross-platform compatibility (no dependency on printenv).
+fn get_mooncakes_credentials_path() -> String {
   // Try HOME first (Unix / macOS / Linux)
-  let home = try @executor.run_command(["printenv", "HOME"]) catch {
-    _ => @executor.CommandResult::failed("printenv failed")
-  } noraise { r => r }
-
-  if home.is_success() {
-    return home.stdout.trim().to_string() + "/.moon/credentials.json"
+  match @executor.get_env_var("HOME") {
+    Some(home) => return home + "/.moon/credentials.json"
+    None => ()
   }
 
   // Try USERPROFILE (Windows)
-  let userprofile = try @executor.run_command(["printenv", "USERPROFILE"]) catch {
-    _ => @executor.CommandResult::failed("printenv failed")
-  } noraise { r => r }
-
-  if userprofile.is_success() {
-    return userprofile.stdout.trim().to_string() + "/.moon/credentials.json"
+  match @executor.get_env_var("USERPROFILE") {
+    Some(profile) => return profile + "/.moon/credentials.json"
+    None => ()
   }
 
   // Fallback: CWD-relative path
@@ -58,9 +53,7 @@ pub async fn validate_publish_config(
         } noraise { _ => () }
 
         // Check if mooncakes credentials exist (warning only, not error)
-        let creds_path = try get_mooncakes_credentials_path() catch {
-          _ => ".moon/credentials.json"
-        } noraise { p => p }
+        let creds_path = get_mooncakes_credentials_path()
         let creds_result = try @fs.read_file(creds_path).text() catch {
           _ => ""
         } noraise { c => c }
@@ -583,6 +576,13 @@ pub async fn run_release_pr(
   match validate_git_ref_name(branch_name) {
     Some(reason) =>
       raise InputValidationError("Invalid branch name '\{branch_name}': \{reason}")
+    None => ()
+  }
+
+  // Validate base branch name
+  match validate_git_ref_name(base_branch) {
+    Some(reason) =>
+      raise InputValidationError("Invalid base_branch '\{base_branch}': \{reason}")
     None => ()
   }
 
