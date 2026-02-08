@@ -78,7 +78,12 @@ fn warn_duplicates(names : Array[String], category : String) -> Unit {
 /// Delegates to CheckResult::new to consolidate bump suggestion logic
 pub fn get_suggested_bump_from_diff(diff : ApiDiff) -> String? {
   let result = CheckResult::new(diff)
-  result.suggested_bump.to_bump_type()
+  match result.suggested_bump {
+    Some(Major) => Some("major")
+    Some(Minor) => Some("minor")
+    Some(Patch) => Some("patch")
+    None => Option::None
+  }
 }
 
 /// Format check result as concise summary

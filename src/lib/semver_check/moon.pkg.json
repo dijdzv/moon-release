@@ -1,6 +1,7 @@
 {
   "import": [
     "moonbitlang/core/json",
-    "moonbitlang/core/hashmap"
+    "moonbitlang/core/hashmap",
+    "moon-release/src/lib/semver"
   ]
 }

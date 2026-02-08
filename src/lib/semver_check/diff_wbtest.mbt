@@ -15,7 +15,7 @@ test "detect removed type as breaking" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes.length(), 1)
   assert_eq(diff.changes[0].kind, Breaking)
   assert_eq(diff.changes[0].name, "Foo")
@@ -38,8 +38,8 @@ test "detect added type as addition" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_additions)
-  assert_false(diff.has_breaking)
+  assert_true(diff.has_additions())
+  assert_false(diff.has_breaking())
   assert_eq(diff.changes[0].kind, Addition)
 }
 
@@ -72,7 +72,7 @@ test "detect signature change as breaking" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes[0].description, "Type signature changed")
 }
 
@@ -99,7 +99,7 @@ test "detect removed method as breaking" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes[0].name, "Foo::bar")
 }
 
@@ -113,8 +113,8 @@ test "no changes detected for identical APIs" {
   }
 
   let diff = diff_api(api, api)
-  assert_false(diff.has_breaking)
-  assert_false(diff.has_additions)
+  assert_false(diff.has_breaking())
+  assert_false(diff.has_additions())
   assert_eq(diff.changes.length(), 0)
 }
 
@@ -135,7 +135,7 @@ test "detect removed error as breaking" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes[0].name, "MyError")
 }
 
@@ -150,8 +150,8 @@ test "detect added error as addition" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_additions)
-  assert_false(diff.has_breaking)
+  assert_true(diff.has_additions())
+  assert_false(diff.has_breaking())
 }
 
 test "detect removed trait as breaking" {
@@ -165,7 +165,7 @@ test "detect removed trait as breaking" {
   let new_api = PackageApi::empty()
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes[0].name, "MyTrait")
 }
 
@@ -180,7 +180,7 @@ test "detect removed value as breaking" {
   let new_api = PackageApi::empty()
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes[0].name, "MY_CONST")
 }
 
@@ -201,7 +201,7 @@ test "detect value signature change as breaking" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes[0].description, "Value/function signature changed")
 }
 
@@ -228,8 +228,8 @@ test "detect added method as addition" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_additions)
-  assert_false(diff.has_breaking)
+  assert_true(diff.has_additions())
+  assert_false(diff.has_breaking())
   assert_eq(diff.changes[0].name, "Foo::new_method")
 }
 
@@ -265,7 +265,7 @@ test "detect added trait method as breaking" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes[0].kind, Breaking)
   assert_eq(diff.changes[0].name, "MyTrait::new_method")
 }
@@ -293,8 +293,8 @@ test "detect added type method as addition (not breaking)" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_additions)
-  assert_false(diff.has_breaking)
+  assert_true(diff.has_additions())
+  assert_false(diff.has_breaking())
   assert_eq(diff.changes[0].kind, Addition)
 }
 
@@ -327,7 +327,7 @@ test "detect method signature change as breaking" {
   }
 
   let diff = diff_api(old_api, new_api)
-  assert_true(diff.has_breaking)
+  assert_true(diff.has_breaking())
   assert_eq(diff.changes[0].name, "Foo::bar")
   assert_eq(diff.changes[0].description, "Method signature changed")
 }

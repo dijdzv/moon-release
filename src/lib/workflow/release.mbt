@@ -1156,7 +1156,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
       }
     } noraise { r => r }
 
-    if check_result.diff.has_breaking {
+    if check_result.diff.has_breaking() {
       println("")
       println("WARNING: Breaking API changes detected!")
       println(@semver_check.format_summary(check_result))

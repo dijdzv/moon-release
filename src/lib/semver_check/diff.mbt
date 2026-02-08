@@ -22,13 +22,21 @@ pub struct ApiChange {
 /// API diff result
 pub struct ApiDiff {
   changes : Array[ApiChange]
-  has_breaking : Bool
-  has_additions : Bool
 } derive(Show)
 
 /// Create empty ApiDiff
 pub fn ApiDiff::empty() -> ApiDiff {
-  ApiDiff::{ changes: [], has_breaking: false, has_additions: false }
+  ApiDiff::{ changes: [] }
+}
+
+/// Check if diff contains any breaking changes
+pub fn ApiDiff::has_breaking(self : ApiDiff) -> Bool {
+  self.changes.iter().any(fn(c) { c.kind == Breaking })
+}
+
+/// Check if diff contains any additions
+pub fn ApiDiff::has_additions(self : ApiDiff) -> Bool {
+  self.changes.iter().any(fn(c) { c.kind == Addition })
 }
 
 /// Compare two APIs and detect differences
@@ -47,10 +55,7 @@ pub fn diff_api(old_api : PackageApi, new_api : PackageApi) -> ApiDiff {
   // Compare values
   diff_values(old_api.values, new_api.values, changes)
 
-  let has_breaking = changes.iter().any(fn(c) { c.kind == Breaking })
-  let has_additions = changes.iter().any(fn(c) { c.kind == Addition })
-
-  ApiDiff::{ changes, has_breaking, has_additions }
+  ApiDiff::{ changes }
 }
 
 /// Detect type differences
