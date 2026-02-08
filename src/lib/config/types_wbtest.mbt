@@ -697,34 +697,6 @@ test "Config::git_release_mode - draft release" {
   }
 }
 
-test "Config::pr_config - default values" {
-  let config = Config::default()
-  let pr = config.pr_config()
-  assert_eq(pr.title, "chore: release v{{ version }}")
-  assert_eq(pr.draft, false)
-  assert_eq(pr.labels, [])
-  assert_eq(pr.branch_prefix, "release/")
-  assert_eq(pr.base_branch, "main")
-}
-
-test "Config::pr_config - custom values" {
-  let content =
-    #|{
-    #|  "pr_title": "release: {{ version }}",
-    #|  "pr_draft": true,
-    #|  "pr_labels": ["release"],
-    #|  "pr_branch_prefix": "rel/",
-    #|  "base_branch": "develop"
-    #|}
-  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
-  let pr = config.pr_config()
-  assert_eq(pr.title, "release: {{ version }}")
-  assert_eq(pr.draft, true)
-  assert_eq(pr.labels, ["release"])
-  assert_eq(pr.branch_prefix, "rel/")
-  assert_eq(pr.base_branch, "develop")
-}
-
 test "PackageConfig::publish_target - mooncakes only" {
   let pkg = PackageConfig::default("pkg", ".")
   assert_true(pkg.publish_target() is MooncakesOnly)

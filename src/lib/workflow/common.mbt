@@ -77,7 +77,7 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
 pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
   match config.publish_target() {
     NpmOnly(npm) | Both(npm) => npm.build_args()
-    _ => @config.NpmConfig::{ build_command: config.npm_build_command, provenance: config.npm_publish_provenance, timeout: config.npm_publish_timeout }.build_args()
+    _ => abort("unreachable: npm build command requested for non-npm config")
   }
 }
 
@@ -85,7 +85,7 @@ pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
 pub fn get_pkg_npm_build_command(pkg : @config.PackageConfig) -> Array[String] {
   match pkg.publish_target() {
     NpmOnly(npm) | Both(npm) => npm.build_args()
-    _ => @config.NpmConfig::{ build_command: pkg.npm_build_command, provenance: true, timeout: 300 }.build_args()
+    _ => abort("unreachable: npm build command requested for non-npm package config")
   }
 }
 

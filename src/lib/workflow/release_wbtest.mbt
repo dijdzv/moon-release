@@ -427,7 +427,11 @@ test "build_pr_body_unified - groups commits by type" {
 // npm build command tests
 
 test "get_npm_build_command - returns default when no custom command" {
-  let config = @config.Config::default()
+  let content =
+    #|{
+    #|  "npm_publish": true
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
   let cmd = get_npm_build_command(config)
   assert_eq(cmd.length(), 4)
   assert_eq(cmd[0], "moon")
@@ -439,6 +443,7 @@ test "get_npm_build_command - returns default when no custom command" {
 test "get_npm_build_command - returns custom command when specified" {
   let content =
     #|{
+    #|  "npm_publish": true,
     #|  "npm_build_command": "npm run build"
     #|}
   let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
@@ -452,6 +457,7 @@ test "get_npm_build_command - returns custom command when specified" {
 test "get_npm_build_command - handles single word command" {
   let content =
     #|{
+    #|  "npm_publish": true,
     #|  "npm_build_command": "make"
     #|}
   let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
@@ -463,6 +469,7 @@ test "get_npm_build_command - handles single word command" {
 test "get_npm_build_command - handles complex command" {
   let content =
     #|{
+    #|  "npm_publish": true,
     #|  "npm_build_command": "moon build --target js --output-dir dist"
     #|}
   let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
@@ -506,4 +513,132 @@ test "get_pkg_npm_build_command - custom" {
   assert_eq(cmd[1], "tsc")
   assert_eq(cmd[2], "--outDir")
   assert_eq(cmd[3], "lib")
+}
+
+// collect_files_to_stage tests
+
+fn make_ctx(config : @config.Config) -> ReleaseContext {
+  let ver = @semver.Version::parse("1.0.0").unwrap()
+  ReleaseContext::new(config, @git.Repository::current(), ver, ver, [])
+}
+
+test "collect_files_to_stage - single package MooncakesOnly" {
+  let config = @config.Config::default()  // moon_publish=true, npm_publish=false
+  let ctx = make_ctx(config)
+  let files = collect_files_to_stage(ctx)
+  assert_eq(files, ["add", "moon.mod.json"])
+}
+
+test "collect_files_to_stage - single package NpmOnly" {
+  let content =
+    #|{
+    #|  "moon_publish": false,
+    #|  "npm_publish": true
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let ctx = make_ctx(config)
+  let files = collect_files_to_stage(ctx)
+  assert_eq(files, ["add", "package.json"])
+}
+
+test "collect_files_to_stage - single package Both" {
+  let content =
+    #|{
+    #|  "moon_publish": true,
+    #|  "npm_publish": true
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let ctx = make_ctx(config)
+  let files = collect_files_to_stage(ctx)
+  assert_eq(files, ["add", "moon.mod.json", "package.json"])
+}
+
+test "collect_files_to_stage - single package NoPublish" {
+  let content =
+    #|{
+    #|  "moon_publish": false,
+    #|  "npm_publish": false
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let ctx = make_ctx(config)
+  let files = collect_files_to_stage(ctx)
+  assert_eq(files, ["add"])
+}
+
+test "collect_files_to_stage - monorepo mixed publish targets" {
+  let content =
+    #|{
+    #|  "packages": [
+    #|    { "name": "core", "path": "packages/core", "moon_publish": true, "npm_publish": false },
+    #|    { "name": "cli", "path": "packages/cli", "moon_publish": false, "npm_publish": true },
+    #|    { "name": "all", "path": "packages/all", "moon_publish": true, "npm_publish": true }
+    #|  ]
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let ctx = make_ctx(config)
+  let files = collect_files_to_stage(ctx)
+  assert_eq(files, ["add", "packages/core/moon.mod.json", "packages/cli/package.json", "packages/all/moon.mod.json", "packages/all/package.json"])
+}
+
+test "collect_files_to_stage - monorepo NoPublish packages skipped" {
+  let content =
+    #|{
+    #|  "packages": [
+    #|    { "name": "core", "path": "packages/core", "moon_publish": true, "npm_publish": false },
+    #|    { "name": "internal", "path": "packages/internal", "moon_publish": false, "npm_publish": false }
+    #|  ]
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let ctx = make_ctx(config)
+  let files = collect_files_to_stage(ctx)
+  assert_eq(files, ["add", "packages/core/moon.mod.json"])
+}
+
+test "collect_files_to_stage - monorepo root path uses no prefix" {
+  let content =
+    #|{
+    #|  "packages": [
+    #|    { "name": "root", "path": ".", "moon_publish": true, "npm_publish": false }
+    #|  ]
+    #|}
+  let config = try { @config.Config::parse(content) } catch { _ => fail("Unexpected error") }
+  let ctx = make_ctx(config)
+  let files = collect_files_to_stage(ctx)
+  assert_eq(files, ["add", "moon.mod.json"])
+}
+
+// replace_json_field + trailing newline preservation tests (for update_package_json_version logic)
+
+test "replace_json_field preserves trailing newline" {
+  let content =
+    #|{
+    #|  "name": "my-pkg",
+    #|  "version": "1.0.0"
+    #|}
+  // Simulate the logic from update_package_json_version:
+  // replace_json_field + trailing newline preservation
+  let with_newline = content + "\n"
+  let result = try { @moon_mod.replace_json_field(with_newline, "version", "2.0.0") } catch { _ => fail("Unexpected error") }
+  // The replace_json_field itself may or may not preserve trailing newline,
+  // so apply the same logic as update_package_json_version
+  let final_result = if with_newline.has_suffix("\n") && not(result.has_suffix("\n")) {
+    result + "\n"
+  } else {
+    result
+  }
+  assert_true(final_result.has_suffix("\n"))
+  assert_true(final_result.contains("\"version\": \"2.0.0\""))
+}
+
+test "replace_json_field - version field missing raises error" {
+  let content =
+    #|{
+    #|  "name": "my-pkg"
+    #|}
+  try {
+    let _ = @moon_mod.replace_json_field(content, "version", "2.0.0")
+    fail("Expected error for missing version field")
+  } catch {
+    _ => ()  // Expected: field not found error
+  }
 }

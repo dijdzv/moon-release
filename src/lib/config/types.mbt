@@ -24,16 +24,6 @@ pub enum GitReleaseMode {
   NoGitRelease                                    // No tag, no release
 } derive(Show, Eq)
 
-/// PR configuration (grouped)
-pub(all) struct PrConfig {
-  title : String
-  body : String
-  labels : Array[String]
-  draft : Bool
-  branch_prefix : String
-  base_branch : String
-} derive(Show, Eq)
-
 // ============================================================================
 // Config struct
 // ============================================================================
@@ -551,18 +541,6 @@ pub fn Config::git_release_mode(self : Config) -> GitReleaseMode {
   }
 }
 
-/// Get PR configuration as a grouped struct
-pub fn Config::pr_config(self : Config) -> PrConfig {
-  PrConfig::{
-    title: self.pr_title,
-    body: self.pr_body,
-    labels: self.pr_labels,
-    draft: self.pr_draft,
-    branch_prefix: self.pr_branch_prefix,
-    base_branch: self.base_branch,
-  }
-}
-
 /// Get package-level publish target
 pub fn PackageConfig::publish_target(self : PackageConfig) -> PublishTarget {
   let npm_config = NpmConfig::{
@@ -578,7 +556,9 @@ pub fn PackageConfig::publish_target(self : PackageConfig) -> PublishTarget {
   }
 }
 
-/// Get the npm build command as an argument array
+/// Get the npm build command as an argument array.
+/// NOTE: Splits on spaces only. Quoted arguments with spaces (e.g. "npm run 'my script'")
+/// are not supported — each space-separated token becomes a separate argument.
 pub fn NpmConfig::build_args(self : NpmConfig) -> Array[String] {
   match self.build_command {
     Some(c) => c.split(" ").map(fn(s) { s.to_string() }).collect()
