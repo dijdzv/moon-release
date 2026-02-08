@@ -14,8 +14,13 @@ pub struct ReleaseContext {
   bump_all : Bool
 }
 
-/// Workflow error
-pub suberror WorkflowError {
+/// Workflow error — structured variants for different failure categories
+pub(all) suberror WorkflowError {
+  GitError(String)
+  ConfigValidationError(String)
+  PublishError(String)
+  InputValidationError(String)
+  ExternalCommandError(String)
   WorkflowError(String)
 }
 

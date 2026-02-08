@@ -51,10 +51,10 @@ pub async fn validate_publish_config(
     match publish_target {
       MooncakesOnly | Both(_) => {
         let content = try @fs.read_file("moon.mod.json").text() catch {
-          _ => raise WorkflowError("moon_publish is enabled but moon.mod.json not found")
+          _ => raise ConfigValidationError("moon_publish is enabled but moon.mod.json not found")
         } noraise { c => c }
         try @moon_mod.parse(content) catch {
-          e => raise WorkflowError("moon_publish is enabled but moon.mod.json is invalid: " + e.to_string())
+          e => raise ConfigValidationError("moon_publish is enabled but moon.mod.json is invalid: " + e.to_string())
         } noraise { _ => () }
 
         // Check if mooncakes credentials exist (warning only, not error)
@@ -90,7 +90,7 @@ pub async fn validate_publish_config(
     match publish_target {
       NpmOnly(_) | Both(_) => {
         try @fs.read_file("package.json").text() catch {
-          _ => raise WorkflowError("npm_publish is enabled but package.json not found")
+          _ => raise ConfigValidationError("npm_publish is enabled but package.json not found")
         } noraise { _ => () }
 
         if verbose {
@@ -105,7 +105,7 @@ pub async fn validate_publish_config(
   // Monorepo: validate each package's required files
   for pkg in config.packages {
     if not(validate_path(pkg.path)) {
-      raise WorkflowError("Invalid path for package " + pkg.name + ": " + pkg.path)
+      raise InputValidationError("Invalid path for package " + pkg.name + ": " + pkg.path)
     }
 
     let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
@@ -114,10 +114,10 @@ pub async fn validate_publish_config(
       MooncakesOnly | Both(_) => {
         let moon_mod_path = pkg_path + "moon.mod.json"
         let content = try @fs.read_file(moon_mod_path).text() catch {
-          _ => raise WorkflowError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " not found")
+          _ => raise ConfigValidationError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " not found")
         } noraise { c => c }
         try @moon_mod.parse(content) catch {
-          e => raise WorkflowError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " is invalid: " + e.to_string())
+          e => raise ConfigValidationError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " is invalid: " + e.to_string())
         } noraise { _ => () }
       }
       _ => ()
@@ -127,7 +127,7 @@ pub async fn validate_publish_config(
       NpmOnly(_) | Both(_) => {
         let pkg_json_path = pkg_path + "package.json"
         try @fs.read_file(pkg_json_path).text() catch {
-          _ => raise WorkflowError("npm_publish is enabled for " + pkg.name + " but " + pkg_json_path + " not found")
+          _ => raise ConfigValidationError("npm_publish is enabled for " + pkg.name + " but " + pkg_json_path + " not found")
         } noraise { _ => () }
       }
       _ => ()
@@ -220,7 +220,7 @@ pub async fn get_current_version(
     }
     (Some(mv), None) => mv
     (None, Some(nv)) => nv
-    (None, None) => raise WorkflowError("No publish target enabled. Enable moon_publish or npm_publish.")
+    (None, None) => raise ConfigValidationError("No publish target enabled. Enable moon_publish or npm_publish.")
   }
 }
 
@@ -561,7 +561,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
           println("Updated package.json to version \{ctx.new_version.to_string()}")
         }
         None =>
-          raise WorkflowError("npm_publish is enabled but package.json not found")
+          raise ConfigValidationError("npm_publish is enabled but package.json not found")
       }
     _ => ()
   }
@@ -582,7 +582,7 @@ pub async fn run_release_pr(
   // Validate branch name
   match validate_git_ref_name(branch_name) {
     Some(reason) =>
-      raise WorkflowError("Invalid branch name '\{branch_name}': \{reason}")
+      raise InputValidationError("Invalid branch name '\{branch_name}': \{reason}")
     None => ()
   }
 
@@ -621,10 +621,10 @@ pub async fn run_release_pr(
     base_branch
   }
   let checkout_result = try @executor.run_git(ctx.repo, ["checkout", "-B", branch_name, start_point]) catch {
-    e => raise WorkflowError("Failed to create/checkout branch '" + branch_name + "': " + e.to_string())
+    e => raise GitError("Failed to create/checkout branch '" + branch_name + "': " + e.to_string())
   } noraise { r => r }
   if not(checkout_result.is_success()) {
-    raise WorkflowError("Failed to create/checkout branch '" + branch_name + "': " + checkout_result.stderr)
+    raise GitError("Failed to create/checkout branch '" + branch_name + "': " + checkout_result.stderr)
   }
 
   let branch_recovery_note = "\nNote: You may be on branch '" + branch_name + "'. Run 'git checkout " + base_branch + "' to return."
@@ -658,10 +658,10 @@ pub async fn run_release_pr(
   // Stage changes - add relevant files based on publish configuration
   let files_to_stage = collect_files_to_stage(ctx)
   let stage_result = try @executor.run_git(ctx.repo, files_to_stage) catch {
-    e => raise WorkflowError("Failed to stage files: " + e.to_string() + branch_recovery_note)
+    e => raise GitError("Failed to stage files: " + e.to_string() + branch_recovery_note)
   } noraise { r => r }
   if not(stage_result.is_success()) {
-    raise WorkflowError("Failed to stage files: " + stage_result.stderr + branch_recovery_note)
+    raise GitError("Failed to stage files: " + stage_result.stderr + branch_recovery_note)
   }
 
   // Check if there are changes with try-catch-noraise pattern
@@ -695,10 +695,10 @@ pub async fn run_release_pr(
   // Commit with try-catch-noraise pattern
   let commit_msg = ctx.config.apply_pr_title_template(ctx.new_version.to_string())
   let commit_result = try @executor.run_git(ctx.repo, ["commit", "-m", commit_msg]) catch {
-    e => raise WorkflowError("Failed to commit: " + e.to_string() + branch_recovery_note)
+    e => raise GitError("Failed to commit: " + e.to_string() + branch_recovery_note)
   } noraise { r => r }
   if not(commit_result.is_success()) {
-    raise WorkflowError("Failed to commit: " + commit_result.stderr + branch_recovery_note)
+    raise GitError("Failed to commit: " + commit_result.stderr + branch_recovery_note)
   }
 
   // Push (force push to update)
@@ -708,7 +708,7 @@ pub async fn run_release_pr(
     println("Pushing with --force-with-lease (safe force push)...")
   }
   let push_result = try @executor.run_git(ctx.repo, ["push", "-u", "--force-with-lease", "origin", branch_name]) catch {
-    e => raise WorkflowError("Failed to push branch '" + branch_name + "' to origin: " + e.to_string() + branch_recovery_note)
+    e => raise GitError("Failed to push branch '" + branch_name + "' to origin: " + e.to_string() + branch_recovery_note)
   } noraise { r => r }
   if not(push_result.is_success()) {
     let hint = if push_result.stderr.contains("permission") || push_result.stderr.contains("denied") {
@@ -718,7 +718,7 @@ pub async fn run_release_pr(
     } else {
       ""
     }
-    raise WorkflowError("Failed to push branch '" + branch_name + "' to origin: " + push_result.stderr + hint + branch_recovery_note)
+    raise GitError("Failed to push branch '" + branch_name + "' to origin: " + push_result.stderr + hint + branch_recovery_note)
   }
 
   // Return to original branch with try-catch-noraise pattern
@@ -769,7 +769,7 @@ pub async fn run_release_pr(
 
       // Create PR with try-catch-noraise pattern
       let pr_result = try @executor.run_gh(gh_args) catch {
-        e => raise WorkflowError("Failed to create pull request: " + e.to_string() + branch_recovery_note)
+        e => raise GitError("Failed to create pull request: " + e.to_string() + branch_recovery_note)
       } noraise { r => r }
       if not(pr_result.is_success()) {
         let hint = if pr_result.stderr.contains("already exists") {
@@ -781,7 +781,7 @@ pub async fn run_release_pr(
         } else {
           ""
         }
-        raise WorkflowError("Failed to create pull request: " + pr_result.stderr + hint + branch_recovery_note)
+        raise GitError("Failed to create pull request: " + pr_result.stderr + hint + branch_recovery_note)
       }
 
       println("Created pull request: " + pr_result.stdout_trimmed())
@@ -1010,7 +1010,7 @@ pub async fn run_release(
     GitHubRelease(..) | TagOnly =>
       match validate_git_ref_name(tag_name) {
         Some(reason) =>
-          raise WorkflowError("Invalid tag name '\{tag_name}': \{reason}")
+          raise InputValidationError("Invalid tag name '\{tag_name}': \{reason}")
         None => ()
       }
     NoGitRelease => ()
@@ -1058,17 +1058,17 @@ pub async fn run_release(
     GitHubRelease(..) | TagOnly => {
       let tag_msg = release_title
       let tag_result = try @executor.run_git(ctx.repo, ["tag", "-a", tag_name, "-m", tag_msg]) catch {
-        e => raise WorkflowError("Failed to create tag: " + e.to_string())
+        e => raise GitError("Failed to create tag: " + e.to_string())
       } noraise { r => r }
       if not(tag_result.is_success()) {
-        raise WorkflowError("Failed to create tag: " + tag_result.stderr)
+        raise GitError("Failed to create tag: " + tag_result.stderr)
       }
 
       let push_result = try @executor.run_git(ctx.repo, ["push", "origin", tag_name]) catch {
-        e => raise WorkflowError("Failed to push tag: " + e.to_string())
+        e => raise GitError("Failed to push tag: " + e.to_string())
       } noraise { r => r }
       if not(push_result.is_success()) {
-        raise WorkflowError("Failed to push tag: " + push_result.stderr)
+        raise GitError("Failed to push tag: " + push_result.stderr)
       }
 
       println("Created and pushed tag: " + tag_name)
@@ -1190,7 +1190,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
   // Run publish with try-catch-noraise pattern
   let publish_result = try @executor.run_command_with_timeout(publish_cmd, timeout) catch {
-    e => raise WorkflowError("Failed to publish: " + e.to_string())
+    e => raise PublishError("Failed to publish: " + e.to_string())
   } noraise { r => r }
 
   match publish_result {
@@ -1237,7 +1237,7 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
   // Run npm publish with try-catch-noraise pattern
   let publish_result = try @executor.run_command_with_timeout(publish_cmd, timeout) catch {
-    e => raise WorkflowError("Failed to publish to npm: " + e.to_string())
+    e => raise PublishError("Failed to publish to npm: " + e.to_string())
   } noraise { r => r }
 
   match publish_result {
@@ -1273,7 +1273,7 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
         } else {
           ""
         }
-        raise WorkflowError("Failed to publish to npm: " + result.stderr + hint)
+        raise PublishError("Failed to publish to npm: " + result.stderr + hint)
       }
   }
 
