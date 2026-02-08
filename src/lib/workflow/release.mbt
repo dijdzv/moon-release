@@ -1,3 +1,213 @@
+/// Get latest tag from repository
+pub async fn get_latest_tag(repo : @git.Repository) -> String? raise WorkflowError {
+  let cmd = repo.get_latest_tag_command()
+  let result = try @executor.run_command(cmd) catch {
+    e => raise ExternalCommandError("Failed to run git describe: " + e.to_string())
+  } noraise { r => r }
+  if result.is_success() {
+    let tag = result.stdout_trimmed()
+    if tag.is_empty() { None } else { Some(tag) }
+  } else {
+    None
+  }
+}
+
+/// Get commits from latest tag to current
+pub async fn get_commits_since_last_tag(
+  repo : @git.Repository,
+  max_commits~ : UInt? = None
+) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
+  // Get latest tag
+  let latest_tag = try get_latest_tag(repo) catch {
+    _ => None
+  } noraise { r => r }
+
+  // Get commit log
+  let log_result = match latest_tag {
+    Some(tag) => {
+      let cmd = try repo.get_commits_since_tag_command(tag) catch {
+        e => raise ExternalCommandError("Failed to build git log command: " + e.to_string())
+      } noraise { r => r }
+      match max_commits {
+        Some(n) => {
+          cmd.push("-n")
+          cmd.push(n.to_string())
+        }
+        None => ()
+      }
+      try @executor.run_command(cmd) catch {
+        e => raise ExternalCommandError("Failed to run git log: " + e.to_string())
+      } noraise { r => r }
+    }
+    None => {
+      let cmd = repo.get_all_commits_command()
+      match max_commits {
+        Some(n) => {
+          cmd.push("-n")
+          cmd.push(n.to_string())
+        }
+        None => ()
+      }
+      try @executor.run_command(cmd) catch {
+        e => raise ExternalCommandError("Failed to run git log: " + e.to_string())
+      } noraise { r => r }
+    }
+  }
+
+  // Verify git log succeeded
+  if not(log_result.is_success()) {
+    let detail = if log_result.stderr.is_empty() {
+      "exit code " + log_result.exit_code.to_string()
+    } else {
+      log_result.stderr.trim().to_string()
+    }
+    raise ExternalCommandError("Failed to read git log: " + detail)
+  }
+
+  // Parse
+  let git_commits = @git.parse_commit_log(log_result.stdout)
+  @git.parse_conventional_commits(git_commits)
+}
+
+/// Check working directory for uncommitted changes
+/// Raises GitError if dirty and allow_dirty is false
+pub async fn check_working_directory(
+  config : @config.Config,
+  repo : @git.Repository,
+  verbose~ : Bool = false
+) -> Unit raise WorkflowError {
+  if config.allow_dirty {
+    return
+  }
+
+  let result = try @executor.run_git(repo, ["status", "--porcelain"]) catch {
+    e => {
+      if verbose {
+        println("Warning: Failed to check git status: " + e.to_string())
+        println("Assuming working directory has changes.")
+      }
+      raise GitError("Failed to check git status: " + e.to_string())
+    }
+  } noraise { r => r }
+
+  if not(result.stdout.trim().is_empty()) {
+    let mut msg = "Working directory has uncommitted changes.\nCommit or stash your changes, or set 'allow_dirty: true' in config."
+    if verbose {
+      let status_result = try @executor.run_git(repo, ["status", "--short"]) catch {
+        _ => @executor.CommandResult::failed("status failed")
+      } noraise { r => r }
+      if status_result.is_success() {
+        msg = msg + "\n\nChanged files:\n" + status_result.stdout
+      }
+    }
+    raise GitError(msg)
+  }
+}
+
+/// Get GitHub client (owner/repo from gh CLI)
+pub async fn get_github_client() -> @github.GitHubClient raise WorkflowError {
+  let result = try @executor.run_command(
+    ["gh", "repo", "view", "--json", "owner,name"],
+  ) catch {
+    e => raise ExternalCommandError("Failed to get repository info: " + e.to_string())
+  } noraise { r => r }
+
+  if not(result.is_success()) {
+    let hint = if result.stderr.contains("not a git repository") {
+      "The current directory is not a git repository."
+    } else if result.stderr.contains("gh auth login") || result.stderr.contains("authentication") {
+      "Run 'gh auth login' to authenticate with GitHub."
+    } else if result.stderr.contains("not found") || result.stderr.contains("command not found") {
+      "The 'gh' CLI is not installed. Install it from https://cli.github.com/"
+    } else {
+      "Make sure you are in a GitHub repository and have 'gh' CLI installed and authenticated."
+    }
+    raise ExternalCommandError(
+      "Failed to get repository info: " + result.stderr.trim().to_string() + "\nHint: " + hint,
+    )
+  }
+
+  let json = try @json.parse(result.stdout) catch {
+    e => raise ExternalCommandError("Failed to parse repository info from 'gh' output: " + e.to_string())
+  } noraise { r => r }
+
+  match json {
+    Object(obj) => {
+      let owner = match obj.get("owner") {
+        Some(Object(o)) =>
+          match o.get("login") {
+            Some(String(s)) => s
+            _ => raise ExternalCommandError("Invalid owner info: expected 'owner.login' to be a string in 'gh' output")
+          }
+        _ => raise ExternalCommandError("Invalid owner info: expected 'owner' to be an object in 'gh' output")
+      }
+      let name = match obj.get("name") {
+        Some(String(s)) => s
+        _ => raise ExternalCommandError("Invalid repo name: expected 'name' to be a string in 'gh' output")
+      }
+      try @github.GitHubClient::new(owner, name) catch {
+        @github.GitHubError(msg) => raise ExternalCommandError("Invalid GitHub repository: " + msg)
+      } noraise { r => r }
+    }
+    _ => raise ExternalCommandError("Invalid repository info: expected JSON object from 'gh' output")
+  }
+}
+
+/// Analyze version bump for single-package mode
+/// Common pipeline: get_current_version → get_commits → validate → determine_bump → bump
+pub async fn analyze_version_bump(
+  config : @config.Config,
+  repo : @git.Repository,
+  forced_bump~ : @semver.BumpType? = None,
+  max_commits~ : UInt? = None,
+  allow_empty_commits~ : Bool = false,
+  default_bump~ : @semver.BumpType? = None
+) -> VersionAnalysis raise WorkflowError {
+  let current_version = get_current_version(config)
+
+  let commits = get_commits_since_last_tag(repo, max_commits~)
+
+  // Validate commits
+  if commits.is_empty() && not(allow_empty_commits) {
+    raise WorkflowError("No commits found since last tag. Nothing to release.")
+  }
+
+  if commits.is_empty() && forced_bump is None && allow_empty_commits {
+    // For release command: empty commits with no forced bump → use default
+    match default_bump {
+      Some(_) => ()
+      None => raise WorkflowError("No commits found since last tag. Nothing to release.")
+    }
+  }
+
+  // Determine bump type
+  let bump_type = match forced_bump {
+    Some(t) => t
+    None =>
+      match @semver.determine_bump_with_custom(
+        commits.map(fn(c) { c.0 }),
+        config.custom_major_increment_regex,
+        config.custom_minor_increment_regex,
+      ) {
+        Some(t) => t
+        None =>
+          match default_bump {
+            Some(t) => t
+            None => raise WorkflowError("No releasable commits found (no feat, fix, or breaking changes)")
+          }
+      }
+  }
+
+  let new_version = @semver.bump(current_version, bump_type)
+
+  VersionAnalysis::{
+    current_version,
+    new_version,
+    commits,
+    bump_type,
+  }
+}
+
 /// Get mooncakes credentials file path
 /// Tries HOME (Unix), then USERPROFILE (Windows), then falls back to CWD-relative path.
 /// Uses libc getenv for cross-platform compatibility (no dependency on printenv).
@@ -374,20 +584,8 @@ pub async fn get_monorepo_representative_version(
 }
 
 /// Update package.json version field
-/// Uses line-based processing with nesting depth tracking to only replace the top-level "version"
-/// Returns the updated content, or None if file doesn't exist
-/// Count consecutive backslashes before position `pos` in a char array.
-/// Returns true if the count is even (meaning the character at `pos` is NOT escaped).
-fn is_unescaped_at(chars : Array[Char], pos : Int) -> Bool {
-  let mut bs = 0
-  let mut k = pos - 1
-  while k >= 0 && chars[k] == '\\' {
-    bs = bs + 1
-    k = k - 1
-  }
-  bs % 2 == 0
-}
-
+/// Delegates to @moon_mod.replace_json_field for format-preserving replacement.
+/// Returns the updated content, or None if file doesn't exist.
 async fn update_package_json_version(
   new_version : @semver.Version,
   path~ : String = "package.json"
@@ -403,100 +601,17 @@ async fn update_package_json_version(
     None => raise WorkflowError("package.json does not contain a valid 'version' field")
   }
 
-  // Replace only the top-level "version" field by tracking brace nesting depth
-  // Process character-by-character across all lines for correct depth tracking
-  // Note: Minified JSON (single-line) is not fully supported for package.json version
-  // replacement. When version_at_depth_1 is found, remaining chars on the same line
-  // don't update depth tracking. This is acceptable because package.json is typically
-  // formatted with one property per line.
-  let lines = content.split("\n")
-  let updated_lines : Array[String] = []
-  let mut depth = 0
-  let mut in_string = false
-  let mut found = false
+  // Delegate to replace_json_field (format-preserving, top-level key only)
+  let result = try @moon_mod.replace_json_field(content, "version", new_version.to_string()) catch {
+    e => raise WorkflowError("Failed to update version in package.json: " + e.to_string())
+  } noraise { r => r }
 
-  for line_view in lines {
-    let line = line_view.to_string()
-
-    if found {
-      updated_lines.push(line)
-      continue
-    }
-
-    // Scan each character to track depth and find "version" key at depth 1
-    let chars = line.to_array()
-    let mut version_at_depth_1 = false
-
-    for i = 0; i < chars.length(); i = i + 1 {
-      let c = chars[i]
-      // Count consecutive backslashes before this character
-      // An even number means the quote is NOT escaped
-      if c == '"' && is_unescaped_at(chars, i) {
-        if not(in_string) {
-          // Opening quote - check if this is "version" key at depth 1
-          if depth == 1 && i + 8 < chars.length() &&
-             chars[i+1] == 'v' && chars[i+2] == 'e' && chars[i+3] == 'r' &&
-             chars[i+4] == 's' && chars[i+5] == 'i' && chars[i+6] == 'o' &&
-             chars[i+7] == 'n' && chars[i+8] == '"' {
-            // Check if followed by ':'
-            let mut k = i + 9
-            while k < chars.length() && (chars[k] == ' ' || chars[k] == '\t') {
-              k = k + 1
-            }
-            if k < chars.length() && chars[k] == ':' {
-              version_at_depth_1 = true
-            }
-          }
-        }
-        in_string = not(in_string)
-      } else if not(in_string) {
-        if c == '{' {
-          depth = depth + 1
-        } else if c == '}' {
-          depth = depth - 1
-        }
-      }
-    }
-
-    if version_at_depth_1 {
-      let indent = get_line_indent(line)
-      let trimmed = line.trim_start()
-      let has_trailing_comma = trimmed.has_suffix(",")
-      let new_line = indent + "\"version\": \"" + new_version.to_string() + "\"" +
-        (if has_trailing_comma { "," } else { "" })
-      updated_lines.push(new_line)
-      found = true
-    } else {
-      updated_lines.push(line)
-    }
-  }
-
-  if not(found) {
-    raise WorkflowError("package.json does not contain a 'version' field at the top level")
-  }
-
-  let result = updated_lines.iter().fold(init="", fn(acc, line) {
-    if acc.is_empty() { line } else { acc + "\n" + line }
-  })
+  // Preserve trailing newline
   if content.has_suffix("\n") && not(result.has_suffix("\n")) {
     Some(result + "\n")
   } else {
     Some(result)
   }
-}
-
-/// Get the leading whitespace of a line
-fn get_line_indent(line : String) -> String {
-  let chars = line.to_array()
-  let sb = StringBuilder::new()
-  for c in chars {
-    if c == ' ' || c == '\t' {
-      sb.write_char(c)
-    } else {
-      break
-    }
-  }
-  sb.to_string()
 }
 
 /// update command: local update only

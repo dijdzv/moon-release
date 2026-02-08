@@ -76,7 +76,7 @@ pub fn update_version(
 }
 
 /// Replace JSON field value (preserving format)
-fn replace_json_field(
+pub fn replace_json_field(
   content : String,
   field : String,
   new_value : String

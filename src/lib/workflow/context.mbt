@@ -39,6 +39,26 @@ pub fn WorkflowError::to_string(self : WorkflowError) -> String {
   }
 }
 
+/// Get a default hint for the error category
+pub fn WorkflowError::hint(self : WorkflowError) -> String {
+  match self {
+    GitError(_) => "Make sure you are in a git repository with at least one commit"
+    ConfigValidationError(_) => "Check your release.json configuration"
+    PublishError(_) => "Check publish credentials and network connection"
+    InputValidationError(_) => "Check the input values and command arguments"
+    ExternalCommandError(_) => "Make sure required tools (git, gh, moon, npm) are installed"
+    WorkflowError(_) => ""
+  }
+}
+
+/// Version analysis result (output of analyze_version_bump)
+pub struct VersionAnalysis {
+  current_version : @semver.Version
+  new_version : @semver.Version
+  commits : Array[(@conventional.ConventionalCommit, String)]
+  bump_type : @semver.BumpType
+}
+
 /// Create ReleaseContext
 pub fn ReleaseContext::new(
   config : @config.Config,

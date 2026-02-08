@@ -76,6 +76,63 @@ test "generate_release_notes - short hash" {
   }
 }
 
+// parse_package_json_version tests
+
+test "parse_package_json_version - valid version" {
+  let content =
+    #|{
+    #|  "name": "my-package",
+    #|  "version": "1.2.3"
+    #|}
+  let result = try { parse_package_json_version(content) } catch { _ => fail("Unexpected error") }
+  match result {
+    Some(v) => assert_eq(v.to_string(), "1.2.3")
+    None => fail("Expected Some version")
+  }
+}
+
+test "parse_package_json_version - no version field" {
+  let content =
+    #|{
+    #|  "name": "my-package"
+    #|}
+  let result = try { parse_package_json_version(content) } catch { _ => fail("Unexpected error") }
+  assert_true(result is None)
+}
+
+test "parse_package_json_version - invalid JSON" {
+  try {
+    let _ = parse_package_json_version("not json")
+    fail("Expected error")
+  } catch {
+    WorkflowError(_) => ()
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse_package_json_version - non-object JSON" {
+  try {
+    let _ = parse_package_json_version("[1,2,3]")
+    fail("Expected error")
+  } catch {
+    WorkflowError(_) => ()
+    _ => fail("Wrong error type")
+  }
+}
+
+test "parse_package_json_version - prerelease version" {
+  let content =
+    #|{
+    #|  "name": "pkg",
+    #|  "version": "1.0.0-alpha.1"
+    #|}
+  let result = try { parse_package_json_version(content) } catch { _ => fail("Unexpected error") }
+  match result {
+    Some(v) => assert_eq(v.to_string(), "1.0.0-alpha.1")
+    None => fail("Expected Some version")
+  }
+}
+
 // Path validation tests
 
 test "validate_path - empty string is valid" {

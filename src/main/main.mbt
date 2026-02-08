@@ -53,6 +53,20 @@ fn output_error_with_hint(msg : String, hint : String, json_output : Bool) -> Un
   }
 }
 
+/// Handle workflow error with automatic hint from error variant
+fn handle_workflow_error(
+  e : @workflow.WorkflowError,
+  json_output : Bool,
+  hint_override~ : String = ""
+) -> Unit {
+  let hint = if hint_override.is_empty() { e.hint() } else { hint_override }
+  if hint.is_empty() {
+    output_error(e.to_string(), json_output)
+  } else {
+    output_error_with_hint(e.to_string(), hint, json_output)
+  }
+}
+
 /// Output warning message (suppressed in JSON mode)
 fn output_warning(msg : String, json_output : Bool) -> Unit {
   if not(json_output) {
@@ -313,12 +327,16 @@ async fn cmd_update(
   let repo = @git.Repository::current()
 
   // Dirty check
-  if should_abort_dirty(config, repo, verbose) {
-    if json_output {
-      output_error("uncommitted changes in working directory", json_output)
+  try @workflow.check_working_directory(config, repo, verbose~) catch {
+    e => {
+      if json_output {
+        output_error("uncommitted changes in working directory", json_output)
+      } else {
+        output_error(e.to_string(), json_output)
+      }
+      exit_error()
     }
-    exit_error()
-  }
+  } noraise { _ => () }
 
   // Parse bump options before monorepo branching
   let forced_bump = get_bump_type(subcmd)
@@ -341,70 +359,23 @@ async fn cmd_update(
       println("Note: --bump applies only to packages with changes. Use --bump-all to include all packages.")
     }
     try @workflow.run_update_packages(config, repo, dry_run, verbose, forced_bump~, bump_all~) catch {
-      e => {
-        output_error(e.to_string(), json_output)
-        exit_error()
-      }
+      e => { handle_workflow_error(e, json_output) ; exit_error() }
     } noraise { _ => () }
     return
   }
 
-  // Get current version from appropriate source (moon.mod.json or package.json)
-  let current_version = try @workflow.get_current_version(config) catch {
+  // Analyze version bump
+  let analysis = try @workflow.analyze_version_bump(config, repo, forced_bump~, max_commits=config.max_analyze_commits) catch {
     e => {
-      output_error_with_hint(
-        e.to_string(),
-        "Version should follow semver format (e.g., 1.2.3 or 1.2.3-alpha)",
-        json_output,
-      )
-      exit_error()
-    }
-  } noraise { v => v }
-
-  // Parse commits with try-catch-noraise pattern
-  let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
-    e => {
-      output_error_with_hint(
-        "Error getting commits: " + e.to_string(),
-        "Make sure you are in a git repository with at least one commit",
-        json_output,
-      )
+      handle_workflow_error(e, json_output, hint_override="Use Conventional Commits (feat:, fix:) or --bump to force a version bump")
       exit_error()
     }
   } noraise { r => r }
 
-  if commits.is_empty() {
-    output_error_with_hint(
-      "No commits found since last tag. Nothing to release.",
-      "Create new commits or use 'moon-release set-version' to set version manually",
-      json_output,
-    )
-    exit_error()
-  }
-
-  // Determine bump type
-  let bump_type = match forced_bump {
-    Some(t) => t
-    None =>
-      match @semver.determine_bump_with_custom(
-        commits.map(fn(c) { c.0 }),
-        config.custom_major_increment_regex,
-        config.custom_minor_increment_regex,
-      ) {
-        Some(t) => t
-        None => {
-          output_error_with_hint(
-            "No releasable commits found (no feat, fix, or breaking changes)",
-            "Use Conventional Commits (feat:, fix:) or --bump to force a version bump",
-            json_output,
-          )
-          exit_error()
-        }
-      }
-  }
-
-  // Calculate new version
-  let new_version = @semver.bump(current_version, bump_type)
+  let current_version = analysis.current_version
+  let new_version = analysis.new_version
+  let commits = analysis.commits
+  let bump_type = analysis.bump_type
 
   // Registry check (if enabled) with try-catch-noraise pattern
   if config.registry_check {
@@ -452,12 +423,9 @@ async fn cmd_update(
     verbose~,
   )
 
-  // Run update with try-catch-noraise pattern
+  // Run update
   try @workflow.run_update(ctx) catch {
-    e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
+    e => { handle_workflow_error(e, json_output) ; exit_error() }
   } noraise { _ =>
     if json_output {
       let bump_str = match bump_type {
@@ -500,18 +468,12 @@ async fn prepare_release_config(
   let repo = @git.Repository::current()
 
   try @workflow.validate_publish_config(config, verbose~) catch {
-    e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
+    e => { handle_workflow_error(e, json_output) ; exit_error() }
   } noraise { _ => () }
 
-  if should_abort_dirty(config, repo, verbose) {
-    if json_output {
-      output_error("uncommitted changes in working directory", json_output)
-    }
-    exit_error()
-  }
+  try @workflow.check_working_directory(config, repo, verbose~) catch {
+    e => { handle_workflow_error(e, json_output) ; exit_error() }
+  } noraise { _ => () }
 
   (config, repo)
 }
@@ -555,62 +517,17 @@ async fn cmd_release_pr(
   let (current_version, new_version, commits) = if is_monorepo {
     // Monorepo: compute representative version from packages
     try @workflow.get_monorepo_representative_version(config, repo, forced_bump, verbose, bump_all~) catch {
-      e => {
-        output_error(e.to_string(), json_output)
-        exit_error()
-      }
+      e => { handle_workflow_error(e, json_output) ; exit_error() }
     } noraise { r => r }
   } else {
-    // Single package: use root files
-    let current_version = try @workflow.get_current_version(config) catch {
+    // Single package: analyze version bump
+    let analysis = try @workflow.analyze_version_bump(config, repo, forced_bump~, max_commits=config.max_analyze_commits) catch {
       e => {
-        output_error_with_hint(
-          e.to_string(),
-          "Version should follow semver format (e.g., 1.2.3)",
-          json_output,
-        )
-        exit_error()
-      }
-    } noraise { v => v }
-
-    let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
-      e => {
-        output_error_with_hint(
-          "Error getting commits: " + e.to_string(),
-          "Make sure you are in a git repository with at least one commit",
-          json_output,
-        )
+        handle_workflow_error(e, json_output, hint_override="Use Conventional Commits or --bump to force a version bump")
         exit_error()
       }
     } noraise { r => r }
-
-    if commits.is_empty() {
-      output_error("No commits found since last tag. Nothing to release.", json_output)
-      exit_error()
-    }
-
-    let bump_type = match forced_bump {
-      Some(t) => t
-      None =>
-        match @semver.determine_bump_with_custom(
-          commits.map(fn(c) { c.0 }),
-          config.custom_major_increment_regex,
-          config.custom_minor_increment_regex,
-        ) {
-          Some(t) => t
-          None => {
-            output_error_with_hint(
-              "No releasable commits found",
-              "Use Conventional Commits or --bump to force a version bump",
-              json_output,
-            )
-            exit_error()
-          }
-        }
-    }
-
-    let new_version = @semver.bump(current_version, bump_type)
-    (current_version, new_version, commits)
+    (analysis.current_version, analysis.new_version, analysis.commits)
   }
 
   // Create context
@@ -626,24 +543,14 @@ async fn cmd_release_pr(
     bump_all~,
   )
 
-  // Get GitHub client with try-catch-noraise pattern
-  let github = try get_github_client() catch {
-    e => {
-      output_error_with_hint(
-        e.to_string(),
-        "Make sure gh CLI is installed and you're logged in (gh auth login)",
-        json_output,
-      )
-      exit_error()
-    }
+  // Get GitHub client
+  let github = try @workflow.get_github_client() catch {
+    e => { handle_workflow_error(e, json_output) ; exit_error() }
   } noraise { r => r }
 
-  // Run workflow with try-catch-noraise pattern
+  // Run workflow
   try @workflow.run_release_pr(ctx, github) catch {
-    e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
+    e => { handle_workflow_error(e, json_output) ; exit_error() }
   } noraise { _ => () }
 }
 
@@ -702,65 +609,20 @@ async fn cmd_release(
   let (current_version, new_version, commits) = if is_monorepo {
     // Monorepo: compute representative version from packages
     try @workflow.get_monorepo_representative_version(config, repo, forced_bump, verbose, bump_all~) catch {
-      e => {
-        output_error(e.to_string(), json_output)
-        exit_error()
-      }
+      e => { handle_workflow_error(e, json_output) ; exit_error() }
     } noraise { r => r }
   } else {
-    // Single package: use root files
-    let current_version = try @workflow.get_current_version(config) catch {
+    // Single package: analyze version bump
+    let analysis = try @workflow.analyze_version_bump(config, repo, forced_bump~, max_commits=config.max_analyze_commits, allow_empty_commits=true, default_bump=Some(@semver.Patch)) catch {
       e => {
-        output_error_with_hint(
-          e.to_string(),
-          "Version should follow semver format (e.g., 1.2.3)",
-          json_output,
-        )
-        exit_error()
-      }
-    } noraise { v => v }
-
-    let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
-      e => {
-        output_error_with_hint(
-          "Error getting commits: " + e.to_string(),
-          "Make sure you are in a git repository",
-          json_output,
-        )
+        handle_workflow_error(e, json_output, hint_override="Create new commits or use --bump to force a version bump")
         exit_error()
       }
     } noraise { r => r }
-
-    // Check for empty commits (no forced bump and no commits)
-    if commits.is_empty() && forced_bump is None {
-      output_error_with_hint(
-        "No commits found since last tag. Nothing to release.",
-        "Create new commits or use --bump to force a version bump",
-        json_output,
-      )
-      exit_error()
-    }
-    let bump_type = match forced_bump {
-      Some(t) => t
-      None =>
-        match @semver.determine_bump_with_custom(
-          commits.map(fn(c) { c.0 }),
-          config.custom_major_increment_regex,
-          config.custom_minor_increment_regex,
-        ) {
-          Some(t) => t
-          None => @semver.Patch // default to patch for non-conventional commits
-        }
-    }
-
-    let new_version = @semver.bump(current_version, bump_type)
-    (current_version, new_version, commits)
+    (analysis.current_version, analysis.new_version, analysis.commits)
   }
 
   // Apply prerelease if specified
-  // In monorepo mode, the prerelease suffix is applied to the representative version only
-  // (used for tag name and release title). Individual package versions are not modified
-  // with the prerelease suffix, as version updates are handled by release-pr/update commands.
   let new_version = match prerelease {
     Some(pre_str) =>
       match new_version.with_prerelease(pre_str) {
@@ -790,24 +652,14 @@ async fn cmd_release(
     bump_all~,
   )
 
-  // Get GitHub client with try-catch-noraise pattern
-  let github = try get_github_client() catch {
-    e => {
-      output_error_with_hint(
-        e.to_string(),
-        "Make sure gh CLI is installed and you're logged in (gh auth login)",
-        json_output,
-      )
-      exit_error()
-    }
+  // Get GitHub client
+  let github = try @workflow.get_github_client() catch {
+    e => { handle_workflow_error(e, json_output) ; exit_error() }
   } noraise { r => r }
 
-  // Run workflow with try-catch-noraise pattern
+  // Run workflow
   try @workflow.run_release(ctx, github) catch {
-    e => {
-      output_error(e.to_string(), json_output)
-      exit_error()
-    }
+    e => { handle_workflow_error(e, json_output) ; exit_error() }
   } noraise { _ => () }
 }
 
@@ -1011,8 +863,10 @@ async fn cmd_check(
   // Get Git repository
   let repo = @git.Repository::current()
 
-  // Get latest tag with try? + to_option + bind pattern
-  let latest_tag = (try? get_latest_tag(repo)).to_option().bind(fn(x) { x })
+  // Get latest tag
+  let latest_tag = try @workflow.get_latest_tag(repo) catch {
+    _ => None
+  } noraise { r => r }
 
   if not(json_output) {
     match latest_tag {
@@ -1021,8 +875,8 @@ async fn cmd_check(
     }
   }
 
-  // Get commits with try-catch-noraise pattern
-  let commits = try get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
+  // Get commits
+  let commits = try @workflow.get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
     e => {
       if json_output {
         println("{\"error\": " + @util.json_string(e.to_string()) + "}")
@@ -1211,69 +1065,6 @@ async fn load_package_json_name(path : String) -> String? raise {
   }
 }
 
-/// Get commits from latest tag to current
-async fn get_commits_since_last_tag(
-  repo : @git.Repository,
-  max_commits~ : UInt? = None
-) -> Array[(@conventional.ConventionalCommit, String)] raise {
-  // Get latest tag with try? + to_option + bind pattern
-  let latest_tag = (try? get_latest_tag(repo)).to_option().bind(fn(x) { x })
-
-  // Get commit log
-  let log_result = match latest_tag {
-    Some(tag) => {
-      let cmd = repo.get_commits_since_tag_command(tag)
-      // Add max_commits if specified
-      match max_commits {
-        Some(n) => {
-          cmd.push("-n")
-          cmd.push(n.to_string())
-        }
-        None => ()
-      }
-      @executor.run_command(cmd)
-    }
-    None => {
-      let cmd = repo.get_all_commits_command()
-      // Add max_commits if specified
-      match max_commits {
-        Some(n) => {
-          cmd.push("-n")
-          cmd.push(n.to_string())
-        }
-        None => ()
-      }
-      @executor.run_command(cmd)
-    }
-  }
-
-  // Verify git log succeeded
-  if not(log_result.is_success()) {
-    let detail = if log_result.stderr.is_empty() {
-      "exit code " + log_result.exit_code.to_string()
-    } else {
-      log_result.stderr.trim().to_string()
-    }
-    fail("Failed to read git log: " + detail)
-  }
-
-  // Parse
-  let git_commits = @git.parse_commit_log(log_result.stdout)
-  @git.parse_conventional_commits(git_commits)
-}
-
-/// Get latest tag
-async fn get_latest_tag(repo : @git.Repository) -> String? raise {
-  let cmd = repo.get_latest_tag_command()
-  let result = @executor.run_command(cmd)
-  if result.is_success() {
-    let tag = result.stdout_trimmed()
-    if tag.is_empty() { None } else { Some(tag) }
-  } else {
-    None
-  }
-}
-
 /// Get bump type
 fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
   match subcmd.args.get("bump") {
@@ -1291,52 +1082,6 @@ fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
   }
 }
 
-/// Get GitHub client
-async fn get_github_client() -> @github.GitHubClient raise {
-  // Get owner/repo using gh repo view
-  let result = @executor.run_command(
-    ["gh", "repo", "view", "--json", "owner,name"],
-  )
-  if not(result.is_success()) {
-    let hint = if result.stderr.contains("not a git repository") {
-      "The current directory is not a git repository."
-    } else if result.stderr.contains("gh auth login") || result.stderr.contains("authentication") {
-      "Run 'gh auth login' to authenticate with GitHub."
-    } else if result.stderr.contains("not found") || result.stderr.contains("command not found") {
-      "The 'gh' CLI is not installed. Install it from https://cli.github.com/"
-    } else {
-      "Make sure you are in a GitHub repository and have 'gh' CLI installed and authenticated."
-    }
-    raise @workflow.WorkflowError(
-      "Failed to get repository info: " + result.stderr.trim().to_string() + "\nHint: " + hint,
-    )
-  }
-
-  // Parse JSON with try-catch-noraise pattern
-  let json = try @json.parse(result.stdout) catch {
-    e => raise @workflow.WorkflowError("Failed to parse repository info from 'gh' output: " + e.to_string())
-  } noraise { r => r }
-
-  match json {
-    Object(obj) => {
-      let owner = match obj.get("owner") {
-        Some(Object(o)) =>
-          match o.get("login") {
-            Some(String(s)) => s
-            _ => raise @workflow.WorkflowError("Invalid owner info: expected 'owner.login' to be a string in 'gh' output")
-          }
-        _ => raise @workflow.WorkflowError("Invalid owner info: expected 'owner' to be an object in 'gh' output")
-      }
-      let name = match obj.get("name") {
-        Some(String(s)) => s
-        _ => raise @workflow.WorkflowError("Invalid repo name: expected 'name' to be a string in 'gh' output")
-      }
-      @github.GitHubClient::new(owner, name)
-    }
-    _ => raise @workflow.WorkflowError("Invalid repository info: expected JSON object from 'gh' output")
-  }
-}
-
 /// Shorten hash
 fn substr_hash(hash : String, len : Int) -> String {
   if hash.length() <= len {
@@ -1350,53 +1095,6 @@ fn substr_hash(hash : String, len : Int) -> String {
     }
   }
   result.to_string()
-}
-
-/// Check for uncommitted changes
-/// Returns (is_dirty, error_occurred)
-async fn check_dirty(repo : @git.Repository, verbose : Bool) -> (Bool, Bool) {
-  // Check git status with try-catch-noraise pattern
-  let result = try @executor.run_git(repo, ["status", "--porcelain"]) catch {
-    e => {
-      if verbose {
-        println("Warning: Failed to check git status: " + e.to_string())
-        println("Assuming working directory has changes.")
-      }
-      return (true, true)
-    }
-  } noraise { r => r }
-  (not(result.stdout.trim().is_empty()), false)
-}
-
-/// Check allow_dirty (returns true if dirty and allow_dirty=false)
-async fn should_abort_dirty(
-  config : @config.Config,
-  repo : @git.Repository,
-  verbose : Bool
-) -> Bool {
-  if config.allow_dirty {
-    return false
-  }
-
-  let (is_dirty, _error_occurred) = check_dirty(repo, verbose)
-  if is_dirty {
-    println("Error: Working directory has uncommitted changes.")
-    println("Commit or stash your changes, or set 'allow_dirty: true' in config.")
-    if verbose {
-      // Get status with try-catch-noraise pattern
-      let result = try @executor.run_git(repo, ["status", "--short"]) catch {
-        e => {
-          println("Warning: Failed to get file list: " + e.to_string())
-          return true
-        }
-      } noraise { r => r }
-      println("")
-      println("Changed files:")
-      println(result.stdout)
-    }
-    return true
-  }
-  false
 }
 
 /// generate-schema command
