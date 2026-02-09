@@ -153,3 +153,36 @@ test "push command without tags" {
   let cmd = repo.push_command(false)
   assert_false(cmd.iter().any(fn(s) { s == "--follow-tags" }))
 }
+
+// parse_commit_log edge case tests
+
+test "parse_commit_log - empty subject (3 parts)" {
+  let output = "abc123\u001e\u001eJohn Doe\u001e2024-01-15T10:00:00Z"
+  let commits = parse_commit_log(output)
+  assert_eq(commits.length(), 1)
+  assert_eq(commits[0].hash, "abc123")
+  assert_eq(commits[0].message, "")
+  assert_eq(commits[0].author, "John Doe")
+}
+
+test "parse_commit_log - fewer than 3 parts skipped" {
+  let output = "abc123\u001eonly-two-parts"
+  let commits = parse_commit_log(output)
+  assert_eq(commits.length(), 0)
+}
+
+test "parse_commit_log - multibyte characters in message" {
+  let output = "abc123\u001e日本語のコミットメッセージ\u001e太郎\u001e2024-01-15T10:00:00Z"
+  let commits = parse_commit_log(output)
+  assert_eq(commits.length(), 1)
+  assert_eq(commits[0].message, "日本語のコミットメッセージ")
+  assert_eq(commits[0].author, "太郎")
+}
+
+test "parse_commit_log - mixed valid and invalid lines" {
+  let output = "abc123\u001efeat: valid\u001eAuthor\u001e2024-01-15T10:00:00Z\nbad-line\nghi789\u001efix: another\u001eAuthor2\u001e2024-01-16T10:00:00Z"
+  let commits = parse_commit_log(output)
+  assert_eq(commits.length(), 2)
+  assert_eq(commits[0].message, "feat: valid")
+  assert_eq(commits[1].message, "fix: another")
+}

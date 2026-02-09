@@ -311,3 +311,45 @@ test "parse release json - null tagName raises error" {
     _ => fail("wrong error type")
   }
 }
+
+// create_pull_request_command with labels
+
+test "create_pull_request_command - with labels" {
+  let client = try { GitHubClient::new("owner", "repo") } catch { _ => fail("Unexpected error") }
+  let cmd = client.create_pull_request_command(
+    "title", "body", "head", "base", labels=["release", "automated"],
+  )
+  let mut label_count = 0
+  for i = 0; i < cmd.length(); i = i + 1 {
+    if cmd[i] == "--label" {
+      label_count = label_count + 1
+    }
+  }
+  assert_eq(label_count, 2)
+  let mut found_release = false
+  let mut found_automated = false
+  for i = 0; i < cmd.length() - 1; i = i + 1 {
+    if cmd[i] == "--label" && cmd[i + 1] == "release" {
+      found_release = true
+    }
+    if cmd[i] == "--label" && cmd[i + 1] == "automated" {
+      found_automated = true
+    }
+  }
+  assert_true(found_release)
+  assert_true(found_automated)
+}
+
+// parse list JSON with empty arrays
+
+test "parse_pull_request_list_json - empty array" {
+  let json = "[]"
+  let result = try { parse_pull_request_list_json(json) } catch { _ => fail("Unexpected error") }
+  assert_eq(result.length(), 0)
+}
+
+test "parse_release_list_json - empty array" {
+  let json = "[]"
+  let result = try { parse_release_list_json(json) } catch { _ => fail("Unexpected error") }
+  assert_eq(result.length(), 0)
+}

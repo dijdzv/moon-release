@@ -742,3 +742,50 @@ test "Config::parse no warnings for valid keys" {
   let _ = try { Config::parse(content, warnings~) } catch { _ => fail("Unexpected error") }
   assert_eq(warnings.length(), 0)
 }
+
+// Additional config field parse tests
+
+test "parse config with bump_all_packages" {
+  let content =
+    #|{
+    #|  "bump_all_packages": true
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.bump_all_packages, true)
+}
+
+test "parse config with pr_branch_prefix" {
+  let content =
+    #|{
+    #|  "pr_branch_prefix": "rel/"
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.pr_branch_prefix, "rel/")
+}
+
+test "parse config with moon_publish_frozen" {
+  let content =
+    #|{
+    #|  "moon_publish_frozen": true
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.moon_publish_frozen, true)
+}
+
+test "parse config with pr_draft" {
+  let content =
+    #|{
+    #|  "pr_draft": true
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.pr_draft, true)
+}
+
+test "parse config with base_branch" {
+  let content =
+    #|{
+    #|  "base_branch": "develop"
+    #|}
+  let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
+  assert_eq(config.base_branch, "develop")
+}

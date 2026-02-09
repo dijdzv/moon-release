@@ -30,46 +30,18 @@ pub suberror GitHubError {
   GitHubError(String)
 }
 
-/// Validate a GitHub repository component (owner or repo name)
-/// Only allows alphanumeric, hyphen, underscore, and dot characters.
-/// Rejects: empty, starting with hyphen, "." or ".." only, longer than 100 chars.
-fn validate_repo_component(s : String) -> Bool {
-  if s.is_empty() {
-    return false
-  }
-  // Length limit (GitHub allows up to ~100 characters)
-  if s.length() > 100 {
-    return false
-  }
-  // Cannot start with a hyphen
-  let chars = s.to_array()
-  if chars[0] == '-' {
-    return false
-  }
-  // Reject "." and ".." (directory traversal)
-  if s == "." || s == ".." {
-    return false
-  }
-  for i = 0; i < chars.length(); i = i + 1 {
-    let c = chars[i]
-    if not((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {
-      return false
-    }
-  }
-  true
-}
-
 /// Create client with owner/repo validation
+/// Delegates to @util.validate_repo_component_impl for shared validation logic.
 pub fn GitHubClient::new(
   owner : String,
   repo : String
 ) -> GitHubClient raise GitHubError {
-  if not(validate_repo_component(owner)) {
+  if not(@util.validate_repo_component_impl(owner)) {
     raise GitHubError(
       "Invalid GitHub owner: '" + owner + "' (only alphanumeric, hyphen, underscore, and dot allowed)",
     )
   }
-  if not(validate_repo_component(repo)) {
+  if not(@util.validate_repo_component_impl(repo)) {
     raise GitHubError(
       "Invalid GitHub repo: '" + repo + "' (only alphanumeric, hyphen, underscore, and dot allowed)",
     )

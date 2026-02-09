@@ -1,5 +1,5 @@
 /// Shared helper: extract first 7 characters of a hash string
-fn short_hash(hash : String) -> String {
+pub fn short_hash(hash : String) -> String {
   if hash.length() >= 7 {
     let chars = hash.to_array()
     let sb = StringBuilder::new()

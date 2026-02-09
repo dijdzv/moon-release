@@ -255,7 +255,7 @@ pub fn validate_git_ref_name_impl(name : String) -> String? {
 }
 
 /// Validate a GitHub repository component (owner or repo name)
-fn validate_repo_component_impl(s : String) -> Bool {
+pub fn validate_repo_component_impl(s : String) -> Bool {
   if s.is_empty() {
     return false
   }

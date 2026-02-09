@@ -762,20 +762,30 @@ pub async fn run_release_pr(
   // Run update (file updates)
   if is_monorepo {
     try run_update_packages(ctx.config, ctx.repo, ctx.dry_run, ctx.verbose, forced_bump=ctx.forced_bump, bump_all=ctx.bump_all) catch {
-      e => raise WorkflowError(e.to_string() + branch_recovery_note)
+      e => {
+        let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
+        raise WorkflowError(e.to_string() + branch_recovery_note)
+      }
     } noraise { _ => () }
   } else {
     try run_update(ctx) catch {
-      e => raise WorkflowError(e.to_string() + branch_recovery_note)
+      e => {
+        let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
+        raise WorkflowError(e.to_string() + branch_recovery_note)
+      }
     } noraise { _ => () }
   }
 
   // Stage changes - add relevant files based on publish configuration
   let files_to_stage = collect_files_to_stage(ctx)
   let stage_result = try @executor.run_git(ctx.repo, files_to_stage) catch {
-    e => raise GitError("Failed to stage files: " + e.to_string() + branch_recovery_note)
+    e => {
+      let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
+      raise GitError("Failed to stage files: " + e.to_string() + branch_recovery_note)
+    }
   } noraise { r => r }
   if not(stage_result.is_success()) {
+    let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
     raise GitError("Failed to stage files: " + stage_result.stderr + branch_recovery_note)
   }
 
@@ -810,9 +820,13 @@ pub async fn run_release_pr(
   // Commit with try-catch-noraise pattern
   let commit_msg = ctx.config.apply_pr_title_template(ctx.new_version.to_string())
   let commit_result = try @executor.run_git(ctx.repo, ["commit", "-m", commit_msg]) catch {
-    e => raise GitError("Failed to commit: " + e.to_string() + branch_recovery_note)
+    e => {
+      let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
+      raise GitError("Failed to commit: " + e.to_string() + branch_recovery_note)
+    }
   } noraise { r => r }
   if not(commit_result.is_success()) {
+    let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
     raise GitError("Failed to commit: " + commit_result.stderr + branch_recovery_note)
   }
 
@@ -823,7 +837,10 @@ pub async fn run_release_pr(
     println("Pushing with --force-with-lease (safe force push)...")
   }
   let push_result = try @executor.run_git(ctx.repo, ["push", "-u", "--force-with-lease", "origin", branch_name]) catch {
-    e => raise GitError("Failed to push branch '" + branch_name + "' to origin: " + e.to_string() + branch_recovery_note)
+    e => {
+      let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
+      raise GitError("Failed to push branch '" + branch_name + "' to origin: " + e.to_string() + branch_recovery_note)
+    }
   } noraise { r => r }
   if not(push_result.is_success()) {
     let hint = if push_result.stderr.contains("permission") || push_result.stderr.contains("denied") {
@@ -833,6 +850,7 @@ pub async fn run_release_pr(
     } else {
       ""
     }
+    let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
     raise GitError("Failed to push branch '" + branch_name + "' to origin: " + push_result.stderr + hint + branch_recovery_note)
   }
 

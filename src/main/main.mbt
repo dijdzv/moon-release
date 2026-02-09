@@ -957,7 +957,7 @@ async fn cmd_check(
         None => ""
       }
       let breaking_str = if cc.breaking { "!" } else { "" }
-      let short_hash = substr_hash(hash, 7)
+      let short_hash = @workflow.short_hash(hash)
       println("  \{short_hash} \{typ_str}\{scope_str}\{breaking_str}: \{cc.description}")
     }
     if commits.length() > max_verbose_commits {
@@ -1082,20 +1082,6 @@ fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
   }
 }
 
-/// Shorten hash
-fn substr_hash(hash : String, len : Int) -> String {
-  if hash.length() <= len {
-    return hash
-  }
-  let chars : Array[Char] = hash.to_array()
-  let result = StringBuilder::new()
-  for i = 0; i < len; i = i + 1 {
-    if i < chars.length() {
-      result.write_char(chars[i])
-    }
-  }
-  result.to_string()
-}
 
 /// generate-schema command
 fn cmd_generate_schema() -> Unit {

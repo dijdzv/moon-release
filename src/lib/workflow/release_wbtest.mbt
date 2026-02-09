@@ -642,3 +642,44 @@ test "replace_json_field - version field missing raises error" {
     _ => ()  // Expected: field not found error
   }
 }
+
+// WorkflowError to_string / hint tests
+
+test "WorkflowError::to_string - GitError includes category" {
+  let e : WorkflowError = GitError("tag not found")
+  assert_eq(e.to_string(), "[git] tag not found")
+}
+
+test "WorkflowError::to_string - ConfigValidationError includes category" {
+  let e : WorkflowError = ConfigValidationError("invalid field")
+  assert_eq(e.to_string(), "[config] invalid field")
+}
+
+test "WorkflowError::to_string - PublishError includes category" {
+  let e : WorkflowError = PublishError("auth failed")
+  assert_eq(e.to_string(), "[publish] auth failed")
+}
+
+test "WorkflowError::to_string - InputValidationError includes category" {
+  let e : WorkflowError = InputValidationError("bad branch name")
+  assert_eq(e.to_string(), "[input] bad branch name")
+}
+
+test "WorkflowError::to_string - ExternalCommandError includes category" {
+  let e : WorkflowError = ExternalCommandError("gh not found")
+  assert_eq(e.to_string(), "[command] gh not found")
+}
+
+test "WorkflowError::to_string - generic WorkflowError has no prefix" {
+  let e : WorkflowError = WorkflowError("something went wrong")
+  assert_eq(e.to_string(), "something went wrong")
+}
+
+test "WorkflowError::hint - each variant returns appropriate hint" {
+  assert_true((GitError("x") : WorkflowError).hint().contains("git repository"))
+  assert_true((ConfigValidationError("x") : WorkflowError).hint().contains("release.json"))
+  assert_true((PublishError("x") : WorkflowError).hint().contains("credentials"))
+  assert_true((InputValidationError("x") : WorkflowError).hint().contains("input values"))
+  assert_true((ExternalCommandError("x") : WorkflowError).hint().contains("installed"))
+  assert_eq((WorkflowError("x") : WorkflowError).hint(), "")
+}

@@ -27,14 +27,14 @@ pub(all) suberror WorkflowError {
   WorkflowError(String)
 }
 
-/// Convert WorkflowError to string
+/// Convert WorkflowError to string (with category prefix for non-generic variants)
 pub fn WorkflowError::to_string(self : WorkflowError) -> String {
   match self {
-    GitError(msg) => msg
-    ConfigValidationError(msg) => msg
-    PublishError(msg) => msg
-    InputValidationError(msg) => msg
-    ExternalCommandError(msg) => msg
+    GitError(msg) => "[git] " + msg
+    ConfigValidationError(msg) => "[config] " + msg
+    PublishError(msg) => "[publish] " + msg
+    InputValidationError(msg) => "[input] " + msg
+    ExternalCommandError(msg) => "[command] " + msg
     WorkflowError(msg) => msg
   }
 }

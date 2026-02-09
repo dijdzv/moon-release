@@ -103,3 +103,17 @@ test "get_env_var - nonexistent var returns None" {
   let result = get_env_var("MOON_RELEASE_NONEXISTENT_VAR_12345")
   assert_true(result is None)
 }
+
+// join_command_args tests
+
+test "join_command_args - single element" {
+  assert_eq(join_command_args(["git"]), "git")
+}
+
+test "join_command_args - multiple elements" {
+  assert_eq(join_command_args(["git", "commit", "-m", "msg"]), "git commit -m msg")
+}
+
+test "join_command_args - empty array" {
+  assert_eq(join_command_args([]), "")
+}
