@@ -1,6 +1,3 @@
-/// Maximum value for safe UInt conversion from Double
-let uint_max_as_double : Double = 4294967295.0
-
 /// GitHub API client (gh CLI command generation)
 pub struct GitHubClient {
   owner : String
@@ -292,7 +289,7 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
   let number = match obj.get("number") {
     Some(Number(n, ..)) =>
       // Treat negative, non-integer, or overflow values as 0
-      if n < 0.0 || n > uint_max_as_double || n % 1.0 != 0.0 {
+      if n < 0.0 || n > @util.uint_max_as_double || n % 1.0 != 0.0 {
         0U
       } else {
         n.to_uint()
@@ -344,7 +341,7 @@ pub fn parse_pull_request_list_json(
         let number = match obj.get("number") {
           Some(Number(n, ..)) =>
             // Treat negative, non-integer, or overflow values as 0
-            if n >= 0.0 && n <= uint_max_as_double && n % 1.0 == 0.0 {
+            if n >= 0.0 && n <= @util.uint_max_as_double && n % 1.0 == 0.0 {
               n.to_uint()
             } else {
               0U

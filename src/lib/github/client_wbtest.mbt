@@ -353,3 +353,43 @@ test "parse_release_list_json - empty array" {
   let result = try { parse_release_list_json(json) } catch { _ => fail("Unexpected error") }
   assert_eq(result.length(), 0)
 }
+
+// PR number boundary tests
+
+test "parse_pull_request_json - negative number treated as 0" {
+  let json =
+    #|{
+    #|  "number": -1,
+    #|  "title": "PR",
+    #|  "headRefName": "branch",
+    #|  "baseRefName": "main"
+    #|}
+  let pr = try { parse_pull_request_json(json) } catch { _ => fail("Unexpected error") }
+  assert_eq(pr.number, 0U)
+}
+
+test "parse_pull_request_json - missing number treated as 0" {
+  let json =
+    #|{
+    #|  "title": "PR",
+    #|  "headRefName": "branch",
+    #|  "baseRefName": "main"
+    #|}
+  let pr = try { parse_pull_request_json(json) } catch { _ => fail("Unexpected error") }
+  assert_eq(pr.number, 0U)
+}
+
+// parse_release_list_json - non-object elements are skipped
+
+test "parse_release_list_json - skips non-object elements" {
+  let json =
+    #|[
+    #|  {"tagName": "v1.0.0", "name": "R1", "isDraft": false, "isPrerelease": false},
+    #|  "not-an-object",
+    #|  42,
+    #|  null
+    #|]
+  let releases = try { parse_release_list_json(json) } catch { _ => fail("Unexpected error") }
+  assert_eq(releases.length(), 1)
+  assert_eq(releases[0].tag_name, "v1.0.0")
+}

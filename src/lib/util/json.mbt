@@ -1,3 +1,6 @@
+/// Maximum value for safe UInt conversion from Double
+pub let uint_max_as_double : Double = 4294967295.0
+
 /// Escape JSON string
 /// RFC 8259 compliant escaping
 pub fn escape_json_string(s : String) -> String {

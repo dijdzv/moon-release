@@ -39,6 +39,21 @@ pub fn WorkflowError::to_string(self : WorkflowError) -> String {
   }
 }
 
+/// Append context to a WorkflowError while preserving its variant (category)
+pub fn WorkflowError::add_context(
+  self : WorkflowError,
+  suffix : String
+) -> WorkflowError {
+  match self {
+    GitError(msg) => GitError(msg + suffix)
+    ConfigValidationError(msg) => ConfigValidationError(msg + suffix)
+    PublishError(msg) => PublishError(msg + suffix)
+    InputValidationError(msg) => InputValidationError(msg + suffix)
+    ExternalCommandError(msg) => ExternalCommandError(msg + suffix)
+    WorkflowError(msg) => WorkflowError(msg + suffix)
+  }
+}
+
 /// Get a default hint for the error category
 pub fn WorkflowError::hint(self : WorkflowError) -> String {
   match self {

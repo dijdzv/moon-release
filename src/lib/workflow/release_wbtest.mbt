@@ -105,7 +105,7 @@ test "parse_package_json_version - invalid JSON" {
     let _ = parse_package_json_version("not json")
     fail("Expected error")
   } catch {
-    WorkflowError(_) => ()
+    WorkflowError(msg) => assert_true(msg.contains("Failed to parse package.json"))
     _ => fail("Wrong error type")
   }
 }
@@ -115,7 +115,7 @@ test "parse_package_json_version - non-object JSON" {
     let _ = parse_package_json_version("[1,2,3]")
     fail("Expected error")
   } catch {
-    WorkflowError(_) => ()
+    WorkflowError(msg) => assert_true(msg.contains("not a valid JSON object"))
     _ => fail("Wrong error type")
   }
 }
@@ -639,7 +639,8 @@ test "replace_json_field - version field missing raises error" {
     let _ = @moon_mod.replace_json_field(content, "version", "2.0.0")
     fail("Expected error for missing version field")
   } catch {
-    _ => ()  // Expected: field not found error
+    @moon_mod.ParseError(msg) => assert_true(msg.contains("not found"))
+    _ => fail("Wrong error type: expected ParseError")
   }
 }
 
@@ -682,4 +683,91 @@ test "WorkflowError::hint - each variant returns appropriate hint" {
   assert_true((InputValidationError("x") : WorkflowError).hint().contains("input values"))
   assert_true((ExternalCommandError("x") : WorkflowError).hint().contains("installed"))
   assert_eq((WorkflowError("x") : WorkflowError).hint(), "")
+}
+
+test "WorkflowError::add_context - preserves GitError variant" {
+  let e : WorkflowError = GitError("original")
+  let with_ctx = e.add_context(" (recovery note)")
+  assert_eq(with_ctx.to_string(), "[git] original (recovery note)")
+  assert_true(with_ctx.hint().contains("git repository"))
+}
+
+test "WorkflowError::add_context - preserves ConfigValidationError variant" {
+  let e : WorkflowError = ConfigValidationError("bad config")
+  let with_ctx = e.add_context(" (context)")
+  assert_eq(with_ctx.to_string(), "[config] bad config (context)")
+  assert_true(with_ctx.hint().contains("release.json"))
+}
+
+test "WorkflowError::add_context - generic WorkflowError stays generic" {
+  let e : WorkflowError = WorkflowError("msg")
+  let with_ctx = e.add_context(" (extra)")
+  assert_eq(with_ctx.to_string(), "msg (extra)")
+  assert_eq(with_ctx.hint(), "")
+}
+
+// short_hash unit tests
+
+test "short_hash - 40-char full hash returns first 7" {
+  assert_eq(short_hash("abcdef1234567890abcdef1234567890abcdef12"), "abcdef1")
+}
+
+test "short_hash - exactly 7 chars returns as-is" {
+  assert_eq(short_hash("abc1234"), "abc1234")
+}
+
+test "short_hash - less than 7 chars returns full string" {
+  assert_eq(short_hash("abc"), "abc")
+}
+
+test "short_hash - empty string returns empty" {
+  assert_eq(short_hash(""), "")
+}
+
+test "short_hash - exactly 8 chars returns first 7" {
+  assert_eq(short_hash("abcdefgh"), "abcdefg")
+}
+
+// build_npm_publish_command unit tests
+
+test "build_npm_publish_command - with provenance" {
+  let cmd = build_npm_publish_command(true)
+  assert_eq(cmd, ["npm", "publish", "--provenance", "--access", "public"])
+}
+
+test "build_npm_publish_command - without provenance" {
+  let cmd = build_npm_publish_command(false)
+  assert_eq(cmd, ["npm", "publish", "--access", "public"])
+}
+
+// generate_package_changelog unit tests
+
+test "generate_package_changelog - empty commits" {
+  let commits : Array[(@conventional.ConventionalCommit, String)] = []
+  assert_eq(generate_package_changelog(commits), "No changes.\n")
+}
+
+test "generate_package_changelog - fix only" {
+  let fix = @conventional.parse("fix: correct bug")
+  match fix {
+    Some(c) => {
+      let result = generate_package_changelog([(c, "abc1234")])
+      assert_true(result.contains("### Bug Fixes"))
+      assert_false(result.contains("### Features"))
+      assert_true(result.contains("correct bug"))
+    }
+    None => fail("parse failed")
+  }
+}
+
+test "generate_package_changelog - docs goes to Other Changes" {
+  let docs = @conventional.parse("docs: update readme")
+  match docs {
+    Some(c) => {
+      let result = generate_package_changelog([(c, "abc1234")])
+      assert_true(result.contains("### Other Changes"))
+      assert_false(result.contains("### Features"))
+    }
+    None => fail("parse failed")
+  }
 }

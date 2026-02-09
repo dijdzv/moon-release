@@ -12,6 +12,15 @@ pub fn short_hash(hash : String) -> String {
   }
 }
 
+/// Get path prefix for file operations: "." → "", otherwise path + "/"
+fn package_path_prefix(path : String) -> String {
+  if path == "." || path.is_empty() {
+    ""
+  } else {
+    path + "/"
+  }
+}
+
 /// Return priority of BumpType (Major > Minor > Patch)
 pub fn bump_priority(bump : @semver.BumpType) -> Int {
   match bump {

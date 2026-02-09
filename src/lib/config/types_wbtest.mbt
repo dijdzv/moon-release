@@ -196,7 +196,7 @@ test "parse invalid moon_publish_timeout - negative" {
     let _ = Config::parse(content)
     fail("Expected error")
   } catch {
-    ConfigError(_) => ()
+    ConfigError(msg) => assert_true(msg.contains("positive integer"))
     _ => fail("Wrong error type")
   }
 }
@@ -210,7 +210,7 @@ test "parse invalid pr_labels - not array" {
     let _ = Config::parse(content)
     fail("Expected error")
   } catch {
-    ConfigError(_) => ()
+    ConfigError(msg) => assert_true(msg.contains("array"))
     _ => fail("Wrong error type")
   }
 }
@@ -634,10 +634,20 @@ test "Config::publish_target - npm only" {
   let content =
     #|{
     #|  "moon_publish": false,
-    #|  "npm_publish": true
+    #|  "npm_publish": true,
+    #|  "npm_build_command": "webpack build",
+    #|  "npm_publish_provenance": false,
+    #|  "npm_publish_timeout": 60
     #|}
   let config = try { Config::parse(content) } catch { _ => fail("Unexpected error") }
-  assert_true(config.publish_target() is NpmOnly(_))
+  match config.publish_target() {
+    NpmOnly(npm) => {
+      assert_eq(npm.build_command, Some("webpack build"))
+      assert_eq(npm.provenance, false)
+      assert_eq(npm.timeout, 60U)
+    }
+    _ => fail("expected NpmOnly")
+  }
 }
 
 test "Config::publish_target - no publish" {

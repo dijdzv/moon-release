@@ -425,9 +425,6 @@ fn parse_bool(
   }
 }
 
-/// Maximum value for safe UInt conversion from Double
-let uint_max_as_double : Double = 4294967295.0
-
 /// Parse optional number field with overflow protection
 fn parse_optional_uint(
   obj : Map[String, Json],
@@ -436,9 +433,9 @@ fn parse_optional_uint(
 ) -> UInt? raise ConfigError {
   match obj.get(key) {
     Some(Number(n, ..)) =>
-      if n >= 0.0 && n <= uint_max_as_double && n % 1.0 == 0.0 {
+      if n >= 0.0 && n <= @util.uint_max_as_double && n % 1.0 == 0.0 {
         Some(n.to_uint())
-      } else if n > uint_max_as_double {
+      } else if n > @util.uint_max_as_double {
         raise ConfigError("'" + key + "' value is too large (max: 4294967295)")
       } else {
         raise ConfigError("'" + key + "' must be a positive integer")
@@ -457,9 +454,9 @@ fn parse_uint(
 ) -> UInt raise ConfigError {
   match obj.get(key) {
     Some(Number(n, ..)) =>
-      if n >= 0.0 && n <= uint_max_as_double && n % 1.0 == 0.0 {
+      if n >= 0.0 && n <= @util.uint_max_as_double && n % 1.0 == 0.0 {
         n.to_uint()
-      } else if n > uint_max_as_double {
+      } else if n > @util.uint_max_as_double {
         raise ConfigError("'" + key + "' value is too large (max: 4294967295)")
       } else {
         raise ConfigError("'" + key + "' must be a positive integer")
@@ -542,11 +539,16 @@ pub fn Config::git_release_mode(self : Config) -> GitReleaseMode {
 }
 
 /// Get package-level publish target
+/// TODO: provenance and timeout are hardcoded defaults; they should reflect
+/// Config.npm_publish_provenance / Config.npm_publish_timeout when callers
+/// start using the NpmConfig values inside the returned PublishTarget.
+/// Currently callers only match on the variant (MooncakesOnly, NpmOnly, etc.)
+/// and use Config-level settings directly for actual publish operations.
 pub fn PackageConfig::publish_target(self : PackageConfig) -> PublishTarget {
   let npm_config = NpmConfig::{
     build_command: self.npm_build_command,
-    provenance: true,  // default for packages
-    timeout: 300,       // default for packages
+    provenance: true,
+    timeout: 300,
   }
   match (self.moon_publish, self.npm_publish) {
     (true, true) => Both(npm_config)

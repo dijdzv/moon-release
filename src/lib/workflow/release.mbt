@@ -311,7 +311,7 @@ pub async fn validate_publish_config(
       raise InputValidationError("Invalid path for package " + pkg.name + ": " + pkg.path)
     }
 
-    let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
+    let pkg_path = package_path_prefix(pkg.path)
 
     match pkg.publish_target() {
       MooncakesOnly | Both(_) => {
@@ -432,7 +432,7 @@ pub async fn get_current_version(
 async fn get_package_current_version(
   pkg : @config.PackageConfig
 ) -> @semver.Version? raise WorkflowError {
-  let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
+  let pkg_path = package_path_prefix(pkg.path)
   let mut moon_version : @semver.Version? = None
   let mut npm_version : @semver.Version? = None
 
@@ -764,14 +764,14 @@ pub async fn run_release_pr(
     try run_update_packages(ctx.config, ctx.repo, ctx.dry_run, ctx.verbose, forced_bump=ctx.forced_bump, bump_all=ctx.bump_all) catch {
       e => {
         let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
-        raise WorkflowError(e.to_string() + branch_recovery_note)
+        raise e.add_context(branch_recovery_note)
       }
     } noraise { _ => () }
   } else {
     try run_update(ctx) catch {
       e => {
         let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
-        raise WorkflowError(e.to_string() + branch_recovery_note)
+        raise e.add_context(branch_recovery_note)
       }
     } noraise { _ => () }
   }
@@ -875,7 +875,7 @@ pub async fn run_release_pr(
     Some((pr_num, _)) => {
       // Update existing PR with try-catch-noraise pattern
       let update_result = try @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body]) catch {
-        e => raise WorkflowError("Failed to update PR: " + e.to_string() + branch_recovery_note)
+        e => raise GitError("Failed to update PR: " + e.to_string() + branch_recovery_note)
       } noraise { r => r }
       if not(update_result.is_success()) {
         println("Warning: Failed to update PR body: " + update_result.stderr)
@@ -931,7 +931,7 @@ fn collect_files_to_stage(ctx : ReleaseContext) -> Array[String] {
       if not(validate_path(pkg.path)) {
         continue
       }
-      let pkg_path = if pkg.path == "." { "" } else { pkg.path + "/" }
+      let pkg_path = package_path_prefix(pkg.path)
       match pkg.publish_target() {
         MooncakesOnly => files.push(pkg_path + "moon.mod.json")
         NpmOnly(_) => files.push(pkg_path + "package.json")
@@ -1067,11 +1067,11 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
       }
 
       let build_result = try @executor.run_command_in_dir(build_cmd, pkg.path) catch {
-        e => raise WorkflowError("Failed to build JS target for " + pkg.name + ": " + e.to_string())
+        e => raise ExternalCommandError("Failed to build JS target for " + pkg.name + ": " + e.to_string())
       } noraise { r => r }
 
       if not(build_result.is_success()) {
-        raise WorkflowError("Failed to build JS target for " + pkg.name + ": " + build_result.stderr)
+        raise ExternalCommandError("Failed to build JS target for " + pkg.name + ": " + build_result.stderr)
       }
 
       if ctx.verbose {
@@ -1099,11 +1099,11 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
     // Run build command - fail if build fails (before any tag/release creation)
     let build_result = try @executor.run_command(build_cmd) catch {
-      e => raise WorkflowError("Failed to build JS target: " + e.to_string())
+      e => raise ExternalCommandError("Failed to build JS target: " + e.to_string())
     } noraise { r => r }
 
     if not(build_result.is_success()) {
-      raise WorkflowError("Failed to build JS target: " + build_result.stderr)
+      raise ExternalCommandError("Failed to build JS target: " + build_result.stderr)
     }
 
     if ctx.verbose {
@@ -1731,7 +1731,7 @@ async fn get_package_commits(
 
   // Get log with try-catch-noraise pattern
   let log_result = try @executor.run_git(repo, log_cmd) catch {
-    e => raise WorkflowError("Failed to get commits: " + e.to_string())
+    e => raise GitError("Failed to get commits: " + e.to_string())
   } noraise { r => r }
 
   let git_commits = @git.parse_commit_log(log_result.stdout)
@@ -1967,13 +1967,13 @@ pub async fn run_semver_check(
   // Get tag with try-catch-noraise pattern
   let tag_result = try @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"]) catch {
     _ =>
-      raise WorkflowError(
+      raise GitError(
         "No tags found. Cannot perform semver check without a previous version.",
       )
   } noraise { r => r }
 
   if not(tag_result.is_success()) {
-    raise WorkflowError(
+    raise GitError(
       "No tags found. Cannot perform semver check without a previous version.",
     )
   }
@@ -1985,10 +1985,10 @@ pub async fn run_semver_check(
 
   // 2. Save current branch name with try-catch-noraise pattern
   let branch_result = try @executor.run_git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]) catch {
-    e => raise WorkflowError("Failed to get current branch: " + e.to_string())
+    e => raise GitError("Failed to get current branch: " + e.to_string())
   } noraise { r => r }
   if not(branch_result.is_success()) {
-    raise WorkflowError("Failed to get current branch: " + branch_result.stderr)
+    raise GitError("Failed to get current branch: " + branch_result.stderr)
   }
   let current_branch = branch_result.stdout_trimmed()
 
@@ -1998,10 +1998,10 @@ pub async fn run_semver_check(
   }
   // Run moon doc with try-catch-noraise pattern
   let doc_result = try @executor.run_command(["moon", "doc"]) catch {
-    e => raise WorkflowError("Failed to run moon doc: " + e.to_string())
+    e => raise ExternalCommandError("Failed to run moon doc: " + e.to_string())
   } noraise { r => r }
   if not(doc_result.is_success()) {
-    raise WorkflowError("Failed to generate docs: " + doc_result.stderr)
+    raise ExternalCommandError("Failed to generate docs: " + doc_result.stderr)
   }
 
   // 4. Load current package_data.json with try-catch-noraise pattern
@@ -2043,10 +2043,10 @@ async fn get_old_apis_with_safe_checkout(
     println("  Checking out tag: " + tag)
   }
   let checkout_result = try @executor.run_git(repo, ["checkout", tag]) catch {
-    e => raise WorkflowError("Failed to checkout tag: " + e.to_string())
+    e => raise GitError("Failed to checkout tag: " + e.to_string())
   } noraise { r => r }
   if not(checkout_result.is_success()) {
-    raise WorkflowError("Failed to checkout tag: " + checkout_result.stderr)
+    raise GitError("Failed to checkout tag: " + checkout_result.stderr)
   }
 
   // From this point, we must return to the original branch
@@ -2058,7 +2058,7 @@ async fn get_old_apis_with_safe_checkout(
   let old_doc_result = try @executor.run_command(["moon", "doc"]) catch {
     e => {
       let _ = try? restore_branch(repo, original_branch, verbose)
-      raise WorkflowError("Failed to run moon doc on tag: " + e.to_string())
+      raise ExternalCommandError("Failed to run moon doc on tag: " + e.to_string())
     }
   } noraise { r => r }
 
@@ -2138,7 +2138,7 @@ async fn load_package_apis(doc_dir : String) -> @semver_check.PackageApi raise W
     },
     max_concurrency=1, // Sequential for deterministic results
   ) catch {
-    e => raise WorkflowError("Failed to scan for package_data.json files: " + e.to_string())
+    e => raise ExternalCommandError("Failed to scan for package_data.json files: " + e.to_string())
   } noraise { _ => () }
 
   @semver_check.merge_package_apis(all_apis)

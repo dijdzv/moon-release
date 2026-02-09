@@ -209,6 +209,35 @@ test "determine_bump_with_custom - no match returns None" {
   }
 }
 
+test "determine_bump - empty commits returns None" {
+  let commits : Array[@conventional.ConventionalCommit] = []
+  assert_eq(determine_bump(commits), None)
+}
+
+test "determine_bump_with_custom - empty commits returns None" {
+  let commits : Array[@conventional.ConventionalCommit] = []
+  assert_eq(determine_bump_with_custom(commits, Some("BREAKING"), Some("NEW")), None)
+}
+
+test "bump major - clears prerelease and build_metadata" {
+  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: Some("alpha"), build_metadata: Some("build.1") }
+  let result = bump(v, Major)
+  assert_eq(result.major, 2)
+  assert_eq(result.minor, 0)
+  assert_eq(result.patch, 0)
+  assert_eq(result.prerelease, None)
+  assert_eq(result.build_metadata, None)
+}
+
+test "bump minor - clears prerelease" {
+  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: Some("beta.1"), build_metadata: None }
+  let result = bump(v, Minor)
+  assert_eq(result.major, 1)
+  assert_eq(result.minor, 3)
+  assert_eq(result.patch, 0)
+  assert_eq(result.prerelease, None)
+}
+
 test "bump_with_prerelease rejects invalid prerelease" {
   let v = Version::{
     major: 1,

@@ -186,3 +186,35 @@ test "parse_commit_log - mixed valid and invalid lines" {
   assert_eq(commits[0].message, "feat: valid")
   assert_eq(commits[1].message, "fix: another")
 }
+
+// validate_ref_param boundary tests (via get_commits_since_tag_command)
+
+test "get_commits_since_tag_command - rejects newline in tag" {
+  let repo = Repository::open_unchecked("/repo")
+  try {
+    let _ = repo.get_commits_since_tag_command("v1.0.0\ninjection")
+    fail("expected error")
+  } catch {
+    GitError(msg) => assert_true(msg.contains("Invalid git ref"))
+    _ => fail("wrong error type")
+  }
+}
+
+test "get_commits_since_tag_command - rejects double dots" {
+  let repo = Repository::open_unchecked("/repo")
+  try {
+    let _ = repo.get_commits_since_tag_command("v1.0.0..v2.0.0")
+    fail("expected error")
+  } catch {
+    GitError(msg) => assert_true(msg.contains("Invalid git ref"))
+    _ => fail("wrong error type")
+  }
+}
+
+// create_tag_command security separator
+
+test "create_tag_command - includes -- separator" {
+  let repo = Repository::open_unchecked("/repo")
+  let cmd = repo.create_tag_command("v2.0.0", "Release 2.0.0")
+  assert_true(cmd.iter().any(fn(s) { s == "--" }))
+}
