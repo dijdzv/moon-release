@@ -81,3 +81,30 @@ publish-dry:
 # Publish to mooncakes.io
 publish:
     moon publish
+
+# === CI/CD Secrets ===
+
+# Register mooncakes credentials as GitHub Secrets (reads from ~/.moon/credentials.json)
+setup-mooncakes-secrets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CREDS="$HOME/.moon/credentials.json"
+    if [ ! -f "$CREDS" ]; then
+        echo "Error: $CREDS not found. Run 'moon login' first."
+        exit 1
+    fi
+    TOKEN=$(jq -r '.token' "$CREDS")
+    USERNAME=$(jq -r '.username' "$CREDS")
+    if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+        echo "Error: token not found in $CREDS"
+        exit 1
+    fi
+    if [ -z "$USERNAME" ] || [ "$USERNAME" = "null" ]; then
+        echo "Error: username not found in $CREDS"
+        exit 1
+    fi
+    echo "Setting MOONCAKES_TOKEN..."
+    echo "$TOKEN" | gh secret set MOONCAKES_TOKEN
+    echo "Setting MOONCAKES_USERNAME..."
+    echo "$USERNAME" | gh secret set MOONCAKES_USERNAME
+    echo "Done! Mooncakes credentials registered as GitHub Secrets."
