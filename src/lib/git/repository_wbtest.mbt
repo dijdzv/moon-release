@@ -165,7 +165,9 @@ test "parse_commit_log - empty subject (4 parts)" {
   assert_eq(commits[0].author, "John Doe")
 }
 
-test "parse_commit_log - actual 3 parts (no date)" {
+// 3 parts: parts[0]=hash, parts[1]=author, parts[2]=date, message is empty string
+// This matches the edge case in parse_commit_log where subject is empty
+test "parse_commit_log - 3 parts maps to (hash, empty_msg, author, date)" {
   let output = "abc123\u001efeat: add feature\u001eJohn Doe"
   let commits = parse_commit_log(output)
   assert_eq(commits.length(), 1)

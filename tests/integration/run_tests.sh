@@ -1007,6 +1007,122 @@ test_check_verbose() {
   rm -rf "$TEST_DIR"
 }
 
+test_npm_publish_update() {
+  log_info "Testing: update with npm_publish updates package.json"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  cat > release.json << 'EOF'
+{
+  "moon_publish": true,
+  "npm_publish": true
+}
+EOF
+  cat > package.json << 'EOF'
+{
+  "name": "@test/pkg",
+  "version": "0.1.0"
+}
+EOF
+  git add .
+  git commit -q -m "chore: add config"
+  git tag v0.1.0
+
+  git commit -q --allow-empty -m "feat: add new feature"
+
+  if $BINARY update 2>/dev/null; then
+    if grep -q '"version": "0.2.0"' package.json; then
+      log_pass "update with npm_publish updates package.json"
+    else
+      log_fail "update with npm_publish should update package.json"
+    fi
+  else
+    log_fail "update with npm_publish failed"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_custom_increment_regex() {
+  log_info "Testing: custom_minor_increment_regex"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  cat > release.json << 'EOF'
+{
+  "custom_minor_increment_regex": "NEW FEATURE"
+}
+EOF
+  git add release.json
+  git commit -q -m "chore: add config"
+  git tag v0.1.0
+
+  # chore normally doesn't bump, but custom regex matches
+  git commit -q --allow-empty -m "chore: NEW FEATURE added"
+
+  output=$($BINARY check 2>&1)
+  if echo "$output" | grep -q "minor"; then
+    log_pass "custom_minor_increment_regex triggers minor bump"
+  else
+    log_fail "custom_minor_increment_regex should trigger minor bump: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_monorepo_npm_publish_update() {
+  log_info "Testing: monorepo update modifies package.json when npm_publish=true"
+
+  TEST_DIR=$(create_monorepo_test_repo "1.0.0" "1.0.0" "1.0.0")
+  cd "$TEST_DIR"
+
+  cat > release.json << 'EOF'
+{
+  "packages": [
+    {
+      "name": "pkg-a",
+      "path": "packages/pkg-a",
+      "moon_publish": true,
+      "npm_publish": true
+    },
+    {
+      "name": "pkg-b",
+      "path": "packages/pkg-b",
+      "moon_publish": true,
+      "npm_publish": false
+    }
+  ]
+}
+EOF
+
+  git add .
+  git commit -q -m "chore: add config"
+  git tag v1.0.0
+
+  mkdir -p packages/pkg-a/src
+  echo "// new" > packages/pkg-a/src/lib.mbt
+  git add .
+  git commit -q -m "feat: add feature to pkg-a"
+
+  $BINARY update 2>/dev/null
+
+  if grep -q '"version": "1.1.0"' packages/pkg-a/package.json; then
+    log_pass "monorepo update modifies pkg-a package.json to 1.1.0"
+  else
+    log_fail "monorepo update should modify pkg-a package.json to 1.1.0"
+  fi
+
+  if grep -q '"version": "1.1.0"' packages/pkg-a/moon.mod.json; then
+    log_pass "monorepo update also modifies pkg-a moon.mod.json to 1.1.0"
+  else
+    log_fail "monorepo update should also modify pkg-a moon.mod.json to 1.1.0"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
 test_error_not_git_repo() {
   log_info "Testing: error when not in git repo"
 
@@ -1072,6 +1188,9 @@ main() {
   test_release_pr_dry_run
   test_release_dry_run
   test_monorepo_update_file_content
+  test_npm_publish_update
+  test_custom_increment_regex
+  test_monorepo_npm_publish_update
   test_allow_dirty
   test_invalid_config_json
   test_config_missing_uses_defaults

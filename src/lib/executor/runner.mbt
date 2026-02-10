@@ -10,7 +10,9 @@ extern "C" fn c_getenv(name : Bytes, buf : Bytes, buf_size : Int) -> Int = "moon
 /// Returns None if the variable is not set or empty.
 /// TODO: Replace with moonbitlang/core/env API when getenv support is added upstream.
 pub fn get_env_var(name : String) -> String? {
-  // Encode name as null-terminated UTF-8 bytes
+  // Encode name as null-terminated bytes.
+  // Note: This assumes ASCII-only variable names (single-byte chars).
+  // All callers use ASCII names (e.g., "PATH", "GITHUB_ACTIONS"), so this is safe.
   let name_chars = name.to_array()
   let byte_arr : Array[Byte] = Array::new(capacity=name_chars.length() + 1)
   for c in name_chars {

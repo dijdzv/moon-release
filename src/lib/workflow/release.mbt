@@ -1724,7 +1724,11 @@ async fn get_package_commits(
 
   let log_cmd = if tag_result.is_success() {
     let tag = tag_result.stdout_trimmed()
-    ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", tag + "..HEAD", "--", path]
+    if tag.is_empty() {
+      ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", "--", path]
+    } else {
+      ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", tag + "..HEAD", "--", path]
+    }
   } else {
     ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", "--", path]
   }
@@ -1778,25 +1782,32 @@ pub async fn run_publish_packages(
     }
 
     // Publish with try-catch-noraise pattern
-    let publish_result = if pkg.path == "." {
-      try @executor.run_command(["moon", "publish"]) catch {
-        e => {
-          println("  Warning: Failed to publish " + pkg.name + ": " + e.to_string())
-          continue
-        }
-      } noraise { r => r }
+    let publish_cmd : Array[String] = if pkg.path == "." {
+      ["moon", "publish"]
     } else {
-      try @executor.run_command(["moon", "publish", "-C", pkg.path]) catch {
-        e => {
-          println("  Warning: Failed to publish " + pkg.name + ": " + e.to_string())
+      ["moon", "publish", "-C", pkg.path]
+    }
+    if config.moon_publish_frozen {
+      publish_cmd.push("--frozen")
+    }
+    let timeout = config.moon_publish_timeout
+    let publish_result = try @executor.run_command_with_timeout(publish_cmd, timeout) catch {
+      e => {
+        println("  Warning: Failed to publish " + pkg.name + ": " + e.to_string())
+        continue
+      }
+    } noraise { r => r }
+
+    match publish_result {
+      None => {
+        println("  Warning: Publish timed out for " + pkg.name + " after \{timeout} seconds")
+        continue
+      }
+      Some(result) =>
+        if not(result.is_success()) {
+          println("  Warning: Failed to publish " + pkg.name + ": " + result.stderr)
           continue
         }
-      } noraise { r => r }
-    }
-
-    if not(publish_result.is_success()) {
-      println("  Warning: Failed to publish " + pkg.name + ": " + publish_result.stderr)
-      continue
     }
 
     println("  Published " + pkg.name)

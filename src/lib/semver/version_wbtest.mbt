@@ -330,3 +330,22 @@ test "with_prerelease rejects invalid prerelease" {
   assert_true(v.with_prerelease("alpha_1") is None)
   assert_true(v.with_prerelease("01") is None)
 }
+
+test "validate_build_metadata - valid" {
+  assert_true(validate_build_metadata("build"))
+  assert_true(validate_build_metadata("build.123"))
+  assert_true(validate_build_metadata("001"))  // leading zeros allowed
+}
+
+test "validate_build_metadata - invalid empty" {
+  assert_false(validate_build_metadata(""))
+}
+
+test "validate_build_metadata - invalid empty identifier" {
+  assert_false(validate_build_metadata("build..123"))
+}
+
+test "validate_build_metadata - invalid characters" {
+  assert_false(validate_build_metadata("build+1"))
+  assert_false(validate_build_metadata("build_1"))
+}

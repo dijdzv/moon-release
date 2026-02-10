@@ -740,6 +740,11 @@ fn generate_default_config_json() -> String {
     #|  "semver_check": false,
     #|  "registry_check": false,
     #|  "allow_dirty": false,
+    #|  "bump_all_packages": false,
+    #|  "max_analyze_commits": null,
+    #|  "custom_major_increment_regex": null,
+    #|  "custom_minor_increment_regex": null,
+    #|  "npm_build_command": null,
     #|  "packages": []
     #|}
   json

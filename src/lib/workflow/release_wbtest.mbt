@@ -76,6 +76,19 @@ test "generate_release_notes - short hash" {
   }
 }
 
+test "generate_release_notes - breaking change commit" {
+  let commit = @conventional.parse("feat!: breaking API change")
+  match commit {
+    Some(c) => {
+      assert_true(c.breaking)
+      let commits = [(c, "abc1234567890")]
+      let result = generate_release_notes(commits)
+      assert_true(result.contains("breaking API change"))
+    }
+    None => fail("parse failed")
+  }
+}
+
 // parse_package_json_version tests
 
 test "parse_package_json_version - valid version" {
@@ -791,4 +804,33 @@ test "generate_package_changelog - docs goes to Other Changes" {
     }
     None => fail("parse failed")
   }
+}
+
+test "generate_package_changelog - breaking feat goes to Features" {
+  let commit = @conventional.parse("feat!: remove old API")
+  match commit {
+    Some(c) => {
+      let result = generate_package_changelog([(c, "abc1234")])
+      assert_true(result.contains("### Features"))
+      assert_true(result.contains("remove old API"))
+    }
+    None => fail("parse failed")
+  }
+}
+
+test "build_pr_body_unified - package with no commits" {
+  let old_ver = @semver.Version::parse("1.0.0").unwrap()
+  let new_ver = @semver.Version::parse("1.0.1").unwrap()
+  let packages = [
+    PackageReleaseInfo::{
+      name: "empty-pkg",
+      old_version: old_ver,
+      new_version: new_ver,
+      commits: [],
+    },
+  ]
+  let result = build_pr_body_unified(packages)
+  assert_true(result.contains("* `empty-pkg`: 1.0.0 -> 1.0.1"))
+  // No changelog section for empty commits
+  assert_false(result.contains("### Features"))
 }
