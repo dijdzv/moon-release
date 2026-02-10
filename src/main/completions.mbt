@@ -1,5 +1,10 @@
 /// Shell completion script generation
+///
+/// IMPORTANT: These completion scripts are hand-maintained and must be manually
+/// synced with the CLI parser definition in main.mbt whenever commands, subcommands,
+/// or flags are added/removed/changed.
 
+///|
 /// generate-completions command
 pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
   let shell : String = if subcmd.positional_args.length() > 0 {
@@ -8,8 +13,7 @@ pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
     println("Error: shell argument is required")
     println("Usage: moon-release generate-completions <shell>")
     println("Supported shells: bash, zsh, fish")
-    c_exit(1)
-    panic()
+    exit_error()
   }
 
   match shell {
@@ -19,12 +23,12 @@ pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
     _ => {
       println("Error: unsupported shell: " + shell)
       println("Supported shells: bash, zsh, fish")
-      c_exit(1)
-      panic()
+      exit_error()
     }
   }
 }
 
+///|
 /// Output bash completion script
 fn print_bash_completion() -> Unit {
   let script =
@@ -37,18 +41,18 @@ fn print_bash_completion() -> Unit {
     #|    cur="${COMP_WORDS[COMP_CWORD]}"
     #|    prev="${COMP_WORDS[COMP_CWORD-1]}"
     #|
-    #|    commands="update release-pr release init version check set-version generate-completions"
+    #|    commands="update release-pr release init version check set-version generate-completions generate-schema"
     #|    global_opts="-n --dry-run -v --verbose -c --config -h --help"
     #|
     #|    case "${COMP_WORDS[1]}" in
     #|        update)
-    #|            opts="-n --dry-run -b --bump -p --packages -o --output"
+    #|            opts="-n --dry-run -b --bump --bump-all -p --packages -o --output"
     #|            ;;
     #|        release-pr)
-    #|            opts="-n --dry-run -b --bump"
+    #|            opts="-n --dry-run -b --bump --bump-all"
     #|            ;;
     #|        release)
-    #|            opts="-n --dry-run -b --bump -p --prerelease"
+    #|            opts="-n --dry-run -b --bump --bump-all -p --prerelease"
     #|            ;;
     #|        init)
     #|            opts="-f --force"
@@ -83,6 +87,7 @@ fn print_bash_completion() -> Unit {
   println(script)
 }
 
+///|
 /// Output zsh completion script
 fn print_zsh_completion() -> Unit {
   let script =
@@ -101,6 +106,7 @@ fn print_zsh_completion() -> Unit {
     #|        'check:Check the current state without making changes'
     #|        'set-version:Set the package version manually'
     #|        'generate-completions:Generate shell completion script'
+    #|        'generate-schema:Generate JSON schema for release.json'
     #|    )
     #|
     #|    local -a global_opts
@@ -132,6 +138,7 @@ fn print_zsh_completion() -> Unit {
     #|                        '--dry-run[Show what would be done]' \
     #|                        '-b[Force version bump]:bump:(major minor patch)' \
     #|                        '--bump[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump-all[Force bump ALL packages]' \
     #|                        '-p[Update all packages]' \
     #|                        '--packages[Update all packages]' \
     #|                        '-o[Output format]:format:(text json)' \
@@ -142,7 +149,8 @@ fn print_zsh_completion() -> Unit {
     #|                        '-n[Show what would be done]' \
     #|                        '--dry-run[Show what would be done]' \
     #|                        '-b[Force version bump]:bump:(major minor patch)' \
-    #|                        '--bump[Force version bump]:bump:(major minor patch)'
+    #|                        '--bump[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump-all[Force bump ALL packages]'
     #|                    ;;
     #|                release)
     #|                    _arguments \
@@ -150,6 +158,7 @@ fn print_zsh_completion() -> Unit {
     #|                        '--dry-run[Show what would be done]' \
     #|                        '-b[Force version bump]:bump:(major minor patch)' \
     #|                        '--bump[Force version bump]:bump:(major minor patch)' \
+    #|                        '--bump-all[Force bump ALL packages]' \
     #|                        '-p[Prerelease identifier]:prerelease:' \
     #|                        '--prerelease[Prerelease identifier]:prerelease:'
     #|                    ;;
@@ -173,6 +182,8 @@ fn print_zsh_completion() -> Unit {
     #|                    _arguments \
     #|                        ':shell:(bash zsh fish)'
     #|                    ;;
+    #|                generate-schema)
+    #|                    ;;
     #|            esac
     #|            ;;
     #|    esac
@@ -182,6 +193,7 @@ fn print_zsh_completion() -> Unit {
   println(script)
 }
 
+///|
 /// Output fish completion script
 fn print_fish_completion() -> Unit {
   let script =
@@ -206,20 +218,24 @@ fn print_fish_completion() -> Unit {
     #|complete -c moon-release -n '__fish_use_subcommand' -a check -d 'Check the current state'
     #|complete -c moon-release -n '__fish_use_subcommand' -a set-version -d 'Set the package version manually'
     #|complete -c moon-release -n '__fish_use_subcommand' -a generate-completions -d 'Generate shell completion script'
+    #|complete -c moon-release -n '__fish_use_subcommand' -a generate-schema -d 'Generate JSON schema for release.json'
     #|
     #|# update options
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s n -l dry-run -d 'Show what would be done'
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from update' -l bump-all -d 'Force bump ALL packages'
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s p -l packages -d 'Update all packages'
     #|complete -c moon-release -n '__fish_seen_subcommand_from update' -s o -l output -r -a 'text json' -d 'Output format'
     #|
     #|# release-pr options
     #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -s n -l dry-run -d 'Show what would be done'
     #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release-pr' -l bump-all -d 'Force bump ALL packages'
     #|
     #|# release options
     #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s n -l dry-run -d 'Show what would be done'
     #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s b -l bump -r -a 'major minor patch' -d 'Force version bump'
+    #|complete -c moon-release -n '__fish_seen_subcommand_from release' -l bump-all -d 'Force bump ALL packages'
     #|complete -c moon-release -n '__fish_seen_subcommand_from release' -s p -l prerelease -r -d 'Prerelease identifier'
     #|
     #|# init options

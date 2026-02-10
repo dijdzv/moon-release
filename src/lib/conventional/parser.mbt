@@ -1,3 +1,8 @@
+///|
+/// Length of "BREAKING CHANGE:" and "BREAKING-CHANGE:" (both 16 characters)
+let breaking_change_prefix_len : Int = 16
+
+///|
 /// Parse commit message and return ConventionalCommit
 pub fn parse(message : String) -> ConventionalCommit? {
   let lines : Array[String] = message
@@ -21,22 +26,14 @@ pub fn parse(message : String) -> ConventionalCommit? {
 
   // Set breaking = true if BREAKING CHANGE footer exists
   let breaking = breaking_mark ||
-    footers.iter().any(fn(f) {
-      f.0 == "BREAKING CHANGE" || f.0 == "BREAKING-CHANGE"
-    })
+    footers
+    .iter()
+    .any(fn(f) { f.0 == "BREAKING CHANGE" || f.0 == "BREAKING-CHANGE" })
 
-  Some(
-    ConventionalCommit::{
-      typ,
-      scope,
-      description,
-      body,
-      breaking,
-      footers,
-    },
-  )
+  Some(ConventionalCommit::{ typ, scope, description, body, breaking, footers })
 }
 
+///|
 /// Parse header line
 fn parse_header(header : String) -> (CommitType, String?, Bool, String)? {
   // Find position of ": "
@@ -83,8 +80,12 @@ fn parse_header(header : String) -> (CommitType, String?, Bool, String)? {
   Some((typ, scope, breaking, description))
 }
 
+///|
 /// Convert type string to CommitType
 fn parse_type(s : String) -> CommitType? {
+  if s.is_empty() {
+    return None
+  }
   match s {
     "feat" => Some(Feat)
     "fix" => Some(Fix)
@@ -101,39 +102,50 @@ fn parse_type(s : String) -> CommitType? {
   }
 }
 
-/// Get substring (safe version)
+///|
+/// Get substring (safe version, char-index based)
 fn substr(s : String, start : Int, end : Int) -> String {
-  if start < 0 || end > s.length() || start > end {
+  let chars : Array[Char] = s.to_array()
+  let len = chars.length()
+  if start < 0 || end > len || start > end {
     return ""
   }
-  let chars : Array[Char] = s.to_array()
   let result = StringBuilder::new()
   for i = start; i < end; i = i + 1 {
-    if i < chars.length() {
-      result.write_char(chars[i])
-    }
+    result.write_char(chars[i])
   }
   result.to_string()
 }
 
-/// Find position of substring
+///|
+/// Find position of substring (char-index based)
 fn find_substring(haystack : String, needle : String) -> Int? {
-  let haystack_len = haystack.length()
-  let needle_len = needle.length()
-  if needle_len > haystack_len {
+  let h_chars : Array[Char] = haystack.to_array()
+  let n_chars : Array[Char] = needle.to_array()
+  let h_len = h_chars.length()
+  let n_len = n_chars.length()
+  if n_len > h_len {
     return None
   }
-  for i = 0; i <= haystack_len - needle_len; i = i + 1 {
-    if substr(haystack, i, i + needle_len) == needle {
+  for i = 0; i <= h_len - n_len; i = i + 1 {
+    let mut matched = true
+    for j = 0; j < n_len; j = j + 1 {
+      if h_chars[i + j] != n_chars[j] {
+        matched = false
+        break
+      }
+    }
+    if matched {
       return Some(i)
     }
   }
   None
 }
 
+///|
 /// Parse body and footers
 fn parse_body_and_footers(
-  lines : Array[String]
+  lines : Array[String],
 ) -> (String?, Array[(String, String)]) {
   if lines.length() <= 1 {
     return (None, [])
@@ -150,19 +162,43 @@ fn parse_body_and_footers(
     return (None, [])
   }
 
-  // Find footer start position
+  // Find footer start position by scanning backwards from the end
+  // Look for the last block of consecutive footer lines preceded by an empty line
   let mut footer_start = -1
-  for i = 0; i < rest.length(); i = i + 1 {
-    let line = rest[i]
-    if is_footer_line(line) {
-      // Verify there is an empty line before footer
-      if i > 0 && rest[i - 1].trim().is_empty() {
-        footer_start = i
-        break
-      } else if i == 0 {
-        // If footer starts from beginning (empty lines only, no body)
+  // Scan backwards to find the last footer line
+  {
+    let mut last_footer = -1
+    for i = rest.length() - 1; i >= 0; i = i - 1 {
+      if rest[i].trim().is_empty() {
+        // skip empty lines at the end
+        continue
+      }
+      if is_footer_line(rest[i]) {
+        last_footer = i
+      }
+      break
+    }
+    if last_footer >= 0 {
+      // Scan backwards from last_footer to find the start of the consecutive footer block
+      let mut block_start = last_footer
+      for i = last_footer - 1; i >= 0; i = i - 1 {
+        if rest[i].trim().is_empty() {
+          // Empty line means the block starts after this
+          break
+        }
+        if is_footer_line(rest[i]) {
+          block_start = i
+        } else {
+          // Non-footer, non-empty line — this isn't part of the footer block
+          block_start = last_footer
+          break
+        }
+      }
+      // Verify there is an empty line before the footer block, or it starts at index 0
+      if block_start == 0 {
         footer_start = 0
-        break
+      } else if block_start > 0 && rest[block_start - 1].trim().is_empty() {
+        footer_start = block_start
       }
     }
   }
@@ -192,6 +228,7 @@ fn parse_body_and_footers(
   (body, footers)
 }
 
+///|
 /// Build body string from body lines
 fn build_body(lines : Array[String]) -> String? {
   if lines.is_empty() {
@@ -208,8 +245,18 @@ fn build_body(lines : Array[String]) -> String? {
     return None
   }
 
+  // Skip trailing empty lines
+  let mut end_idx = lines.length()
+  while end_idx > start_idx && lines[end_idx - 1].trim().is_empty() {
+    end_idx = end_idx - 1
+  }
+
+  if start_idx >= end_idx {
+    return None
+  }
+
   let result : Array[String] = []
-  for i = start_idx; i < lines.length(); i = i + 1 {
+  for i = start_idx; i < end_idx; i = i + 1 {
     result.push(lines[i])
   }
 
@@ -220,6 +267,7 @@ fn build_body(lines : Array[String]) -> String? {
   }
 }
 
+///|
 /// Check if line is a footer line
 fn is_footer_line(line : String) -> Bool {
   let trimmed = line.trim().to_string()
@@ -257,12 +305,15 @@ fn is_footer_line(line : String) -> Bool {
   false
 }
 
+///|
 /// Check if token is valid (alphanumeric and hyphens only)
 fn is_valid_token(token : String) -> Bool {
   if token.is_empty() {
     return false
   }
-  token.iter().all(fn(c) {
+  token
+  .iter()
+  .all(fn(c) {
     (c >= 'a' && c <= 'z') ||
     (c >= 'A' && c <= 'Z') ||
     (c >= '0' && c <= '9') ||
@@ -270,6 +321,7 @@ fn is_valid_token(token : String) -> Bool {
   })
 }
 
+///|
 /// Parse footer lines
 fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
   let footers : Array[(String, String)] = []
@@ -283,13 +335,17 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
 
     // "BREAKING CHANGE: value" format
     if trimmed.has_prefix("BREAKING CHANGE:") {
-      let value = substr(trimmed, 16, trimmed.length()).trim().to_string()
+      let value = substr(trimmed, breaking_change_prefix_len, trimmed.length())
+        .trim()
+        .to_string()
       footers.push(("BREAKING CHANGE", value))
       continue
     }
 
     if trimmed.has_prefix("BREAKING-CHANGE:") {
-      let value = substr(trimmed, 16, trimmed.length()).trim().to_string()
+      let value = substr(trimmed, breaking_change_prefix_len, trimmed.length())
+        .trim()
+        .to_string()
       footers.push(("BREAKING-CHANGE", value))
       continue
     }

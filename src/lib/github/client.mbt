@@ -1,12 +1,11 @@
-/// Maximum value for safe UInt conversion from Double
-let uint_max_as_double : Double = 4294967295.0
-
+///|
 /// GitHub API client (gh CLI command generation)
 pub struct GitHubClient {
   owner : String
   repo : String
 } derive(Show, Eq)
 
+///|
 /// GitHub release
 pub struct Release {
   tag_name : String
@@ -16,6 +15,7 @@ pub struct Release {
   prerelease : Bool
 } derive(Show, Eq)
 
+///|
 /// Pull Request
 pub struct PullRequest {
   number : UInt
@@ -25,30 +25,52 @@ pub struct PullRequest {
   base : String
 } derive(Show, Eq)
 
+///|
 /// GitHub API error
 pub suberror GitHubError {
   GitHubError(String)
 }
 
-/// Create client
-pub fn GitHubClient::new(owner : String, repo : String) -> GitHubClient {
+///|
+/// Create client with owner/repo validation
+/// Delegates to @util.validate_repo_component_impl for shared validation logic.
+pub fn GitHubClient::new(
+  owner : String,
+  repo : String,
+) -> GitHubClient raise GitHubError {
+  if not(@util.validate_repo_component_impl(owner)) {
+    raise GitHubError(
+      "Invalid GitHub owner: '" +
+      owner +
+      "' (only alphanumeric, hyphen, underscore, and dot allowed)",
+    )
+  }
+  if not(@util.validate_repo_component_impl(repo)) {
+    raise GitHubError(
+      "Invalid GitHub repo: '" +
+      repo +
+      "' (only alphanumeric, hyphen, underscore, and dot allowed)",
+    )
+  }
   GitHubClient::{ owner, repo }
 }
 
+///|
 /// Get repository string
 fn GitHubClient::repo_string(self : GitHubClient) -> String {
   self.owner + "/" + self.repo
 }
 
+///|
 /// Command to create a release
 pub fn GitHubClient::create_release_command(
   self : GitHubClient,
   tag_name : String,
   title : String,
   notes : String,
-  draft~ : Bool = false,
-  prerelease~ : Bool = false,
-  latest~ : Bool = true
+  draft? : Bool = false,
+  prerelease? : Bool = false,
+  latest? : Bool = true,
 ) -> Array[String] {
   let cmd : Array[String] = [
     "gh",
@@ -76,17 +98,28 @@ pub fn GitHubClient::create_release_command(
   cmd
 }
 
+///|
 /// Command to get a release (by tag name)
 pub fn GitHubClient::get_release_command(
   self : GitHubClient,
-  tag : String
+  tag : String,
 ) -> Array[String] {
-  ["gh", "release", "view", tag, "--repo", self.repo_string(), "--json", "tagName,name,body,isDraft,isPrerelease"]
+  [
+    "gh",
+    "release",
+    "view",
+    tag,
+    "--repo",
+    self.repo_string(),
+    "--json",
+    "tagName,name,body,isDraft,isPrerelease",
+  ]
 }
 
+///|
 /// Command to get the latest release
 pub fn GitHubClient::get_latest_release_command(
-  self : GitHubClient
+  self : GitHubClient,
 ) -> Array[String] {
   [
     "gh",
@@ -101,6 +134,7 @@ pub fn GitHubClient::get_latest_release_command(
   ]
 }
 
+///|
 /// Command to create a PR
 pub fn GitHubClient::create_pull_request_command(
   self : GitHubClient,
@@ -108,8 +142,8 @@ pub fn GitHubClient::create_pull_request_command(
   body : String,
   head : String,
   base : String,
-  draft~ : Bool = false,
-  labels~ : Array[String] = []
+  draft? : Bool = false,
+  labels? : Array[String] = [],
 ) -> Array[String] {
   let cmd : Array[String] = [
     "gh",
@@ -136,10 +170,11 @@ pub fn GitHubClient::create_pull_request_command(
   cmd
 }
 
+///|
 /// Command to get a PR
 pub fn GitHubClient::get_pull_request_command(
   self : GitHubClient,
-  number : UInt
+  number : UInt,
 ) -> Array[String] {
   [
     "gh",
@@ -153,11 +188,12 @@ pub fn GitHubClient::get_pull_request_command(
   ]
 }
 
+///|
 /// Command to list PRs
 pub fn GitHubClient::list_pull_requests_command(
   self : GitHubClient,
-  state~ : String = "open",
-  limit~ : UInt = 30U
+  state? : String = "open",
+  limit? : UInt = 30U,
 ) -> Array[String] {
   [
     "gh",
@@ -174,11 +210,14 @@ pub fn GitHubClient::list_pull_requests_command(
   ]
 }
 
+///|
 /// Parse release response with try-catch-noraise pattern
 pub fn parse_release_json(output : String) -> Release raise GitHubError {
   let json = try @json.parse(output) catch {
     e => raise GitHubError("Failed to parse release JSON: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let obj = match json {
     Object(o) => o
@@ -187,7 +226,8 @@ pub fn parse_release_json(output : String) -> Release raise GitHubError {
 
   let tag_name = match obj.get("tagName") {
     Some(String(s)) => s
-    _ => ""
+    _ =>
+      raise GitHubError("Missing or invalid 'tagName' in release JSON response")
   }
 
   let name = match obj.get("name") {
@@ -215,14 +255,17 @@ pub fn parse_release_json(output : String) -> Release raise GitHubError {
   Release::{ tag_name, name, body, draft, prerelease }
 }
 
+///|
 /// Parse release list response with try-catch-noraise pattern
 pub fn parse_release_list_json(
-  output : String
+  output : String,
 ) -> Array[Release] raise GitHubError {
   let json = try @json.parse(output) catch {
     e =>
       raise GitHubError("Failed to parse release list JSON: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let arr = match json {
     Array(a) => a
@@ -249,9 +292,7 @@ pub fn parse_release_list_json(
           Some(True) => true
           _ => false
         }
-        result.push(
-          Release::{ tag_name, name, body: "", draft, prerelease },
-        )
+        result.push(Release::{ tag_name, name, body: "", draft, prerelease })
       }
       _ => ()
     }
@@ -259,22 +300,28 @@ pub fn parse_release_list_json(
   result
 }
 
-/// Parse PR response
+///|
 /// Parse PR response with try-catch-noraise pattern
-pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError {
+pub fn parse_pull_request_json(
+  output : String,
+) -> PullRequest raise GitHubError {
   let json = try @json.parse(output) catch {
     e => raise GitHubError("Failed to parse PR JSON: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let obj = match json {
     Object(o) => o
     _ => raise GitHubError("Expected JSON object in PR response")
   }
 
+  // Note: 0 is used as a sentinel value for parse failure.
+  // Callers should check for number == 0 before using the PR number.
   let number = match obj.get("number") {
     Some(Number(n, ..)) =>
       // Treat negative, non-integer, or overflow values as 0
-      if n < 0.0 || n > uint_max_as_double || n != n.to_int().to_double() {
+      if n < 0.0 || n > @util.uint_max_as_double || n % 1.0 != 0.0 {
         0U
       } else {
         n.to_uint()
@@ -306,13 +353,16 @@ pub fn parse_pull_request_json(output : String) -> PullRequest raise GitHubError
   PullRequest::{ number, title, body, head, base }
 }
 
+///|
 /// Parse PR list response with try-catch-noraise pattern
 pub fn parse_pull_request_list_json(
-  output : String
+  output : String,
 ) -> Array[PullRequest] raise GitHubError {
   let json = try @json.parse(output) catch {
     e => raise GitHubError("Failed to parse PR list JSON: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let arr = match json {
     Array(a) => a
@@ -325,8 +375,12 @@ pub fn parse_pull_request_list_json(
       Object(obj) => {
         let number = match obj.get("number") {
           Some(Number(n, ..)) =>
-            // Bounds check for UInt overflow
-            if n >= 0.0 && n <= uint_max_as_double { n.to_uint() } else { 0U }
+            // Treat negative, non-integer, or overflow values as 0
+            if n >= 0.0 && n <= @util.uint_max_as_double && n % 1.0 == 0.0 {
+              n.to_uint()
+            } else {
+              0U
+            }
           _ => 0U
         }
         let title = match obj.get("title") {
@@ -341,9 +395,7 @@ pub fn parse_pull_request_list_json(
           Some(String(s)) => s
           _ => ""
         }
-        result.push(
-          PullRequest::{ number, title, body: "", head, base },
-        )
+        result.push(PullRequest::{ number, title, body: "", head, base })
       }
       _ => ()
     }

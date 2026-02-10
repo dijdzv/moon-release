@@ -23,6 +23,14 @@ inputs:
     description: 'Path to configuration file'
     required: false
     default: 'release.json'
+  bump:
+    description: 'Force bump type: major, minor, or patch'
+    required: false
+    default: ''
+  bump-all:
+    description: 'Bump all packages including unchanged ones (monorepo)'
+    required: false
+    default: 'false'
   dry-run:
     description: 'Show what would be done without making changes'
     required: false
@@ -52,20 +60,21 @@ runs:
     - name: Setup mooncakes.io credentials
       if: inputs.mooncakes-token != '' && inputs.mooncakes-username != ''
       shell: bash
+      env:
+        MOONCAKES_TOKEN: ${{ inputs.mooncakes-token }}
+        MOONCAKES_USERNAME: ${{ inputs.mooncakes-username }}
       run: |
         mkdir -p ~/.moon
-        cat > ~/.moon/credentials.json << EOF
-        {
-          "token": "${{ inputs.mooncakes-token }}",
-          "username": "${{ inputs.mooncakes-username }}"
-        }
-        EOF
+        jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
+          '{"token": $token, "username": $username}' > ~/.moon/credentials.json
         chmod 600 ~/.moon/credentials.json
 
     - name: Build moon-release
       shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        cd ${{ github.action_path }}
+        cd "$ACTION_PATH"
         moon build --target native
 
     - name: Run moon-release
@@ -73,18 +82,54 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_CONFIG: ${{ inputs.config-file }}
+        INPUT_BUMP: ${{ inputs.bump }}
+        INPUT_BUMP_ALL: ${{ inputs.bump-all }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
+        BUMP_FLAG=""
+        BUMP_ALL_FLAG=""
         DRY_RUN_FLAG=""
         VERBOSE_FLAG=""
-        if [ "${{ inputs.dry-run }}" = "true" ]; then
+        if [ -n "$INPUT_BUMP" ]; then
+          BUMP_FLAG="--bump $INPUT_BUMP"
+        fi
+        if [ "$INPUT_BUMP_ALL" = "true" ]; then
+          BUMP_ALL_FLAG="--bump-all"
+        fi
+        if [ "$INPUT_DRY_RUN" = "true" ]; then
           DRY_RUN_FLAG="--dry-run"
         fi
-        if [ "${{ inputs.verbose }}" = "true" ]; then
+        if [ "$INPUT_VERBOSE" = "true" ]; then
           VERBOSE_FLAG="--verbose"
         fi
 
-        ${{ github.action_path }}/target/native/release/build/src/main/main.exe \
-          ${{ inputs.command }} \
-          --config "${{ inputs.config-file }}" \
+        set +e
+        OUTPUT=$("$ACTION_PATH/_build/native/release/build/src/main/main.exe" \
+          "$INPUT_COMMAND" \
+          --config "$INPUT_CONFIG" \
+          $BUMP_FLAG \
+          $BUMP_ALL_FLAG \
           $DRY_RUN_FLAG \
-          $VERBOSE_FLAG
+          $VERBOSE_FLAG 2>&1)
+        EXIT_CODE=$?
+        set -e
+        echo "$OUTPUT"
+        if [ $EXIT_CODE -ne 0 ]; then
+          echo "::error::moon-release failed with exit code $EXIT_CODE"
+          exit $EXIT_CODE
+        fi
+
+        # Capture outputs for downstream steps
+        VERSION=$(echo "$OUTPUT" | grep -oP '(?:^|[ ])v?\K[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+_-]*' | tail -1 || true)
+        TAG=$(echo "$OUTPUT" | grep -oP '(?:tag:\s*)\K\S+' | tail -1 || true)
+        PR_URL=$(echo "$OUTPUT" | grep -oP 'https://github\.com/[^\s"]+/pull/[0-9]+' | tail -1 || true)
+
+        {
+          echo "version=${VERSION:-}"
+          echo "tag=${TAG:-}"
+          echo "pr-url=${PR_URL:-}"
+        } >> "$GITHUB_OUTPUT"

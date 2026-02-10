@@ -1,17 +1,17 @@
 // CheckResult tests
 
+///|
 test "CheckResult::new - no changes" {
   let diff = ApiDiff::empty()
   let result = CheckResult::new(diff)
-  assert_true(result.success)
+  assert_true(result.is_success())
   assert_eq(result.suggested_bump, None)
   assert_eq(result.messages.length(), 0)
 }
 
+///|
 test "CheckResult::new - breaking changes suggests Major" {
   let diff = ApiDiff::{
-    has_breaking: true,
-    has_additions: false,
     changes: [
       ApiChange::{
         kind: Breaking,
@@ -22,15 +22,14 @@ test "CheckResult::new - breaking changes suggests Major" {
     ],
   }
   let result = CheckResult::new(diff)
-  assert_false(result.success)
-  assert_eq(result.suggested_bump, Major)
+  assert_false(result.is_success())
+  assert_eq(result.suggested_bump, Some(@semver.BumpType::Major))
   assert_true(result.messages.length() > 0)
 }
 
+///|
 test "CheckResult::new - additions only suggests Minor" {
   let diff = ApiDiff::{
-    has_breaking: false,
-    has_additions: true,
     changes: [
       ApiChange::{
         kind: Addition,
@@ -41,14 +40,13 @@ test "CheckResult::new - additions only suggests Minor" {
     ],
   }
   let result = CheckResult::new(diff)
-  assert_true(result.success)
-  assert_eq(result.suggested_bump, Minor)
+  assert_true(result.is_success())
+  assert_eq(result.suggested_bump, Some(@semver.BumpType::Minor))
 }
 
+///|
 test "CheckResult::new - compatible changes suggests Patch" {
   let diff = ApiDiff::{
-    has_breaking: false,
-    has_additions: false,
     changes: [
       ApiChange::{
         kind: Compatible,
@@ -59,10 +57,11 @@ test "CheckResult::new - compatible changes suggests Patch" {
     ],
   }
   let result = CheckResult::new(diff)
-  assert_true(result.success)
-  assert_eq(result.suggested_bump, Patch)
+  assert_true(result.is_success())
+  assert_eq(result.suggested_bump, Some(@semver.BumpType::Patch))
 }
 
+///|
 test "CheckResult::format - no changes" {
   let diff = ApiDiff::empty()
   let result = CheckResult::new(diff)
@@ -71,10 +70,9 @@ test "CheckResult::format - no changes" {
   assert_true(formatted.contains("NONE"))
 }
 
+///|
 test "CheckResult::format - breaking changes" {
   let diff = ApiDiff::{
-    has_breaking: true,
-    has_additions: false,
     changes: [
       ApiChange::{
         kind: Breaking,
@@ -91,10 +89,9 @@ test "CheckResult::format - breaking changes" {
   assert_true(formatted.contains("Breaking changes"))
 }
 
+///|
 test "CheckResult::format - additions" {
   let diff = ApiDiff::{
-    has_breaking: false,
-    has_additions: true,
     changes: [
       ApiChange::{
         kind: Addition,
@@ -110,20 +107,128 @@ test "CheckResult::format - additions" {
   assert_true(formatted.contains("API changes: 1"))
 }
 
-// SuggestedBump tests
+// suggested_bump conversion tests
 
-test "SuggestedBump::to_bump_type - Major" {
-  assert_eq(Major.to_bump_type(), Some("major"))
+///|
+test "suggested_bump - Major converts to major string" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Breaking,
+        category: "type",
+        name: "Foo",
+        description: "Type removed",
+      },
+    ],
+  }
+  assert_eq(get_suggested_bump_from_diff(diff), Some("major"))
 }
 
-test "SuggestedBump::to_bump_type - Minor" {
-  assert_eq(Minor.to_bump_type(), Some("minor"))
+///|
+test "suggested_bump - Minor converts to minor string" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Addition,
+        category: "type",
+        name: "Bar",
+        description: "Type added",
+      },
+    ],
+  }
+  assert_eq(get_suggested_bump_from_diff(diff), Some("minor"))
 }
 
-test "SuggestedBump::to_bump_type - Patch" {
-  assert_eq(Patch.to_bump_type(), Some("patch"))
+///|
+test "suggested_bump - Patch converts to patch string" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Compatible,
+        category: "type",
+        name: "Baz",
+        description: "Compatible change",
+      },
+    ],
+  }
+  assert_eq(get_suggested_bump_from_diff(diff), Some("patch"))
 }
 
-test "SuggestedBump::to_bump_type - None" {
-  assert_eq(SuggestedBump::None.to_bump_type(), Option::None)
+///|
+test "suggested_bump - None converts to None" {
+  let diff = ApiDiff::empty()
+  assert_eq(get_suggested_bump_from_diff(diff), Option::None)
+}
+
+// format_summary tests
+
+///|
+test "format_summary - no changes" {
+  let result = CheckResult::new(ApiDiff::empty())
+  let summary = format_summary(result)
+  assert_true(summary.contains("No API changes"))
+}
+
+///|
+test "format_summary - breaking changes" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Breaking,
+        category: "type",
+        name: "Foo",
+        description: "Type removed",
+      },
+    ],
+  }
+  let result = CheckResult::new(diff)
+  let summary = format_summary(result)
+  assert_true(summary.contains("Breaking changes: 1"))
+}
+
+///|
+test "format_summary - additions" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Addition,
+        category: "function",
+        name: "new_func",
+        description: "Function added",
+      },
+    ],
+  }
+  let result = CheckResult::new(diff)
+  let summary = format_summary(result)
+  assert_true(summary.contains("Additions: 1"))
+}
+
+///|
+test "format_summary - mixed breaking and additions" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Breaking,
+        category: "type",
+        name: "Foo",
+        description: "Type removed",
+      },
+      ApiChange::{
+        kind: Addition,
+        category: "function",
+        name: "bar",
+        description: "Function added",
+      },
+      ApiChange::{
+        kind: Addition,
+        category: "function",
+        name: "baz",
+        description: "Function added",
+      },
+    ],
+  }
+  let result = CheckResult::new(diff)
+  let summary = format_summary(result)
+  assert_true(summary.contains("Breaking changes: 1"))
+  assert_true(summary.contains("Additions: 2"))
 }

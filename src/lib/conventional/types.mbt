@@ -1,3 +1,4 @@
+///|
 /// Conventional Commits type
 pub enum CommitType {
   Feat
@@ -14,6 +15,7 @@ pub enum CommitType {
   Custom(String)
 } derive(Show, Eq)
 
+///|
 /// Structured representation of Conventional Commits
 pub struct ConventionalCommit {
   typ : CommitType

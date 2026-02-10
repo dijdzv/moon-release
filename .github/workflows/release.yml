@@ -20,16 +20,25 @@ permissions:
 
 jobs:
   release-pr:
-    if: github.event.inputs.build-only != 'true'
+    if: github.event.inputs.build-only != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !(startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v'))))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+      - name: Setup MoonBit (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+      - name: Setup MoonBit (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
       - name: Build moon-release
         run: |
@@ -44,12 +53,13 @@ jobs:
       - name: Run moon-release (release-pr)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry-run }}
         run: |
           DRY_RUN_FLAG=""
-          if [ "${{ github.event.inputs.dry-run }}" = "true" ]; then
+          if [ "$DRY_RUN" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
-          ./target/native/release/build/src/main/main.exe release-pr $DRY_RUN_FLAG --verbose
+          ./_build/native/release/build/src/main/main.exe release-pr $DRY_RUN_FLAG --verbose
 
   # Build binaries for multiple platforms
   # Triggered when a release PR is merged (commit message starts with "chore: release v")
@@ -71,43 +81,24 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+      - name: Setup MoonBit (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+      - name: Setup MoonBit (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
       - name: Fetch dependencies
         run: moon update
-
-      - name: Trigger source download (Windows)
-        if: runner.os == 'Windows'
-        run: moon build --target native 2>&1 || true
-
-      - name: Patch moonbitlang/async for Windows (temporary fix)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Find thread_pool.c in .mooncakes or registry
-          $file = Get-ChildItem -Recurse -Filter "thread_pool.c" -Path ".mooncakes" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $file) {
-            $file = Get-ChildItem -Recurse -Filter "thread_pool.c" -Path "$env:USERPROFILE/.moon/registry" -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-          if ($file) {
-            $content = Get-Content $file.FullName -Raw
-            # Patch 1: startup_info.cb -> startup_info.StartupInfo.cb
-            $content = $content -replace 'startup_info\.cb = sizeof\(STARTUPINFOEXW\);', 'startup_info.StartupInfo.cb = sizeof(STARTUPINFOEXW);'
-            # Patch 2: Replace all 'attrs' with 'startup_info.lpAttributeList'
-            $content = $content -replace 'free\(attrs\)', 'free(startup_info.lpAttributeList)'
-            $content = $content -replace 'UpdateProcThreadAttributeList\(\s*attrs,', 'UpdateProcThreadAttribute(startup_info.lpAttributeList,'
-            # Patch 3: UpdateProcThreadAttributeList -> UpdateProcThreadAttribute (remaining)
-            $content = $content -replace 'UpdateProcThreadAttributeList\(', 'UpdateProcThreadAttribute('
-            Set-Content $file.FullName $content -NoNewline
-            Write-Host "Patched thread_pool.c: $($file.FullName)"
-          } else {
-            Write-Host "WARNING: thread_pool.c not found, skipping patch"
-          }
 
       - name: Build
         run: moon build --target native
@@ -115,16 +106,16 @@ jobs:
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
         run: |
-          cp ./target/native/release/build/src/main/main.exe ./${{ matrix.artifact }}
+          cp ./_build/native/release/build/src/main/main.exe ./${{ matrix.artifact }}
           chmod +x ./${{ matrix.artifact }}
 
       - name: Rename binary (Windows)
         if: runner.os == 'Windows'
         run: |
-          copy .\target\native\release\build\src\main\main.exe .\${{ matrix.artifact }}
+          copy .\_build\native\release\build\src\main\main.exe .\${{ matrix.artifact }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
@@ -135,20 +126,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+      - name: Setup MoonBit (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+      - name: Setup MoonBit (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
       - name: Build moon-release
         run: |
           moon update
           moon build --target native
 
+      - name: Setup mooncakes credentials
+        env:
+          MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
+          MOONCAKES_USERNAME: ${{ secrets.MOONCAKES_USERNAME }}
+        run: |
+          mkdir -p ~/.moon
+          jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
+            '{"token": $token, "username": $username}' > ~/.moon/credentials.json
+
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
 
@@ -161,7 +170,11 @@ jobs:
       - name: Get version from moon.mod.json
         id: version
         run: |
-          VERSION=$(grep '"version"' moon.mod.json | sed 's/.*: *"\([^"]*\)".*/\1/')
+          VERSION=$(jq -r '.version' moon.mod.json)
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "ERROR: version not found in moon.mod.json"
+            exit 1
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create release with binaries
@@ -169,7 +182,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Run moon-release to create tag and release
-          ./target/native/release/build/src/main/main.exe release --verbose
+          ./_build/native/release/build/src/main/main.exe release --verbose
 
-          # Upload binaries to the release
-          gh release upload "v${{ steps.version.outputs.version }}" release-assets/* --clobber
+      - name: Upload binaries to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release upload "v${VERSION}" release-assets/* --clobber

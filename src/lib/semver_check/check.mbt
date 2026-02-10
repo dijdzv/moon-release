@@ -1,60 +1,58 @@
+///|
 /// Semver check result
 pub struct CheckResult {
-  success : Bool
-  suggested_bump : SuggestedBump
+  suggested_bump : @semver.BumpType?
   diff : ApiDiff
   messages : Array[String]
 } derive(Show)
 
-/// Suggested version bump
-pub enum SuggestedBump {
-  /// Breaking changes detected -> Major
-  Major
-  /// New features added -> Minor
-  Minor
-  /// No changes or only compatible changes -> Patch
-  Patch
-  /// No API changes
-  None
-} derive(Show, Eq)
+///|
+/// Check if result indicates success (no breaking changes)
+pub fn CheckResult::is_success(self : CheckResult) -> Bool {
+  not(self.diff.has_breaking())
+}
 
+///|
 /// Create check result
 pub fn CheckResult::new(diff : ApiDiff) -> CheckResult {
   let messages : Array[String] = []
-  let suggested_bump = if diff.has_breaking {
-    Major
-  } else if diff.has_additions {
-    Minor
+  let suggested_bump : @semver.BumpType? = if diff.has_breaking() {
+    Some(Major)
+  } else if diff.has_additions() {
+    Some(Minor)
   } else if diff.changes.is_empty() {
     None
   } else {
-    Patch
+    Some(Patch)
   }
 
   // Generate messages
-  if diff.has_breaking {
+  if diff.has_breaking() {
     messages.push("BREAKING CHANGES detected:")
     for change in diff.changes {
       if change.kind == Breaking {
-        messages.push("  - [\{change.category}] \{change.name}: \{change.description}")
+        messages.push(
+          "  - [\{change.category}] \{change.name}: \{change.description}",
+        )
       }
     }
   }
 
-  if diff.has_additions {
+  if diff.has_additions() {
     messages.push("New additions:")
     for change in diff.changes {
       if change.kind == Addition {
-        messages.push("  + [\{change.category}] \{change.name}: \{change.description}")
+        messages.push(
+          "  + [\{change.category}] \{change.name}: \{change.description}",
+        )
       }
     }
   }
 
-  let success = not(diff.has_breaking)
-
-  CheckResult::{ success, suggested_bump, diff, messages }
+  CheckResult::{ suggested_bump, diff, messages }
 }
 
+///|
 /// Convert result to display string
 pub fn CheckResult::format(self : CheckResult) -> String {
   let lines : Array[String] = []
@@ -75,30 +73,28 @@ pub fn CheckResult::format(self : CheckResult) -> String {
 
   lines.push("")
   let bump_str = match self.suggested_bump {
-    Major => "MAJOR (breaking changes)"
-    Minor => "MINOR (new features)"
-    Patch => "PATCH (compatible changes)"
+    Some(Major) => "MAJOR (breaking changes)"
+    Some(Minor) => "MINOR (new features)"
+    Some(Patch) => "PATCH (compatible changes)"
     None => "NONE (no changes)"
   }
   lines.push("Suggested version bump: " + bump_str)
 
-  if not(self.success) {
+  if not(self.is_success()) {
     lines.push("")
     lines.push("WARNING: Breaking changes detected!")
-    lines.push("Consider bumping the major version or documenting the breaking changes.")
+    lines.push(
+      "Consider bumping the major version or documenting the breaking changes.",
+    )
   }
 
-  lines.iter().fold(init="", fn(acc, line) {
-    if acc.is_empty() { line } else { acc + "\n" + line }
+  lines
+  .iter()
+  .fold(init="", fn(acc, line) {
+    if acc.is_empty() {
+      line
+    } else {
+      acc + "\n" + line
+    }
   })
-}
-
-/// Convert to bump type
-pub fn SuggestedBump::to_bump_type(self : SuggestedBump) -> String? {
-  match self {
-    Major => Some("major")
-    Minor => Some("minor")
-    Patch => Some("patch")
-    None => Option::None
-  }
 }
