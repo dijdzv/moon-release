@@ -65,7 +65,7 @@ test "parse invalid json" {
     let _ = Config::parse(content)
     fail("Expected error")
   } catch {
-    ConfigError(_) => ()
+    ConfigError(msg) => assert_true(msg.contains("JSON") || msg.contains("parse"))
     _ => fail("Wrong error type")
   }
 }
@@ -224,7 +224,7 @@ test "parse invalid pr_labels - not strings" {
     let _ = Config::parse(content)
     fail("Expected error")
   } catch {
-    ConfigError(_) => ()
+    ConfigError(msg) => assert_true(msg.contains("string"))
     _ => fail("Wrong error type")
   }
 }
@@ -286,7 +286,7 @@ test "parse invalid packages - not array" {
     let _ = Config::parse(content)
     fail("Expected error")
   } catch {
-    ConfigError(_) => ()
+    ConfigError(msg) => assert_true(msg.contains("array"))
     _ => fail("Wrong error type")
   }
 }

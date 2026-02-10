@@ -179,6 +179,27 @@ test "build_pr_body - replaces version template" {
   }
 }
 
+test "build_pr_body - replaces changelog template" {
+  let config = @config.Config::default()
+  let current_version = @semver.Version::parse("1.0.0")
+  let new_version = @semver.Version::parse("1.1.0")
+  match (current_version, new_version) {
+    (Some(cur), Some(new)) => {
+      let ctx = ReleaseContext::new(
+        config,
+        @git.Repository::current(),
+        cur,
+        new,
+        [],  // empty commits
+      )
+      let result = build_pr_body(ctx)
+      // Empty commits should produce "No changes." in changelog
+      assert_true(result.contains("No changes."))
+    }
+    _ => fail("parse failed")
+  }
+}
+
 // Git ref name validation tests
 
 test "validate_git_ref_name - valid simple name" {

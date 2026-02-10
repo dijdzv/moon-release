@@ -156,13 +156,23 @@ test "push command without tags" {
 
 // parse_commit_log edge case tests
 
-test "parse_commit_log - empty subject (3 parts)" {
+test "parse_commit_log - empty subject (4 parts)" {
   let output = "abc123\u001e\u001eJohn Doe\u001e2024-01-15T10:00:00Z"
   let commits = parse_commit_log(output)
   assert_eq(commits.length(), 1)
   assert_eq(commits[0].hash, "abc123")
   assert_eq(commits[0].message, "")
   assert_eq(commits[0].author, "John Doe")
+}
+
+test "parse_commit_log - actual 3 parts (no date)" {
+  let output = "abc123\u001efeat: add feature\u001eJohn Doe"
+  let commits = parse_commit_log(output)
+  assert_eq(commits.length(), 1)
+  assert_eq(commits[0].hash, "abc123")
+  assert_eq(commits[0].message, "")
+  assert_eq(commits[0].author, "feat: add feature")
+  assert_eq(commits[0].date, "John Doe")
 }
 
 test "parse_commit_log - fewer than 3 parts skipped" {

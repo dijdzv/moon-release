@@ -1190,7 +1190,7 @@ pub async fn run_release(
   match release_mode {
     GitHubRelease(..) | TagOnly => {
       let tag_msg = release_title
-      let tag_result = try @executor.run_git(ctx.repo, ["tag", "-a", tag_name, "-m", tag_msg]) catch {
+      let tag_result = try @executor.run_git(ctx.repo, ["tag", "-a", "-m", tag_msg, "--", tag_name]) catch {
         e => raise GitError("Failed to create tag: " + e.to_string())
       } noraise { r => r }
       if not(tag_result.is_success()) {
@@ -1638,7 +1638,7 @@ pub async fn run_update_packages(
       None => continue
     }
 
-    let pkg_path = if plan.path == "." { "" } else { plan.path + "/" }
+    let pkg_path = package_path_prefix(plan.path)
     let group_info = match pkg.version_group {
       Some(g) => " (group: " + g + ")"
       None => ""

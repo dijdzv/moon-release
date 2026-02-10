@@ -148,3 +148,72 @@ test "suggested_bump - None converts to None" {
   let diff = ApiDiff::empty()
   assert_eq(get_suggested_bump_from_diff(diff), Option::None)
 }
+
+// format_summary tests
+
+test "format_summary - no changes" {
+  let result = CheckResult::new(ApiDiff::empty())
+  let summary = format_summary(result)
+  assert_true(summary.contains("No API changes"))
+}
+
+test "format_summary - breaking changes" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Breaking,
+        category: "type",
+        name: "Foo",
+        description: "Type removed",
+      },
+    ],
+  }
+  let result = CheckResult::new(diff)
+  let summary = format_summary(result)
+  assert_true(summary.contains("Breaking changes: 1"))
+}
+
+test "format_summary - additions" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Addition,
+        category: "function",
+        name: "new_func",
+        description: "Function added",
+      },
+    ],
+  }
+  let result = CheckResult::new(diff)
+  let summary = format_summary(result)
+  assert_true(summary.contains("Additions: 1"))
+}
+
+test "format_summary - mixed breaking and additions" {
+  let diff = ApiDiff::{
+    changes: [
+      ApiChange::{
+        kind: Breaking,
+        category: "type",
+        name: "Foo",
+        description: "Type removed",
+      },
+      ApiChange::{
+        kind: Addition,
+        category: "function",
+        name: "bar",
+        description: "Function added",
+      },
+      ApiChange::{
+        kind: Addition,
+        category: "function",
+        name: "baz",
+        description: "Function added",
+      },
+    ],
+  }
+  let result = CheckResult::new(diff)
+  let summary = format_summary(result)
+  assert_true(summary.contains("Breaking changes: 1"))
+  assert_true(summary.contains("Additions: 2"))
+}

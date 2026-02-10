@@ -826,6 +826,204 @@ EOF
   rm -rf "$TEST_DIR"
 }
 
+test_release_pr_dry_run() {
+  log_info "Testing: release-pr --dry-run"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  git tag v0.1.0
+  git commit -q --allow-empty -m "feat: add new feature"
+
+  output=$($BINARY release-pr --dry-run 2>&1 || true)
+
+  if echo "$output" | grep -q "\[dry-run\]"; then
+    if echo "$output" | grep -q "release/v0.2.0"; then
+      log_pass "release-pr --dry-run shows correct branch name"
+    else
+      log_fail "release-pr --dry-run should show release/v0.2.0 branch"
+    fi
+  else
+    log_skip "release-pr --dry-run (requires gh auth)"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_release_dry_run() {
+  log_info "Testing: release --dry-run"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  git tag v0.1.0
+  git commit -q --allow-empty -m "feat: add feature"
+
+  output=$($BINARY release --dry-run 2>&1 || true)
+
+  if echo "$output" | grep -q "\[dry-run\]"; then
+    if echo "$output" | grep -q "v0.2.0"; then
+      log_pass "release --dry-run shows correct version"
+    else
+      log_fail "release --dry-run should show v0.2.0"
+    fi
+  else
+    log_skip "release --dry-run (requires gh auth)"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_monorepo_update_file_content() {
+  log_info "Testing: monorepo update actually modifies files"
+
+  TEST_DIR=$(create_monorepo_test_repo "1.0.0" "" "1.0.0")
+  cd "$TEST_DIR"
+
+  cat > release.json << 'EOF'
+{
+  "packages": [
+    { "name": "pkg-a", "path": "packages/pkg-a", "moon_publish": true, "npm_publish": false },
+    { "name": "pkg-b", "path": "packages/pkg-b", "moon_publish": true, "npm_publish": false }
+  ]
+}
+EOF
+
+  git add .
+  git commit -q -m "chore: add config"
+  git tag v1.0.0
+
+  mkdir -p packages/pkg-a/src
+  echo "// new" > packages/pkg-a/src/lib.mbt
+  git add .
+  git commit -q -m "feat: add feature to pkg-a"
+
+  $BINARY update 2>/dev/null
+
+  if grep -q '"version": "1.1.0"' packages/pkg-a/moon.mod.json; then
+    log_pass "monorepo update modifies pkg-a moon.mod.json to 1.1.0"
+  else
+    log_fail "monorepo update should modify pkg-a to 1.1.0"
+  fi
+
+  if grep -q '"version": "1.0.0"' packages/pkg-b/moon.mod.json; then
+    log_pass "monorepo update does not modify unchanged pkg-b"
+  else
+    log_fail "monorepo update should not modify unchanged pkg-b"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_allow_dirty() {
+  log_info "Testing: allow_dirty config option"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  cat > release.json << 'EOF'
+{
+  "allow_dirty": true
+}
+EOF
+
+  git add release.json
+  git commit -q -m "chore: add config"
+  git tag v0.1.0
+  git commit -q --allow-empty -m "feat: new feature"
+
+  # Create uncommitted changes (use a separate file to avoid breaking moon.mod.json)
+  echo "dirty" > untracked_file.txt
+
+  # update should succeed with allow_dirty
+  if $BINARY update --dry-run 2>&1 | grep -q "Would update"; then
+    log_pass "allow_dirty allows update with uncommitted changes"
+  else
+    log_fail "allow_dirty should allow update with uncommitted changes"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_invalid_config_json() {
+  log_info "Testing: invalid config JSON"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  echo "not valid json" > release.json
+  git add release.json
+  git commit -q -m "chore: add bad config"
+  git tag v0.1.0
+  git commit -q --allow-empty -m "feat: new"
+
+  output=$($BINARY update 2>&1 || true)
+  if echo "$output" | grep -q "Error"; then
+    log_pass "update rejects invalid config JSON"
+  else
+    log_fail "update should reject invalid config: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_config_missing_uses_defaults() {
+  log_info "Testing: missing config uses defaults"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  # No release.json created
+  git tag v0.1.0
+  git commit -q --allow-empty -m "feat: add feature"
+
+  output=$($BINARY update --dry-run 2>&1)
+  if echo "$output" | grep -q "Would update"; then
+    log_pass "update works without release.json"
+  else
+    log_fail "update should work without release.json: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_check_verbose() {
+  log_info "Testing: check with verbose flag"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  git tag v0.1.0
+  git commit -q --allow-empty -m "feat: feature one"
+  git commit -q --allow-empty -m "fix: bug fix"
+
+  output=$($BINARY check -v 2>&1)
+  if echo "$output" | grep -q "feat"; then
+    log_pass "check -v shows commit details"
+  else
+    log_fail "check -v should show commit types: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_error_not_git_repo() {
+  log_info "Testing: error when not in git repo"
+
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+  cd "$tmp_dir"
+
+  output=$($BINARY check 2>&1 || true)
+  if echo "$output" | grep -qi "error\|fatal"; then
+    log_pass "check command fails gracefully outside git repo"
+  else
+    log_fail "check should fail outside git repo: $output"
+  fi
+
+  rm -rf "$tmp_dir"
+}
+
 # ===== Main =====
 
 main() {
@@ -871,6 +1069,14 @@ main() {
   test_monorepo_version_group_representative
   test_monorepo_bump_all
   test_monorepo_bump_major_all
+  test_release_pr_dry_run
+  test_release_dry_run
+  test_monorepo_update_file_content
+  test_allow_dirty
+  test_invalid_config_json
+  test_config_missing_uses_defaults
+  test_check_verbose
+  test_error_not_git_repo
 
   echo ""
   echo "================================"
