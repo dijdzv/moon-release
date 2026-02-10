@@ -13,6 +13,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Setup MoonBit
         uses: hustcer/setup-moonbit@530086df82b240bec92955d3562f43a2783f21af # v1
+      - name: Fetch dependencies
+        run: moon update
       - name: Check
         run: moon check --target native
       - name: Test
