@@ -14,13 +14,32 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
 
 ## Installation
 
+### From mooncakes.io (recommended)
+
 ```bash
-# Build from source
+moon install dijdzv/moon-release
+```
+
+### Download binary
+
+Download pre-built binaries from [GitHub Releases](https://github.com/dijdzv/moon-release/releases/latest):
+
+```bash
+# Linux (x86_64)
+curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
+chmod +x moon-release
+
+# macOS (Apple Silicon)
+curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-macos-arm64
+chmod +x moon-release
+```
+
+### Build from source
+
+```bash
 git clone https://github.com/dijdzv/moon-release
 cd moon-release
-moon build --target native
-
-# Add binary to PATH
+moon build --target native --release
 cp _build/native/release/build/src/main/main.exe ~/.local/bin/moon-release
 ```
 
@@ -371,7 +390,9 @@ jobs:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
       - name: Download moon-release
         run: |
@@ -391,7 +412,7 @@ jobs:
 
 **Key points:**
 - `fetch-depth: 0` - Required to analyze commit history
-- `hustcer/setup-moonbit@v1` - Sets up MoonBit toolchain
+- Setup MoonBit - Installs MoonBit toolchain via official installer
 - Git config - Required for committing version changes
 - `GITHUB_TOKEN` - Automatically provided by GitHub Actions
 
@@ -435,7 +456,9 @@ Add the release job that runs when a release PR is merged:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
       - name: Configure mooncakes credentials
         env:

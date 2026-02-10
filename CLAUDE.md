@@ -10,7 +10,8 @@ Respond in Japanese. Technical terms and code identifiers remain in their origin
 
 ```bash
 # Build & check (native target only)
-moon build --target native          # Build executable
+moon build --target native           # Build executable (debug)
+moon build --target native --release # Build executable (release, optimized)
 moon check --target native           # Type-check only (fast)
 
 # Test
