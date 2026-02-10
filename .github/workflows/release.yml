@@ -28,8 +28,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@530086df82b240bec92955d3562f43a2783f21af # v1
+      - name: Setup MoonBit (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+      - name: Setup MoonBit (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
       - name: Build moon-release
         run: |
@@ -76,8 +85,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@530086df82b240bec92955d3562f43a2783f21af # v1
+      - name: Setup MoonBit (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+      - name: Setup MoonBit (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
       - name: Fetch dependencies
         run: moon update
@@ -112,8 +130,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@530086df82b240bec92955d3562f43a2783f21af # v1
+      - name: Setup MoonBit (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+      - name: Setup MoonBit (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
       - name: Build moon-release
         run: |
