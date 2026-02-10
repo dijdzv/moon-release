@@ -24,7 +24,7 @@ jobs:
         run: moon update
 
       - name: Build (with prebuild script for linker flags)
-        run: moon build --target native
+        run: moon build --target native --release
 
       - name: Test binary
         run: |

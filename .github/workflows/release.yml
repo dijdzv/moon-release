@@ -43,7 +43,7 @@ jobs:
       - name: Build moon-release
         run: |
           moon update
-          moon build --target native
+          moon build --target native --release
 
       - name: Configure Git
         run: |
@@ -101,7 +101,7 @@ jobs:
         run: moon update
 
       - name: Build
-        run: moon build --target native
+        run: moon build --target native --release
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
@@ -145,7 +145,7 @@ jobs:
       - name: Build moon-release
         run: |
           moon update
-          moon build --target native
+          moon build --target native --release
 
       - name: Setup mooncakes credentials
         env:

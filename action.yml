@@ -54,8 +54,19 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Setup MoonBit
-      uses: hustcer/setup-moonbit@v1
+    - name: Setup MoonBit (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+        echo "$HOME/.moon/bin" >> $GITHUB_PATH
+    - name: Setup MoonBit (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+        irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+        "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
     - name: Setup mooncakes.io credentials
       if: inputs.mooncakes-token != '' && inputs.mooncakes-username != ''
@@ -75,7 +86,8 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
       run: |
         cd "$ACTION_PATH"
-        moon build --target native
+        moon update
+        moon build --target native --release
 
     - name: Run moon-release
       id: release
