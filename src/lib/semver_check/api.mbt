@@ -1,3 +1,4 @@
+///|
 /// API information (extracted from package_data.json)
 pub struct PackageApi {
   name : String
@@ -7,11 +8,13 @@ pub struct PackageApi {
   values : Array[ValueInfo]
 } derive(Show)
 
+///|
 /// Create empty PackageApi
 pub fn PackageApi::empty() -> PackageApi {
   PackageApi::{ name: "", types: [], errors: [], traits: [], values: [] }
 }
 
+///|
 /// Type information
 pub struct TypeInfo {
   name : String
@@ -19,6 +22,7 @@ pub struct TypeInfo {
   methods : Array[MethodInfo]
 } derive(Show, Eq)
 
+///|
 /// Error type information
 pub struct ErrorInfo {
   name : String
@@ -26,6 +30,7 @@ pub struct ErrorInfo {
   methods : Array[MethodInfo]
 } derive(Show, Eq)
 
+///|
 /// Trait information
 pub struct TraitInfo {
   name : String
@@ -33,23 +38,27 @@ pub struct TraitInfo {
   methods : Array[MethodInfo]
 } derive(Show, Eq)
 
+///|
 /// Method information
 pub struct MethodInfo {
   name : String
   signature : String
 } derive(Show, Eq)
 
+///|
 /// Value (top-level function, etc.) information
 pub struct ValueInfo {
   name : String
   signature : String
 } derive(Show, Eq)
 
+///|
 /// Parse error
 pub suberror ParseError {
   ParseError(String)
 }
 
+///|
 /// Remove HTML tags from signature
 fn strip_html_tags(s : String) -> String {
   let result = StringBuilder::new()
@@ -66,11 +75,14 @@ fn strip_html_tags(s : String) -> String {
   result.to_string()
 }
 
+///|
 /// Parse package_data.json with try-catch-noraise pattern
 pub fn parse_package_data(content : String) -> PackageApi raise ParseError {
   let json = try @json.parse(content) catch {
     e => raise ParseError("JSON parse error: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let obj = match json {
     Object(o) => o
@@ -90,11 +102,12 @@ pub fn parse_package_data(content : String) -> PackageApi raise ParseError {
   PackageApi::{ name, types, errors, traits, values }
 }
 
+///|
 /// Parse types array
 fn parse_types(obj : Map[String, Json]) -> Array[TypeInfo] {
   let result : Array[TypeInfo] = []
   match obj.get("types") {
-    Some(Array(arr)) => {
+    Some(Array(arr)) =>
       for item in arr {
         match item {
           Object(type_obj) => {
@@ -112,17 +125,17 @@ fn parse_types(obj : Map[String, Json]) -> Array[TypeInfo] {
           _ => continue
         }
       }
-    }
     _ => ()
   }
   result
 }
 
+///|
 /// Parse errors array
 fn parse_errors(obj : Map[String, Json]) -> Array[ErrorInfo] {
   let result : Array[ErrorInfo] = []
   match obj.get("errors") {
-    Some(Array(arr)) => {
+    Some(Array(arr)) =>
       for item in arr {
         match item {
           Object(err_obj) => {
@@ -140,17 +153,17 @@ fn parse_errors(obj : Map[String, Json]) -> Array[ErrorInfo] {
           _ => continue
         }
       }
-    }
     _ => ()
   }
   result
 }
 
+///|
 /// Parse traits array
 fn parse_traits(obj : Map[String, Json]) -> Array[TraitInfo] {
   let result : Array[TraitInfo] = []
   match obj.get("traits") {
-    Some(Array(arr)) => {
+    Some(Array(arr)) =>
       for item in arr {
         match item {
           Object(trait_obj) => {
@@ -168,17 +181,17 @@ fn parse_traits(obj : Map[String, Json]) -> Array[TraitInfo] {
           _ => continue
         }
       }
-    }
     _ => ()
   }
   result
 }
 
+///|
 /// Parse values array
 fn parse_values(obj : Map[String, Json]) -> Array[ValueInfo] {
   let result : Array[ValueInfo] = []
   match obj.get("values") {
-    Some(Array(arr)) => {
+    Some(Array(arr)) =>
       for item in arr {
         match item {
           Object(val_obj) => {
@@ -195,17 +208,17 @@ fn parse_values(obj : Map[String, Json]) -> Array[ValueInfo] {
           _ => continue
         }
       }
-    }
     _ => ()
   }
   result
 }
 
+///|
 /// Parse methods array
 fn parse_methods(obj : Map[String, Json]) -> Array[MethodInfo] {
   let result : Array[MethodInfo] = []
   match obj.get("methods") {
-    Some(Array(arr)) => {
+    Some(Array(arr)) =>
       for item in arr {
         match item {
           Object(method_obj) => {
@@ -222,7 +235,6 @@ fn parse_methods(obj : Map[String, Json]) -> Array[MethodInfo] {
           _ => continue
         }
       }
-    }
     _ => ()
   }
   result

@@ -1,5 +1,6 @@
 // CheckResult tests
 
+///|
 test "CheckResult::new - no changes" {
   let diff = ApiDiff::empty()
   let result = CheckResult::new(diff)
@@ -8,6 +9,7 @@ test "CheckResult::new - no changes" {
   assert_eq(result.messages.length(), 0)
 }
 
+///|
 test "CheckResult::new - breaking changes suggests Major" {
   let diff = ApiDiff::{
     changes: [
@@ -25,6 +27,7 @@ test "CheckResult::new - breaking changes suggests Major" {
   assert_true(result.messages.length() > 0)
 }
 
+///|
 test "CheckResult::new - additions only suggests Minor" {
   let diff = ApiDiff::{
     changes: [
@@ -41,6 +44,7 @@ test "CheckResult::new - additions only suggests Minor" {
   assert_eq(result.suggested_bump, Some(@semver.BumpType::Minor))
 }
 
+///|
 test "CheckResult::new - compatible changes suggests Patch" {
   let diff = ApiDiff::{
     changes: [
@@ -57,6 +61,7 @@ test "CheckResult::new - compatible changes suggests Patch" {
   assert_eq(result.suggested_bump, Some(@semver.BumpType::Patch))
 }
 
+///|
 test "CheckResult::format - no changes" {
   let diff = ApiDiff::empty()
   let result = CheckResult::new(diff)
@@ -65,6 +70,7 @@ test "CheckResult::format - no changes" {
   assert_true(formatted.contains("NONE"))
 }
 
+///|
 test "CheckResult::format - breaking changes" {
   let diff = ApiDiff::{
     changes: [
@@ -83,6 +89,7 @@ test "CheckResult::format - breaking changes" {
   assert_true(formatted.contains("Breaking changes"))
 }
 
+///|
 test "CheckResult::format - additions" {
   let diff = ApiDiff::{
     changes: [
@@ -102,6 +109,7 @@ test "CheckResult::format - additions" {
 
 // suggested_bump conversion tests
 
+///|
 test "suggested_bump - Major converts to major string" {
   let diff = ApiDiff::{
     changes: [
@@ -116,6 +124,7 @@ test "suggested_bump - Major converts to major string" {
   assert_eq(get_suggested_bump_from_diff(diff), Some("major"))
 }
 
+///|
 test "suggested_bump - Minor converts to minor string" {
   let diff = ApiDiff::{
     changes: [
@@ -130,6 +139,7 @@ test "suggested_bump - Minor converts to minor string" {
   assert_eq(get_suggested_bump_from_diff(diff), Some("minor"))
 }
 
+///|
 test "suggested_bump - Patch converts to patch string" {
   let diff = ApiDiff::{
     changes: [
@@ -144,6 +154,7 @@ test "suggested_bump - Patch converts to patch string" {
   assert_eq(get_suggested_bump_from_diff(diff), Some("patch"))
 }
 
+///|
 test "suggested_bump - None converts to None" {
   let diff = ApiDiff::empty()
   assert_eq(get_suggested_bump_from_diff(diff), Option::None)
@@ -151,12 +162,14 @@ test "suggested_bump - None converts to None" {
 
 // format_summary tests
 
+///|
 test "format_summary - no changes" {
   let result = CheckResult::new(ApiDiff::empty())
   let summary = format_summary(result)
   assert_true(summary.contains("No API changes"))
 }
 
+///|
 test "format_summary - breaking changes" {
   let diff = ApiDiff::{
     changes: [
@@ -173,6 +186,7 @@ test "format_summary - breaking changes" {
   assert_true(summary.contains("Breaking changes: 1"))
 }
 
+///|
 test "format_summary - additions" {
   let diff = ApiDiff::{
     changes: [
@@ -189,6 +203,7 @@ test "format_summary - additions" {
   assert_true(summary.contains("Additions: 1"))
 }
 
+///|
 test "format_summary - mixed breaking and additions" {
   let diff = ApiDiff::{
     changes: [

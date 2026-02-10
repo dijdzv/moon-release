@@ -1,3 +1,4 @@
+///|
 test "parse simple package_data.json" {
   let json =
     #|{
@@ -15,7 +16,7 @@ test "parse simple package_data.json" {
     #|  "traits": [],
     #|  "values": []
     #|}
-  let api = try { parse_package_data(json) } catch { _ => fail("Parse failed") }
+  let api = parse_package_data(json) catch { _ => fail("Parse failed") }
   assert_eq(api.name, "test/pkg")
   assert_eq(api.types.length(), 1)
   assert_eq(api.types[0].name, "Foo")
@@ -23,6 +24,7 @@ test "parse simple package_data.json" {
   assert_eq(api.types[0].methods[0].name, "new")
 }
 
+///|
 test "strip html tags from signature" {
   let json =
     #|{
@@ -38,10 +40,11 @@ test "strip html tags from signature" {
     #|  "traits": [],
     #|  "values": []
     #|}
-  let api = try { parse_package_data(json) } catch { _ => fail("Parse failed") }
+  let api = parse_package_data(json) catch { _ => fail("Parse failed") }
   assert_eq(api.types[0].signature, "pub struct Bar { items : Array[String] }")
 }
 
+///|
 test "parse errors" {
   let json =
     #|{
@@ -56,12 +59,13 @@ test "parse errors" {
     #|  "traits": [],
     #|  "values": []
     #|}
-  let api = try { parse_package_data(json) } catch { _ => fail("Parse failed") }
+  let api = parse_package_data(json) catch { _ => fail("Parse failed") }
   assert_eq(api.errors.length(), 1)
   assert_eq(api.errors[0].name, "ConfigError")
   assert_true(api.errors[0].signature.contains("ConfigError"))
 }
 
+///|
 test "parse traits" {
   let json =
     #|{
@@ -79,12 +83,13 @@ test "parse traits" {
     #|  ],
     #|  "values": []
     #|}
-  let api = try { parse_package_data(json) } catch { _ => fail("Parse failed") }
+  let api = parse_package_data(json) catch { _ => fail("Parse failed") }
   assert_eq(api.traits.length(), 1)
   assert_eq(api.traits[0].name, "Printable")
   assert_eq(api.traits[0].methods.length(), 1)
 }
 
+///|
 test "parse values" {
   let json =
     #|{
@@ -103,24 +108,35 @@ test "parse values" {
     #|    }
     #|  ]
     #|}
-  let api = try { parse_package_data(json) } catch { _ => fail("Parse failed") }
+  let api = parse_package_data(json) catch { _ => fail("Parse failed") }
   assert_eq(api.values.length(), 2)
   assert_eq(api.values[0].name, "DEFAULT_VALUE")
   assert_eq(api.values[1].name, "my_function")
 }
 
+///|
 test "merge_package_apis combines all items with prefix" {
   let api1 = PackageApi::{
     name: "pkg1",
-    types: [TypeInfo::{ name: "Type1", signature: "pub struct Type1 {}", methods: [] }],
+    types: [
+      TypeInfo::{ name: "Type1", signature: "pub struct Type1 {}", methods: [] },
+    ],
     errors: [],
     traits: [],
     values: [],
   }
   let api2 = PackageApi::{
     name: "pkg2",
-    types: [TypeInfo::{ name: "Type2", signature: "pub struct Type2 {}", methods: [] }],
-    errors: [ErrorInfo::{ name: "Error1", signature: "pub suberror Error1 {}", methods: [] }],
+    types: [
+      TypeInfo::{ name: "Type2", signature: "pub struct Type2 {}", methods: [] },
+    ],
+    errors: [
+      ErrorInfo::{
+        name: "Error1",
+        signature: "pub suberror Error1 {}",
+        methods: [],
+      },
+    ],
     traits: [],
     values: [],
   }
@@ -134,10 +150,13 @@ test "merge_package_apis combines all items with prefix" {
   assert_eq(merged.errors[0].name, "pkg2.Error1")
 }
 
+///|
 test "merge_package_apis single package no prefix" {
   let api = PackageApi::{
     name: "pkg1",
-    types: [TypeInfo::{ name: "Type1", signature: "pub struct Type1 {}", methods: [] }],
+    types: [
+      TypeInfo::{ name: "Type1", signature: "pub struct Type1 {}", methods: [] },
+    ],
     errors: [],
     traits: [],
     values: [ValueInfo::{ name: "foo", signature: "pub fn foo() -> Unit" }],
@@ -149,6 +168,7 @@ test "merge_package_apis single package no prefix" {
   assert_eq(merged.values[0].name, "foo")
 }
 
+///|
 test "PackageApi::empty returns empty api" {
   let api = PackageApi::empty()
   assert_eq(api.name, "")

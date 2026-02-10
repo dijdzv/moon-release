@@ -21,7 +21,7 @@ cd moon-release
 moon build --target native
 
 # Add binary to PATH
-cp target/native/release/build/src/main/main.exe ~/.local/bin/moon-release
+cp _build/native/release/build/src/main/main.exe ~/.local/bin/moon-release
 ```
 
 ## Quick Start

@@ -20,7 +20,7 @@ moon test --target native            # Unit tests (471+ tests)
 # Run
 moon run src/main -- <args>          # Run CLI directly
 # or after build:
-./target/native/release/build/src/main/main.exe <args>
+./_build/native/release/build/src/main/main.exe <args>
 ```
 
 The `justfile` provides shortcuts: `just test`, `just test-integration`, `just test-all`, `just check`, `just build-native`.

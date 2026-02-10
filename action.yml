@@ -108,7 +108,7 @@ runs:
         fi
 
         set +e
-        OUTPUT=$("$ACTION_PATH/target/native/release/build/src/main/main.exe" \
+        OUTPUT=$("$ACTION_PATH/_build/native/release/build/src/main/main.exe" \
           "$INPUT_COMMAND" \
           --config "$INPUT_CONFIG" \
           $BUMP_FLAG \

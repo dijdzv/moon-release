@@ -2,32 +2,36 @@
 // ADT types for type-safe config access
 // ============================================================================
 
+///|
 /// Publish target — represents which registries to publish to
 pub enum PublishTarget {
-  MooncakesOnly       // Only mooncakes.io
-  NpmOnly(NpmConfig)  // Only npm
-  Both(NpmConfig)     // Both mooncakes.io and npm
-  NoPublish           // No publishing
+  MooncakesOnly // Only mooncakes.io
+  NpmOnly(NpmConfig) // Only npm
+  Both(NpmConfig) // Both mooncakes.io and npm
+  NoPublish // No publishing
 } derive(Show, Eq)
 
+///|
 /// npm-specific configuration
 pub(all) struct NpmConfig {
-  build_command : String?    // Custom build command (None = default "moon build --target js")
-  provenance : Bool          // Use --provenance flag for Trusted Publishing
-  timeout : UInt             // Publish timeout in seconds
+  build_command : String? // Custom build command (None = default "moon build --target js")
+  provenance : Bool // Use --provenance flag for Trusted Publishing
+  timeout : UInt // Publish timeout in seconds
 } derive(Show, Eq)
 
+///|
 /// Git release mode — how releases are created
 pub enum GitReleaseMode {
-  GitHubRelease(draft~ : Bool, latest~ : Bool)  // Full GitHub release
-  TagOnly                                         // Create tag only (no GitHub release)
-  NoGitRelease                                    // No tag, no release
+  GitHubRelease(draft~ : Bool, latest~ : Bool) // Full GitHub release
+  TagOnly // Create tag only (no GitHub release)
+  NoGitRelease // No tag, no release
 } derive(Show, Eq)
 
 // ============================================================================
 // Config struct
 // ============================================================================
 
+///|
 /// Configuration
 pub struct Config {
   pr_title : String
@@ -45,8 +49,8 @@ pub struct Config {
   moon_publish : Bool
   moon_publish_frozen : Bool
   npm_publish : Bool
-  npm_build_command : String?  // Command to build JS target before npm publish
-  npm_publish_provenance : Bool  // Use --provenance flag (requires GitHub Actions with id-token: write)
+  npm_build_command : String? // Command to build JS target before npm publish
+  npm_publish_provenance : Bool // Use --provenance flag (requires GitHub Actions with id-token: write)
   semver_check : Bool
   pr_branch_prefix : String
   base_branch : String
@@ -55,29 +59,32 @@ pub struct Config {
   allow_dirty : Bool
   // NOTE: Despite the name "regex", these fields use substring matching, not regular expressions.
   // The name is kept for backward compatibility with existing config files.
-  custom_major_increment_regex : String?  // Substring match (not regex). Matches if commit description contains this string.
-  custom_minor_increment_regex : String?  // Substring match (not regex). Matches if commit description contains this string.
+  custom_major_increment_regex : String? // Substring match (not regex). Matches if commit description contains this string.
+  custom_minor_increment_regex : String? // Substring match (not regex). Matches if commit description contains this string.
   max_analyze_commits : UInt?
-  moon_publish_timeout : UInt  // In seconds
-  npm_publish_timeout : UInt   // In seconds
-  bump_all_packages : Bool  // Bump all packages uniformly (fixed versioning for monorepo)
+  moon_publish_timeout : UInt // In seconds
+  npm_publish_timeout : UInt // In seconds
+  bump_all_packages : Bool // Bump all packages uniformly (fixed versioning for monorepo)
 } derive(Show, Eq)
 
+///|
 /// Package configuration (for monorepo)
 pub struct PackageConfig {
   name : String
   path : String
   moon_publish : Bool
   npm_publish : Bool
-  npm_build_command : String?  // Command to build JS target before npm publish
+  npm_build_command : String? // Command to build JS target before npm publish
   version_group : String?
 } derive(Show, Eq)
 
+///|
 /// Configuration error
 pub suberror ConfigError {
   ConfigError(String)
 }
 
+///|
 /// Convert ConfigError to string
 pub fn ConfigError::to_string(self : ConfigError) -> String {
   match self {
@@ -85,6 +92,7 @@ pub fn ConfigError::to_string(self : ConfigError) -> String {
   }
 }
 
+///|
 /// Default configuration
 pub fn Config::default() -> Config {
   Config::{
@@ -102,9 +110,9 @@ pub fn Config::default() -> Config {
     git_release_latest: true,
     moon_publish: true,
     moon_publish_frozen: false,
-    npm_publish: false,  // Disabled by default
-    npm_build_command: None,  // Default: "moon build --target js" when npm_publish is true
-    npm_publish_provenance: true,  // Enabled by default (for Trusted Publishing)
+    npm_publish: false, // Disabled by default
+    npm_build_command: None, // Default: "moon build --target js" when npm_publish is true
+    npm_publish_provenance: true, // Enabled by default (for Trusted Publishing)
     semver_check: false,
     pr_branch_prefix: "release/",
     base_branch: "main",
@@ -114,12 +122,13 @@ pub fn Config::default() -> Config {
     custom_major_increment_regex: None,
     custom_minor_increment_regex: None,
     max_analyze_commits: None,
-    moon_publish_timeout: 300,  // Default 5 minutes
-    npm_publish_timeout: 300,   // Default 5 minutes
+    moon_publish_timeout: 300, // Default 5 minutes
+    npm_publish_timeout: 300, // Default 5 minutes
     bump_all_packages: false,
   }
 }
 
+///|
 /// Default package configuration
 pub fn PackageConfig::default(name : String, path : String) -> PackageConfig {
   PackageConfig::{
@@ -132,12 +141,13 @@ pub fn PackageConfig::default(name : String, path : String) -> PackageConfig {
   }
 }
 
+///|
 /// Parse configuration from JSON (merge with defaults)
 /// Warnings about unknown keys are collected into the `warnings` array instead of printing.
 /// Callers can display them as appropriate (e.g., suppress in JSON output mode).
 pub fn Config::parse(
   content : String,
-  warnings~ : Array[String] = []
+  warnings? : Array[String] = [],
 ) -> Config raise ConfigError {
   let d = Config::default()
 
@@ -148,26 +158,27 @@ pub fn Config::parse(
   // Parse JSON with try-catch-noraise pattern
   let json = try @json.parse(content) catch {
     e => raise ConfigError("Invalid JSON in config file: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let obj = match json {
     Object(o) => o
-    _ => raise ConfigError("Config file must contain a JSON object at the root level")
+    _ =>
+      raise ConfigError(
+        "Config file must contain a JSON object at the root level",
+      )
   }
 
   // Check for unknown keys and warn
   let known_keys : Array[String] = [
-    "pr_title", "pr_draft", "pr_labels", "pr_body",
-    "allow_prerelease", "git_tag_enable", "git_tag_name",
-    "git_release_enable", "git_release_draft", "git_release_name",
-    "git_release_body", "git_release_latest",
-    "moon_publish", "moon_publish_frozen",
-    "npm_publish", "npm_build_command", "npm_publish_provenance",
-    "semver_check", "pr_branch_prefix", "base_branch",
-    "packages", "registry_check", "allow_dirty",
-    "custom_major_increment_regex", "custom_minor_increment_regex",
-    "max_analyze_commits", "moon_publish_timeout", "npm_publish_timeout",
-    "bump_all_packages",
+    "pr_title", "pr_draft", "pr_labels", "pr_body", "allow_prerelease", "git_tag_enable",
+    "git_tag_name", "git_release_enable", "git_release_draft", "git_release_name",
+    "git_release_body", "git_release_latest", "moon_publish", "moon_publish_frozen",
+    "npm_publish", "npm_build_command", "npm_publish_provenance", "semver_check",
+    "pr_branch_prefix", "base_branch", "packages", "registry_check", "allow_dirty",
+    "custom_major_increment_regex", "custom_minor_increment_regex", "max_analyze_commits",
+    "moon_publish_timeout", "npm_publish_timeout", "bump_all_packages",
   ]
   for key, _ in obj {
     let mut found = false
@@ -185,7 +196,8 @@ pub fn Config::parse(
   // packages needs special handling
   let packages = match obj.get("packages") {
     Some(Array(arr)) => parse_packages(arr)
-    Some(_) => raise ConfigError("'packages' must be an array of package objects")
+    Some(_) =>
+      raise ConfigError("'packages' must be an array of package objects")
     None => d.packages
   }
 
@@ -197,19 +209,39 @@ pub fn Config::parse(
     allow_prerelease: parse_bool(obj, "allow_prerelease", d.allow_prerelease),
     git_tag_enable: parse_bool(obj, "git_tag_enable", d.git_tag_enable),
     git_tag_name: parse_string(obj, "git_tag_name", d.git_tag_name),
-    git_release_enable: parse_bool(obj, "git_release_enable", d.git_release_enable),
+    git_release_enable: parse_bool(
+      obj,
+      "git_release_enable",
+      d.git_release_enable,
+    ),
     git_release_draft: parse_bool(obj, "git_release_draft", d.git_release_draft),
     git_release_name: parse_string(obj, "git_release_name", d.git_release_name),
-    git_release_body: parse_optional_string(obj, "git_release_body", d.git_release_body),
-    git_release_latest: parse_bool(obj, "git_release_latest", d.git_release_latest),
+    git_release_body: parse_optional_string(
+      obj,
+      "git_release_body",
+      d.git_release_body,
+    ),
+    git_release_latest: parse_bool(
+      obj,
+      "git_release_latest",
+      d.git_release_latest,
+    ),
     moon_publish: parse_bool(obj, "moon_publish", d.moon_publish),
-    moon_publish_frozen: parse_bool(obj, "moon_publish_frozen", d.moon_publish_frozen),
+    moon_publish_frozen: parse_bool(
+      obj,
+      "moon_publish_frozen",
+      d.moon_publish_frozen,
+    ),
     npm_publish: parse_bool(obj, "npm_publish", d.npm_publish),
     npm_build_command: validate_optional_command(
       parse_optional_string(obj, "npm_build_command", d.npm_build_command),
       "npm_build_command",
     ),
-    npm_publish_provenance: parse_bool(obj, "npm_publish_provenance", d.npm_publish_provenance),
+    npm_publish_provenance: parse_bool(
+      obj,
+      "npm_publish_provenance",
+      d.npm_publish_provenance,
+    ),
     semver_check: parse_bool(obj, "semver_check", d.semver_check),
     pr_branch_prefix: parse_string(obj, "pr_branch_prefix", d.pr_branch_prefix),
     base_branch: parse_string(obj, "base_branch", d.base_branch),
@@ -217,11 +249,19 @@ pub fn Config::parse(
     registry_check: parse_bool(obj, "registry_check", d.registry_check),
     allow_dirty: parse_bool(obj, "allow_dirty", d.allow_dirty),
     custom_major_increment_regex: validate_pattern(
-      parse_optional_string(obj, "custom_major_increment_regex", d.custom_major_increment_regex),
+      parse_optional_string(
+        obj,
+        "custom_major_increment_regex",
+        d.custom_major_increment_regex,
+      ),
       "custom_major_increment_regex",
     ),
     custom_minor_increment_regex: validate_pattern(
-      parse_optional_string(obj, "custom_minor_increment_regex", d.custom_minor_increment_regex),
+      parse_optional_string(
+        obj,
+        "custom_minor_increment_regex",
+        d.custom_minor_increment_regex,
+      ),
       "custom_minor_increment_regex",
     ),
     max_analyze_commits: parse_optional_uint(
@@ -229,12 +269,21 @@ pub fn Config::parse(
       "max_analyze_commits",
       d.max_analyze_commits,
     ),
-    moon_publish_timeout: parse_uint(obj, "moon_publish_timeout", d.moon_publish_timeout),
-    npm_publish_timeout: parse_uint(obj, "npm_publish_timeout", d.npm_publish_timeout),
+    moon_publish_timeout: parse_uint(
+      obj,
+      "moon_publish_timeout",
+      d.moon_publish_timeout,
+    ),
+    npm_publish_timeout: parse_uint(
+      obj,
+      "npm_publish_timeout",
+      d.npm_publish_timeout,
+    ),
     bump_all_packages: parse_bool(obj, "bump_all_packages", d.bump_all_packages),
   }
 }
 
+///|
 /// Parse package configuration
 fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
   let result : Array[PackageConfig] = []
@@ -243,34 +292,103 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
       Object(pkg_obj) => {
         // Parse package fields with try-catch-noraise pattern
         let name = try parse_pkg_required_string(pkg_obj, "name") catch {
-          e => raise ConfigError("packages[" + i.to_string() + "]: " + e.to_string())
-        } noraise { r => r }
+          e =>
+            raise ConfigError(
+              "packages[" + i.to_string() + "]: " + e.to_string(),
+            )
+        } noraise {
+          r => r
+        }
         let path = try parse_pkg_string(pkg_obj, "path", ".") catch {
-          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
-        } noraise { r => r }
-        let moon_publish = try parse_pkg_bool(pkg_obj, "moon_publish", true) catch {
-          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
-        } noraise { r => r }
-        let npm_publish = try parse_pkg_bool(pkg_obj, "npm_publish", false) catch {
-          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
-        } noraise { r => r }
-        let npm_build_command_raw = try parse_pkg_optional_string(pkg_obj, "npm_build_command", None) catch {
-          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
-        } noraise { r => r }
+          e =>
+            raise ConfigError(
+              "packages[" + i.to_string() + "] '" + name + "': " + e.to_string(),
+            )
+        } noraise {
+          r => r
+        }
+        let moon_publish = try
+          parse_pkg_bool(pkg_obj, "moon_publish", true)
+        catch {
+          e =>
+            raise ConfigError(
+              "packages[" + i.to_string() + "] '" + name + "': " + e.to_string(),
+            )
+        } noraise {
+          r => r
+        }
+        let npm_publish = try
+          parse_pkg_bool(pkg_obj, "npm_publish", false)
+        catch {
+          e =>
+            raise ConfigError(
+              "packages[" + i.to_string() + "] '" + name + "': " + e.to_string(),
+            )
+        } noraise {
+          r => r
+        }
+        let npm_build_command_raw = try
+          parse_pkg_optional_string(pkg_obj, "npm_build_command", None)
+        catch {
+          e =>
+            raise ConfigError(
+              "packages[" + i.to_string() + "] '" + name + "': " + e.to_string(),
+            )
+        } noraise {
+          r => r
+        }
         // Validate package path (prevent directory traversal and absolute paths)
-        match @util.validate_path_full(path, allow_absolute=false).error_message() {
-          Some(reason) => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': invalid path '" + path + "': " + reason)
+        match
+          @util.validate_path_full(path, allow_absolute=false).error_message() {
+          Some(reason) =>
+            raise ConfigError(
+              "packages[" +
+              i.to_string() +
+              "] '" +
+              name +
+              "': invalid path '" +
+              path +
+              "': " +
+              reason,
+            )
           None => ()
         }
-        let npm_build_command = try validate_optional_command(npm_build_command_raw, "npm_build_command") catch {
-          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
-        } noraise { r => r }
-        let version_group = try parse_pkg_optional_string(pkg_obj, "version_group", None) catch {
-          e => raise ConfigError("packages[" + i.to_string() + "] '" + name + "': " + e.to_string())
-        } noraise { r => r }
-        result.push(PackageConfig::{ name, path, moon_publish, npm_publish, npm_build_command, version_group })
+        let npm_build_command = try
+          validate_optional_command(npm_build_command_raw, "npm_build_command")
+        catch {
+          e =>
+            raise ConfigError(
+              "packages[" + i.to_string() + "] '" + name + "': " + e.to_string(),
+            )
+        } noraise {
+          r => r
+        }
+        let version_group = try
+          parse_pkg_optional_string(pkg_obj, "version_group", None)
+        catch {
+          e =>
+            raise ConfigError(
+              "packages[" + i.to_string() + "] '" + name + "': " + e.to_string(),
+            )
+        } noraise {
+          r => r
+        }
+        result.push(PackageConfig::{
+          name,
+          path,
+          moon_publish,
+          npm_publish,
+          npm_build_command,
+          version_group,
+        })
       }
-      _ => raise ConfigError("packages[" + i.to_string() + "]: must be an object, got " + arr[i].stringify())
+      _ =>
+        raise ConfigError(
+          "packages[" +
+          i.to_string() +
+          "]: must be an object, got " +
+          arr[i].stringify(),
+        )
     }
   }
   result
@@ -280,6 +398,7 @@ fn parse_packages(arr : Array[Json]) -> Array[PackageConfig] raise ConfigError {
 // JSON parse helper functions
 // ============================================================================
 
+///|
 /// Validate that a command string does not contain shell control characters
 /// that could be used for command injection.
 /// Returns true if the command is safe, false if it contains dangerous characters.
@@ -287,18 +406,26 @@ fn validate_command(cmd : String) -> Bool {
   let chars = cmd.to_array()
   for i = 0; i < chars.length(); i = i + 1 {
     let c = chars[i]
-    if c == ';' || c == '|' || c == '&' || c == '`' || c == '$' || c == '\n' || c == '\r' || c == '\u0000' {
+    if c == ';' ||
+      c == '|' ||
+      c == '&' ||
+      c == '`' ||
+      c == '$' ||
+      c == '\n' ||
+      c == '\r' ||
+      c == '\u0000' {
       return false
     }
   }
   true
 }
 
+///|
 /// Validate an optional command string, raising ConfigError if it contains
 /// shell control characters.
 fn validate_optional_command(
   cmd : String?,
-  field_name : String
+  field_name : String,
 ) -> String? raise ConfigError {
   match cmd {
     Some(c) =>
@@ -313,11 +440,12 @@ fn validate_optional_command(
   }
 }
 
+///|
 /// Validate custom pattern (used for increment patterns)
 /// Note: These patterns use substring matching (contains), not regex
 fn validate_pattern(
   pattern : String?,
-  field_name : String
+  field_name : String,
 ) -> String? raise ConfigError {
   match pattern {
     Some(p) => {
@@ -333,7 +461,19 @@ fn validate_pattern(
       for i = 0; i < chars.length(); i = i + 1 {
         let c = chars[i]
         // Check for common regex metacharacters
-        if c == '^' || c == '$' || c == '*' || c == '+' || c == '?' || c == '|' || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' || c == '\\' {
+        if c == '^' ||
+          c == '$' ||
+          c == '*' ||
+          c == '+' ||
+          c == '?' ||
+          c == '|' ||
+          c == '(' ||
+          c == ')' ||
+          c == '[' ||
+          c == ']' ||
+          c == '{' ||
+          c == '}' ||
+          c == '\\' {
           raise ConfigError(
             "'\{field_name}' contains regex metacharacter '\{c}'. Note: This field uses simple substring matching, not regex. The pattern '\{p}' will be matched literally.",
           )
@@ -345,11 +485,12 @@ fn validate_pattern(
   }
 }
 
+///|
 /// Parse string field
 fn parse_string(
   obj : Map[String, Json],
   key : String,
-  default : String
+  default : String,
 ) -> String raise ConfigError {
   match obj.get(key) {
     Some(String(s)) => s
@@ -358,10 +499,11 @@ fn parse_string(
   }
 }
 
+///|
 /// Parse required string field (for package)
 fn parse_pkg_required_string(
   obj : Map[String, Json],
-  key : String
+  key : String,
 ) -> String raise ConfigError {
   match obj.get(key) {
     Some(String(s)) => s
@@ -370,11 +512,12 @@ fn parse_pkg_required_string(
   }
 }
 
+///|
 /// Parse string field (for package)
 fn parse_pkg_string(
   obj : Map[String, Json],
   key : String,
-  default : String
+  default : String,
 ) -> String raise ConfigError {
   match obj.get(key) {
     Some(String(s)) => s
@@ -383,11 +526,12 @@ fn parse_pkg_string(
   }
 }
 
+///|
 /// Parse optional string field
 fn parse_optional_string(
   obj : Map[String, Json],
   key : String,
-  default : String?
+  default : String?,
 ) -> String? raise ConfigError {
   match obj.get(key) {
     Some(String(s)) => Some(s)
@@ -397,11 +541,12 @@ fn parse_optional_string(
   }
 }
 
+///|
 /// Parse optional string field (for package)
 fn parse_pkg_optional_string(
   obj : Map[String, Json],
   key : String,
-  default : String?
+  default : String?,
 ) -> String? raise ConfigError {
   match obj.get(key) {
     Some(String(s)) => Some(s)
@@ -411,11 +556,12 @@ fn parse_pkg_optional_string(
   }
 }
 
+///|
 /// Parse boolean field
 fn parse_bool(
   obj : Map[String, Json],
   key : String,
-  default : Bool
+  default : Bool,
 ) -> Bool raise ConfigError {
   match obj.get(key) {
     Some(True) => true
@@ -425,11 +571,12 @@ fn parse_bool(
   }
 }
 
+///|
 /// Parse optional number field with overflow protection
 fn parse_optional_uint(
   obj : Map[String, Json],
   key : String,
-  default : UInt?
+  default : UInt?,
 ) -> UInt? raise ConfigError {
   match obj.get(key) {
     Some(Number(n, ..)) =>
@@ -446,11 +593,12 @@ fn parse_optional_uint(
   }
 }
 
+///|
 /// Parse number field with overflow protection
 fn parse_uint(
   obj : Map[String, Json],
   key : String,
-  default : UInt
+  default : UInt,
 ) -> UInt raise ConfigError {
   match obj.get(key) {
     Some(Number(n, ..)) =>
@@ -466,11 +614,12 @@ fn parse_uint(
   }
 }
 
+///|
 /// Parse boolean field (for package)
 fn parse_pkg_bool(
   obj : Map[String, Json],
   key : String,
-  default : Bool
+  default : Bool,
 ) -> Bool raise ConfigError {
   match obj.get(key) {
     Some(True) => true
@@ -480,11 +629,12 @@ fn parse_pkg_bool(
   }
 }
 
+///|
 /// Parse string array field
 fn parse_string_array(
   obj : Map[String, Json],
   key : String,
-  default : Array[String]
+  default : Array[String],
 ) -> Array[String] raise ConfigError {
   match obj.get(key) {
     Some(Array(arr)) => {
@@ -502,8 +652,12 @@ fn parse_string_array(
   }
 }
 
+///|
 /// Apply version to PR title template
-pub fn Config::apply_pr_title_template(self : Config, version : String) -> String {
+pub fn Config::apply_pr_title_template(
+  self : Config,
+  version : String,
+) -> String {
   self.pr_title.replace(old="{{ version }}", new=version)
 }
 
@@ -511,6 +665,7 @@ pub fn Config::apply_pr_title_template(self : Config, version : String) -> Strin
 // ADT accessor methods — derive typed values from flat config fields
 // ============================================================================
 
+///|
 /// Get the publish target as a typed ADT
 pub fn Config::publish_target(self : Config) -> PublishTarget {
   let npm_config = NpmConfig::{
@@ -526,11 +681,15 @@ pub fn Config::publish_target(self : Config) -> PublishTarget {
   }
 }
 
+///|
 /// Get the git release mode as a typed ADT
 pub fn Config::git_release_mode(self : Config) -> GitReleaseMode {
   match (self.git_tag_enable, self.git_release_enable) {
     (true, true) =>
-      GitHubRelease(draft=self.git_release_draft, latest=self.git_release_latest)
+      GitHubRelease(
+        draft=self.git_release_draft,
+        latest=self.git_release_latest,
+      )
     (true, false) => TagOnly
     // git_release_enable without git_tag_enable doesn't make sense,
     // but we treat it as NoGitRelease
@@ -538,6 +697,7 @@ pub fn Config::git_release_mode(self : Config) -> GitReleaseMode {
   }
 }
 
+///|
 /// Get package-level publish target
 /// TODO: provenance and timeout are hardcoded defaults; they should reflect
 /// Config.npm_publish_provenance / Config.npm_publish_timeout when callers
@@ -558,6 +718,7 @@ pub fn PackageConfig::publish_target(self : PackageConfig) -> PublishTarget {
   }
 }
 
+///|
 /// Get the npm build command as an argument array.
 /// NOTE: Splits on spaces only. Quoted arguments with spaces (e.g. "npm run 'my script'")
 /// are not supported — each space-separated token becomes a separate argument.

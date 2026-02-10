@@ -1,33 +1,51 @@
+///|
 /// Get latest tag from repository
-pub async fn get_latest_tag(repo : @git.Repository) -> String? raise WorkflowError {
+pub async fn get_latest_tag(
+  repo : @git.Repository,
+) -> String? raise WorkflowError {
   let cmd = repo.get_latest_tag_command()
   let result = try @executor.run_command(cmd) catch {
-    e => raise ExternalCommandError("Failed to run git describe: " + e.to_string())
-  } noraise { r => r }
+    e =>
+      raise ExternalCommandError("Failed to run git describe: " + e.to_string())
+  } noraise {
+    r => r
+  }
   if result.is_success() {
     let tag = result.stdout_trimmed()
-    if tag.is_empty() { None } else { Some(tag) }
+    if tag.is_empty() {
+      None
+    } else {
+      Some(tag)
+    }
   } else {
     None
   }
 }
 
+///|
 /// Get commits from latest tag to current
 pub async fn get_commits_since_last_tag(
   repo : @git.Repository,
-  max_commits~ : UInt? = None
+  max_commits? : UInt? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
   // Get latest tag
   let latest_tag = try get_latest_tag(repo) catch {
     _ => None
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // Get commit log
   let log_result = match latest_tag {
     Some(tag) => {
       let cmd = try repo.get_commits_since_tag_command(tag) catch {
-        e => raise ExternalCommandError("Failed to build git log command: " + e.to_string())
-      } noraise { r => r }
+        e =>
+          raise ExternalCommandError(
+            "Failed to build git log command: " + e.to_string(),
+          )
+      } noraise {
+        r => r
+      }
       match max_commits {
         Some(n) => {
           cmd.push("-n")
@@ -36,8 +54,11 @@ pub async fn get_commits_since_last_tag(
         None => ()
       }
       try @executor.run_command(cmd) catch {
-        e => raise ExternalCommandError("Failed to run git log: " + e.to_string())
-      } noraise { r => r }
+        e =>
+          raise ExternalCommandError("Failed to run git log: " + e.to_string())
+      } noraise {
+        r => r
+      }
     }
     None => {
       let cmd = repo.get_all_commits_command()
@@ -49,8 +70,11 @@ pub async fn get_commits_since_last_tag(
         None => ()
       }
       try @executor.run_command(cmd) catch {
-        e => raise ExternalCommandError("Failed to run git log: " + e.to_string())
-      } noraise { r => r }
+        e =>
+          raise ExternalCommandError("Failed to run git log: " + e.to_string())
+      } noraise {
+        r => r
+      }
     }
   }
 
@@ -69,12 +93,13 @@ pub async fn get_commits_since_last_tag(
   @git.parse_conventional_commits(git_commits)
 }
 
+///|
 /// Check working directory for uncommitted changes
 /// Raises GitError if dirty and allow_dirty is false
 pub async fn check_working_directory(
   config : @config.Config,
   repo : @git.Repository,
-  verbose~ : Bool = false
+  verbose? : Bool = false,
 ) -> Unit raise WorkflowError {
   if config.allow_dirty {
     return
@@ -88,14 +113,20 @@ pub async fn check_working_directory(
       }
       raise GitError("Failed to check git status: " + e.to_string())
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   if not(result.stdout.trim().is_empty()) {
     let mut msg = "Working directory has uncommitted changes.\nCommit or stash your changes, or set 'allow_dirty: true' in config."
     if verbose {
-      let status_result = try @executor.run_git(repo, ["status", "--short"]) catch {
+      let status_result = try
+        @executor.run_git(repo, ["status", "--short"])
+      catch {
         _ => @executor.CommandResult::failed("status failed")
-      } noraise { r => r }
+      } noraise {
+        r => r
+      }
       if status_result.is_success() {
         msg = msg + "\n\nChanged files:\n" + status_result.stdout
       }
@@ -104,32 +135,48 @@ pub async fn check_working_directory(
   }
 }
 
+///|
 /// Get GitHub client (owner/repo from gh CLI)
 pub async fn get_github_client() -> @github.GitHubClient raise WorkflowError {
-  let result = try @executor.run_command(
-    ["gh", "repo", "view", "--json", "owner,name"],
-  ) catch {
-    e => raise ExternalCommandError("Failed to get repository info: " + e.to_string())
-  } noraise { r => r }
+  let result = try
+    @executor.run_command(["gh", "repo", "view", "--json", "owner,name"])
+  catch {
+    e =>
+      raise ExternalCommandError(
+        "Failed to get repository info: " + e.to_string(),
+      )
+  } noraise {
+    r => r
+  }
 
   if not(result.is_success()) {
     let hint = if result.stderr.contains("not a git repository") {
       "The current directory is not a git repository."
-    } else if result.stderr.contains("gh auth login") || result.stderr.contains("authentication") {
+    } else if result.stderr.contains("gh auth login") ||
+      result.stderr.contains("authentication") {
       "Run 'gh auth login' to authenticate with GitHub."
-    } else if result.stderr.contains("not found") || result.stderr.contains("command not found") {
+    } else if result.stderr.contains("not found") ||
+      result.stderr.contains("command not found") {
       "The 'gh' CLI is not installed. Install it from https://cli.github.com/"
     } else {
       "Make sure you are in a GitHub repository and have 'gh' CLI installed and authenticated."
     }
     raise ExternalCommandError(
-      "Failed to get repository info: " + result.stderr.trim().to_string() + "\nHint: " + hint,
+      "Failed to get repository info: " +
+      result.stderr.trim().to_string() +
+      "\nHint: " +
+      hint,
     )
   }
 
   let json = try @json.parse(result.stdout) catch {
-    e => raise ExternalCommandError("Failed to parse repository info from 'gh' output: " + e.to_string())
-  } noraise { r => r }
+    e =>
+      raise ExternalCommandError(
+        "Failed to parse repository info from 'gh' output: " + e.to_string(),
+      )
+  } noraise {
+    r => r
+  }
 
   match json {
     Object(obj) => {
@@ -137,31 +184,47 @@ pub async fn get_github_client() -> @github.GitHubClient raise WorkflowError {
         Some(Object(o)) =>
           match o.get("login") {
             Some(String(s)) => s
-            _ => raise ExternalCommandError("Invalid owner info: expected 'owner.login' to be a string in 'gh' output")
+            _ =>
+              raise ExternalCommandError(
+                "Invalid owner info: expected 'owner.login' to be a string in 'gh' output",
+              )
           }
-        _ => raise ExternalCommandError("Invalid owner info: expected 'owner' to be an object in 'gh' output")
+        _ =>
+          raise ExternalCommandError(
+            "Invalid owner info: expected 'owner' to be an object in 'gh' output",
+          )
       }
       let name = match obj.get("name") {
         Some(String(s)) => s
-        _ => raise ExternalCommandError("Invalid repo name: expected 'name' to be a string in 'gh' output")
+        _ =>
+          raise ExternalCommandError(
+            "Invalid repo name: expected 'name' to be a string in 'gh' output",
+          )
       }
       try @github.GitHubClient::new(owner, name) catch {
-        @github.GitHubError(msg) => raise ExternalCommandError("Invalid GitHub repository: " + msg)
-      } noraise { r => r }
+        @github.GitHubError(msg) =>
+          raise ExternalCommandError("Invalid GitHub repository: " + msg)
+      } noraise {
+        r => r
+      }
     }
-    _ => raise ExternalCommandError("Invalid repository info: expected JSON object from 'gh' output")
+    _ =>
+      raise ExternalCommandError(
+        "Invalid repository info: expected JSON object from 'gh' output",
+      )
   }
 }
 
+///|
 /// Analyze version bump for single-package mode
 /// Common pipeline: get_current_version → get_commits → validate → determine_bump → bump
 pub async fn analyze_version_bump(
   config : @config.Config,
   repo : @git.Repository,
-  forced_bump~ : @semver.BumpType? = None,
-  max_commits~ : UInt? = None,
-  allow_empty_commits~ : Bool = false,
-  default_bump~ : @semver.BumpType? = None
+  forced_bump? : @semver.BumpType? = None,
+  max_commits? : UInt? = None,
+  allow_empty_commits? : Bool = false,
+  default_bump? : @semver.BumpType? = None,
 ) -> VersionAnalysis raise WorkflowError {
   let current_version = get_current_version(config)
 
@@ -176,7 +239,10 @@ pub async fn analyze_version_bump(
     // For release command: empty commits with no forced bump → use default
     match default_bump {
       Some(_) => ()
-      None => raise WorkflowError("No commits found since last tag. Nothing to release.")
+      None =>
+        raise WorkflowError(
+          "No commits found since last tag. Nothing to release.",
+        )
     }
   }
 
@@ -184,30 +250,30 @@ pub async fn analyze_version_bump(
   let bump_type = match forced_bump {
     Some(t) => t
     None =>
-      match @semver.determine_bump_with_custom(
-        commits.map(fn(c) { c.0 }),
-        config.custom_major_increment_regex,
-        config.custom_minor_increment_regex,
-      ) {
+      match
+        @semver.determine_bump_with_custom(
+          commits.map(fn(c) { c.0 }),
+          config.custom_major_increment_regex,
+          config.custom_minor_increment_regex,
+        ) {
         Some(t) => t
         None =>
           match default_bump {
             Some(t) => t
-            None => raise WorkflowError("No releasable commits found (no feat, fix, or breaking changes)")
+            None =>
+              raise WorkflowError(
+                "No releasable commits found (no feat, fix, or breaking changes)",
+              )
           }
       }
   }
 
   let new_version = @semver.bump(current_version, bump_type)
 
-  VersionAnalysis::{
-    current_version,
-    new_version,
-    commits,
-    bump_type,
-  }
+  VersionAnalysis::{ current_version, new_version, commits, bump_type }
 }
 
+///|
 /// Get mooncakes credentials file path
 /// Tries HOME (Unix), then USERPROFILE (Windows), then falls back to CWD-relative path.
 /// Uses libc getenv for cross-platform compatibility (no dependency on printenv).
@@ -228,6 +294,7 @@ fn get_mooncakes_credentials_path() -> String {
   ".moon/credentials.json"
 }
 
+///|
 /// Build the npm publish command array with standard flags
 fn build_npm_publish_command(provenance : Bool) -> Array[String] {
   let cmd : Array[String] = ["npm", "publish"]
@@ -239,11 +306,12 @@ fn build_npm_publish_command(provenance : Bool) -> Array[String] {
   cmd
 }
 
+///|
 /// Validate publish configuration
 /// Ensures required files exist for enabled publish targets
 pub async fn validate_publish_config(
   config : @config.Config,
-  verbose~ : Bool = false
+  verbose? : Bool = false,
 ) -> Unit raise WorkflowError {
   let is_monorepo = not(config.packages.is_empty())
 
@@ -256,17 +324,30 @@ pub async fn validate_publish_config(
     match publish_target {
       MooncakesOnly | Both(_) => {
         let content = try @fs.read_file("moon.mod.json").text() catch {
-          _ => raise ConfigValidationError("moon_publish is enabled but moon.mod.json not found")
-        } noraise { c => c }
+          _ =>
+            raise ConfigValidationError(
+              "moon_publish is enabled but moon.mod.json not found",
+            )
+        } noraise {
+          c => c
+        }
         try @moon_mod.parse(content) catch {
-          e => raise ConfigValidationError("moon_publish is enabled but moon.mod.json is invalid: " + e.to_string())
-        } noraise { _ => () }
+          e =>
+            raise ConfigValidationError(
+              "moon_publish is enabled but moon.mod.json is invalid: " +
+              e.to_string(),
+            )
+        } noraise {
+          _ => ()
+        }
 
         // Check if mooncakes credentials exist (warning only, not error)
         let creds_path = get_mooncakes_credentials_path()
         let creds_result = try @fs.read_file(creds_path).text() catch {
           _ => ""
-        } noraise { c => c }
+        } noraise {
+          c => c
+        }
 
         let has_token = if creds_result.is_empty() {
           false
@@ -282,7 +363,9 @@ pub async fn validate_publish_config(
           println("  moon publish may fail without authentication.")
           println("  Run 'moon login' to authenticate with mooncakes.io")
           if verbose {
-            println("  Or set MOONCAKES_TOKEN and MOONCAKES_USERNAME in CI environment")
+            println(
+              "  Or set MOONCAKES_TOKEN and MOONCAKES_USERNAME in CI environment",
+            )
           }
         }
       }
@@ -293,8 +376,13 @@ pub async fn validate_publish_config(
     match publish_target {
       NpmOnly(_) | Both(_) => {
         try @fs.read_file("package.json").text() catch {
-          _ => raise ConfigValidationError("npm_publish is enabled but package.json not found")
-        } noraise { _ => () }
+          _ =>
+            raise ConfigValidationError(
+              "npm_publish is enabled but package.json not found",
+            )
+        } noraise {
+          _ => ()
+        }
 
         if verbose {
           println("npm_publish enabled: using Trusted Publishing (OIDC)")
@@ -308,7 +396,9 @@ pub async fn validate_publish_config(
   // Monorepo: validate each package's required files
   for pkg in config.packages {
     if not(validate_path(pkg.path)) {
-      raise InputValidationError("Invalid path for package " + pkg.name + ": " + pkg.path)
+      raise InputValidationError(
+        "Invalid path for package " + pkg.name + ": " + pkg.path,
+      )
     }
 
     let pkg_path = package_path_prefix(pkg.path)
@@ -317,11 +407,30 @@ pub async fn validate_publish_config(
       MooncakesOnly | Both(_) => {
         let moon_mod_path = pkg_path + "moon.mod.json"
         let content = try @fs.read_file(moon_mod_path).text() catch {
-          _ => raise ConfigValidationError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " not found")
-        } noraise { c => c }
+          _ =>
+            raise ConfigValidationError(
+              "moon_publish is enabled for " +
+              pkg.name +
+              " but " +
+              moon_mod_path +
+              " not found",
+            )
+        } noraise {
+          c => c
+        }
         try @moon_mod.parse(content) catch {
-          e => raise ConfigValidationError("moon_publish is enabled for " + pkg.name + " but " + moon_mod_path + " is invalid: " + e.to_string())
-        } noraise { _ => () }
+          e =>
+            raise ConfigValidationError(
+              "moon_publish is enabled for " +
+              pkg.name +
+              " but " +
+              moon_mod_path +
+              " is invalid: " +
+              e.to_string(),
+            )
+        } noraise {
+          _ => ()
+        }
       }
       _ => ()
     }
@@ -330,33 +439,52 @@ pub async fn validate_publish_config(
       NpmOnly(_) | Both(_) => {
         let pkg_json_path = pkg_path + "package.json"
         try @fs.read_file(pkg_json_path).text() catch {
-          _ => raise ConfigValidationError("npm_publish is enabled for " + pkg.name + " but " + pkg_json_path + " not found")
-        } noraise { _ => () }
+          _ =>
+            raise ConfigValidationError(
+              "npm_publish is enabled for " +
+              pkg.name +
+              " but " +
+              pkg_json_path +
+              " not found",
+            )
+        } noraise {
+          _ => ()
+        }
       }
       _ => ()
     }
   }
 }
 
+///|
 /// Get package name from moon.mod.json
 async fn get_package_name() -> String {
   // Try to read package name from moon.mod.json
   let content = try @fs.read_file("moon.mod.json").text() catch {
     _ => return "this-package"
-  } noraise { c => c }
+  } noraise {
+    c => c
+  }
 
   let moon_mod = try @moon_mod.parse(content) catch {
     _ => return "this-package"
-  } noraise { m => m }
+  } noraise {
+    m => m
+  }
 
   moon_mod.name
 }
 
+///|
 /// Extract version from package.json content using JSON parser
-fn parse_package_json_version(content : String) -> @semver.Version? raise WorkflowError {
+fn parse_package_json_version(
+  content : String,
+) -> @semver.Version? raise WorkflowError {
   let json = try @json.parse(content) catch {
     e => raise WorkflowError("Failed to parse package.json: " + e.to_string())
-  } noraise { j => j }
+  } noraise {
+    j => j
+  }
 
   match json {
     Object(map) =>
@@ -368,19 +496,23 @@ fn parse_package_json_version(content : String) -> @semver.Version? raise Workfl
   }
 }
 
+///|
 /// Read version from package.json file
 pub async fn get_package_json_version() -> @semver.Version? raise WorkflowError {
   let content = try @fs.read_file("package.json").text() catch {
     _ => return None
-  } noraise { c => c }
+  } noraise {
+    c => c
+  }
 
   parse_package_json_version(content)
 }
 
+///|
 /// Get current version from the appropriate source based on config
 /// If both moon_publish and npm_publish are enabled, returns the higher version
 pub async fn get_current_version(
-  config : @config.Config
+  config : @config.Config,
 ) -> @semver.Version raise WorkflowError {
   let publish_target = config.publish_target()
   let mut moon_version : @semver.Version? = None
@@ -390,16 +522,25 @@ pub async fn get_current_version(
   match publish_target {
     MooncakesOnly | Both(_) => {
       let content = try @fs.read_file("moon.mod.json").text() catch {
-        e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string())
-      } noraise { c => c }
+        e =>
+          raise WorkflowError("Failed to read moon.mod.json: " + e.to_string())
+      } noraise {
+        c => c
+      }
 
       let moon_mod = try @moon_mod.parse(content) catch {
-        e => raise WorkflowError("Failed to parse moon.mod.json: " + e.to_string())
-      } noraise { m => m }
+        e =>
+          raise WorkflowError("Failed to parse moon.mod.json: " + e.to_string())
+      } noraise {
+        m => m
+      }
 
       match @semver.Version::parse(moon_mod.version) {
         Some(v) => moon_version = Some(v)
-        None => raise WorkflowError("Invalid version in moon.mod.json: " + moon_mod.version)
+        None =>
+          raise WorkflowError(
+            "Invalid version in moon.mod.json: " + moon_mod.version,
+          )
       }
     }
     _ => ()
@@ -417,20 +558,27 @@ pub async fn get_current_version(
 
   // Return the higher version if both are available
   match (moon_version, npm_version) {
-    (Some(mv), Some(nv)) => {
+    (Some(mv), Some(nv)) =>
       // Compare and return higher version
-      if mv.compare(nv) >= 0 { mv } else { nv }
-    }
+      if mv.compare(nv) >= 0 {
+        mv
+      } else {
+        nv
+      }
     (Some(mv), None) => mv
     (None, Some(nv)) => nv
-    (None, None) => raise ConfigValidationError("No publish target enabled. Enable moon_publish or npm_publish.")
+    (None, None) =>
+      raise ConfigValidationError(
+        "No publish target enabled. Enable moon_publish or npm_publish.",
+      )
   }
 }
 
+///|
 /// Read a package's current version from moon.mod.json and/or package.json
 /// If both are enabled, returns the higher version (consistent with get_current_version)
 async fn get_package_current_version(
-  pkg : @config.PackageConfig
+  pkg : @config.PackageConfig,
 ) -> @semver.Version? raise WorkflowError {
   let pkg_path = package_path_prefix(pkg.path)
   let mut moon_version : @semver.Version? = None
@@ -441,14 +589,18 @@ async fn get_package_current_version(
     let moon_mod_path = pkg_path + "moon.mod.json"
     let content = try @fs.read_file(moon_mod_path).text() catch {
       _ => ""
-    } noraise { c => c }
+    } noraise {
+      c => c
+    }
     if not(content.is_empty()) {
       moon_version = try {
         let moon_mod = @moon_mod.parse(content)
         @semver.Version::parse(moon_mod.version)
       } catch {
         _ => None
-      } noraise { v => v }
+      } noraise {
+        v => v
+      }
     }
   }
 
@@ -457,23 +609,33 @@ async fn get_package_current_version(
     let pkg_json_path = pkg_path + "package.json"
     let content = try @fs.read_file(pkg_json_path).text() catch {
       _ => ""
-    } noraise { c => c }
+    } noraise {
+      c => c
+    }
     if not(content.is_empty()) {
       npm_version = try parse_package_json_version(content) catch {
         _ => None
-      } noraise { v => v }
+      } noraise {
+        v => v
+      }
     }
   }
 
   // Return the higher version if both are available
   match (moon_version, npm_version) {
-    (Some(mv), Some(nv)) => if mv.compare(nv) >= 0 { Some(mv) } else { Some(nv) }
+    (Some(mv), Some(nv)) =>
+      if mv.compare(nv) >= 0 {
+        Some(mv)
+      } else {
+        Some(nv)
+      }
     (Some(mv), None) => Some(mv)
     (None, Some(nv)) => Some(nv)
     (None, None) => None
   }
 }
 
+///|
 /// Get monorepo representative version
 /// Returns (max_current_version, max_new_version, all_commits) across packages
 /// The representative version is the highest new_version among target packages.
@@ -485,7 +647,7 @@ async fn compute_effective_bump(
   config : @config.Config,
   repo : @git.Repository,
   forced_bump : @semver.BumpType?,
-  bump_all : Bool
+  bump_all : Bool,
 ) -> @semver.BumpType? raise WorkflowError {
   if not(bump_all) || forced_bump is Some(_) {
     return forced_bump
@@ -499,15 +661,18 @@ async fn compute_effective_bump(
     }
     let commits = try get_package_commits(repo, pkg.path) catch {
       _ => continue
-    } noraise { c => c }
+    } noraise {
+      c => c
+    }
     if commits.is_empty() {
       continue
     }
-    match @semver.determine_bump_with_custom(
-      commits.map(fn(c) { c.0 }),
-      config.custom_major_increment_regex,
-      config.custom_minor_increment_regex,
-    ) {
+    match
+      @semver.determine_bump_with_custom(
+        commits.map(fn(c) { c.0 }),
+        config.custom_major_increment_regex,
+        config.custom_minor_increment_regex,
+      ) {
       Some(t) => {
         let p = bump_priority(t)
         if p > max_bump_priority {
@@ -521,6 +686,7 @@ async fn compute_effective_bump(
   max_bump
 }
 
+///|
 /// When bump_all is true, all packages are targeted (unchanged packages use the max bump type).
 /// Used for tag names, branch names, and release titles in monorepo mode
 ///
@@ -532,9 +698,19 @@ pub async fn get_monorepo_representative_version(
   repo : @git.Repository,
   forced_bump : @semver.BumpType?,
   verbose : Bool,
-  bump_all~ : Bool = false
-) -> (@semver.Version, @semver.Version, Array[(@conventional.ConventionalCommit, String)]) raise WorkflowError {
-  let plans = resolve_version_plan(config, repo, forced_bump, verbose, bump_all~)
+  bump_all? : Bool = false,
+) -> (
+  @semver.Version,
+  @semver.Version,
+  Array[(@conventional.ConventionalCommit, String)],
+) raise WorkflowError {
+  let plans = resolve_version_plan(
+    config,
+    repo,
+    forced_bump,
+    verbose,
+    bump_all~,
+  )
 
   if plans.is_empty() {
     raise WorkflowError("No releasable commits found across packages")
@@ -557,12 +733,11 @@ pub async fn get_monorepo_representative_version(
     }
 
     match max_new {
-      Some(mn) => {
+      Some(mn) =>
         if plan.new_version.compare(mn) > 0 {
           max_new = Some(plan.new_version)
           max_current = Some(plan.old_version)
         }
-      }
       None => {
         max_new = Some(plan.new_version)
         max_current = Some(plan.old_version)
@@ -583,28 +758,41 @@ pub async fn get_monorepo_representative_version(
   (current, new_version, all_commits)
 }
 
+///|
 /// Update package.json version field
 /// Delegates to @moon_mod.replace_json_field for format-preserving replacement.
 /// Returns the updated content, or None if file doesn't exist.
 async fn update_package_json_version(
   new_version : @semver.Version,
-  path~ : String = "package.json"
+  path? : String = "package.json",
 ) -> String? raise WorkflowError {
   // Try to read package.json
   let content = try @fs.read_file(path).text() catch {
-    _ => return None  // File doesn't exist, that's OK
-  } noraise { c => c }
+    _ => return None // File doesn't exist, that's OK
+  } noraise {
+    c => c
+  }
 
   // Verify package.json has a valid version field
   match parse_package_json_version(content) {
     Some(_) => ()
-    None => raise WorkflowError("package.json does not contain a valid 'version' field")
+    None =>
+      raise WorkflowError(
+        "package.json does not contain a valid 'version' field",
+      )
   }
 
   // Delegate to replace_json_field (format-preserving, top-level key only)
-  let result = try @moon_mod.replace_json_field(content, "version", new_version.to_string()) catch {
-    e => raise WorkflowError("Failed to update version in package.json: " + e.to_string())
-  } noraise { r => r }
+  let result = try
+    @moon_mod.replace_json_field(content, "version", new_version.to_string())
+  catch {
+    e =>
+      raise WorkflowError(
+        "Failed to update version in package.json: " + e.to_string(),
+      )
+  } noraise {
+    r => r
+  }
 
   // Preserve trailing newline
   if content.has_suffix("\n") && not(result.has_suffix("\n")) {
@@ -614,6 +802,7 @@ async fn update_package_json_version(
   }
 }
 
+///|
 /// update command: local update only
 pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   if ctx.verbose {
@@ -627,11 +816,21 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
   if ctx.dry_run {
     match publish_target {
-      MooncakesOnly => println("[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}")
-      NpmOnly(_) => println("[dry-run] Would update package.json to version \{ctx.new_version.to_string()}")
+      MooncakesOnly =>
+        println(
+          "[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}",
+        )
+      NpmOnly(_) =>
+        println(
+          "[dry-run] Would update package.json to version \{ctx.new_version.to_string()}",
+        )
       Both(_) => {
-        println("[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}")
-        println("[dry-run] Would update package.json to version \{ctx.new_version.to_string()}")
+        println(
+          "[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}",
+        )
+        println(
+          "[dry-run] Would update package.json to version \{ctx.new_version.to_string()}",
+        )
       }
       NoPublish => ()
     }
@@ -642,16 +841,37 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   match publish_target {
     MooncakesOnly | Both(_) => {
       let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
-        e => raise WorkflowError("Failed to read moon.mod.json: " + e.to_string() + ". Make sure the file exists and is readable.")
-      } noraise { c => c }
+        e =>
+          raise WorkflowError(
+            "Failed to read moon.mod.json: " +
+            e.to_string() +
+            ". Make sure the file exists and is readable.",
+          )
+      } noraise {
+        c => c
+      }
 
-      let updated_content = try @moon_mod.update_version(moon_mod_content, ctx.new_version) catch {
-        e => raise WorkflowError("Failed to update version in moon.mod.json: " + e.to_string())
-      } noraise { c => c }
+      let updated_content = try
+        @moon_mod.update_version(moon_mod_content, ctx.new_version)
+      catch {
+        e =>
+          raise WorkflowError(
+            "Failed to update version in moon.mod.json: " + e.to_string(),
+          )
+      } noraise {
+        c => c
+      }
 
       try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
-        e => raise WorkflowError("Failed to write moon.mod.json: " + e.to_string() + ". Check file permissions.")
-      } noraise { _ => () }
+        e =>
+          raise WorkflowError(
+            "Failed to write moon.mod.json: " +
+            e.to_string() +
+            ". Check file permissions.",
+          )
+      } noraise {
+        _ => ()
+      }
 
       println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
     }
@@ -663,48 +883,69 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
     NpmOnly(_) | Both(_) =>
       match update_package_json_version(ctx.new_version) {
         Some(updated_pkg_json) => {
-          try @fs.write_file("package.json", updated_pkg_json, create=0o644) catch {
-            e => raise WorkflowError("Failed to write package.json: " + e.to_string())
-          } noraise { _ => () }
-          println("Updated package.json to version \{ctx.new_version.to_string()}")
+          try
+            @fs.write_file("package.json", updated_pkg_json, create=0o644)
+          catch {
+            e =>
+              raise WorkflowError(
+                "Failed to write package.json: " + e.to_string(),
+              )
+          } noraise {
+            _ => ()
+          }
+          println(
+            "Updated package.json to version \{ctx.new_version.to_string()}",
+          )
         }
         None =>
-          raise ConfigValidationError("npm_publish is enabled but package.json not found")
+          raise ConfigValidationError(
+            "npm_publish is enabled but package.json not found",
+          )
       }
     _ => ()
   }
 }
 
+///|
 /// release-pr command: create or update PR
 pub async fn run_release_pr(
   ctx : ReleaseContext,
-  github : @github.GitHubClient
+  github : @github.GitHubClient,
 ) -> Unit raise WorkflowError {
   if ctx.verbose {
     println("Running release-pr workflow...")
   }
 
-  let branch_name = ctx.config.pr_branch_prefix + "v\{ctx.new_version.to_string()}"
+  let branch_name = ctx.config.pr_branch_prefix +
+    "v\{ctx.new_version.to_string()}"
   let base_branch = ctx.config.base_branch
 
   // Validate branch name
   match validate_git_ref_name(branch_name) {
     Some(reason) =>
-      raise InputValidationError("Invalid branch name '\{branch_name}': \{reason}")
+      raise InputValidationError(
+        "Invalid branch name '\{branch_name}': \{reason}",
+      )
     None => ()
   }
 
   // Validate base branch name
   match validate_git_ref_name(base_branch) {
     Some(reason) =>
-      raise InputValidationError("Invalid base_branch '\{base_branch}': \{reason}")
+      raise InputValidationError(
+        "Invalid base_branch '\{base_branch}': \{reason}",
+      )
     None => ()
   }
 
   // Find existing release PR (errors are suppressed to None)
-  let existing_pr = try find_existing_release_pr(github, ctx.config.pr_branch_prefix) catch {
+  let existing_pr = try
+    find_existing_release_pr(github, ctx.config.pr_branch_prefix)
+  catch {
     _ => None
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   if ctx.dry_run {
     match existing_pr {
@@ -722,10 +963,16 @@ pub async fn run_release_pr(
   }
 
   // Fetch base branch from remote to ensure we branch from the latest state
-  let fetch_result = (try? @executor.run_git(ctx.repo, ["fetch", "origin", base_branch]))
-    .unwrap_or(@executor.CommandResult::failed("fetch failed"))
+  let fetch_result = (try? @executor.run_git(ctx.repo, [
+    "fetch", "origin", base_branch,
+  ])).unwrap_or(@executor.CommandResult::failed("fetch failed"))
   if not(fetch_result.is_success()) && ctx.verbose {
-    println("[WARN] Failed to fetch origin/" + base_branch + ": " + fetch_result.stderr)
+    println(
+      "[WARN] Failed to fetch origin/" +
+      base_branch +
+      ": " +
+      fetch_result.stderr,
+    )
     println("[WARN] Continuing with local branch state...")
   }
 
@@ -735,45 +982,87 @@ pub async fn run_release_pr(
   } else {
     base_branch
   }
-  let checkout_result = try @executor.run_git(ctx.repo, ["checkout", "-B", branch_name, start_point]) catch {
-    e => raise GitError("Failed to create/checkout branch '" + branch_name + "': " + e.to_string())
-  } noraise { r => r }
+  let checkout_result = try
+    @executor.run_git(ctx.repo, ["checkout", "-B", branch_name, start_point])
+  catch {
+    e =>
+      raise GitError(
+        "Failed to create/checkout branch '" +
+        branch_name +
+        "': " +
+        e.to_string(),
+      )
+  } noraise {
+    r => r
+  }
   if not(checkout_result.is_success()) {
-    raise GitError("Failed to create/checkout branch '" + branch_name + "': " + checkout_result.stderr)
+    raise GitError(
+      "Failed to create/checkout branch '" +
+      branch_name +
+      "': " +
+      checkout_result.stderr,
+    )
   }
 
-  let branch_recovery_note = "\nNote: You may be on branch '" + branch_name + "'. Run 'git checkout " + base_branch + "' to return."
+  let branch_recovery_note = "\nNote: You may be on branch '" +
+    branch_name +
+    "'. Run 'git checkout " +
+    base_branch +
+    "' to return."
 
   // Collect package release info BEFORE file updates (so old_version is accurate)
   let is_monorepo = not(ctx.config.packages.is_empty())
   let monorepo_pkg_info : Array[PackageReleaseInfo] = if is_monorepo {
-    try collect_package_release_info(ctx.config, ctx.repo, ctx.verbose, forced_bump=ctx.forced_bump, bump_all=ctx.bump_all) catch {
+    try
+      collect_package_release_info(
+        ctx.config,
+        ctx.repo,
+        ctx.verbose,
+        forced_bump=ctx.forced_bump,
+        bump_all=ctx.bump_all,
+      )
+    catch {
       e => {
         if ctx.verbose {
           println("[WARN] Failed to collect package info: " + e.to_string())
         }
         []
       }
-    } noraise { r => r }
+    } noraise {
+      r => r
+    }
   } else {
     []
   }
 
   // Run update (file updates)
   if is_monorepo {
-    try run_update_packages(ctx.config, ctx.repo, ctx.dry_run, ctx.verbose, forced_bump=ctx.forced_bump, bump_all=ctx.bump_all) catch {
+    try
+      run_update_packages(
+        ctx.config,
+        ctx.repo,
+        ctx.dry_run,
+        ctx.verbose,
+        forced_bump=ctx.forced_bump,
+        bump_all=ctx.bump_all,
+      )
+    catch {
       e => {
         let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
         raise e.add_context(branch_recovery_note)
       }
-    } noraise { _ => () }
+    } noraise {
+      _ => ()
+    }
   } else {
     try run_update(ctx) catch {
       e => {
         let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
         raise e.add_context(branch_recovery_note)
       }
-    } noraise { _ => () }
+    } noraise {
+      _ => ()
+    }
   }
 
   // Stage changes - add relevant files based on publish configuration
@@ -781,53 +1070,84 @@ pub async fn run_release_pr(
   let stage_result = try @executor.run_git(ctx.repo, files_to_stage) catch {
     e => {
       let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
-      raise GitError("Failed to stage files: " + e.to_string() + branch_recovery_note)
+      raise GitError(
+        "Failed to stage files: " + e.to_string() + branch_recovery_note,
+      )
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
   if not(stage_result.is_success()) {
     let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
-    raise GitError("Failed to stage files: " + stage_result.stderr + branch_recovery_note)
+    raise GitError(
+      "Failed to stage files: " + stage_result.stderr + branch_recovery_note,
+    )
   }
 
   // Check if there are changes with try-catch-noraise pattern
-  let diff_result = try @executor.run_git(ctx.repo, ["diff", "--cached", "--quiet"]) catch {
+  let diff_result = try
+    @executor.run_git(ctx.repo, ["diff", "--cached", "--quiet"])
+  catch {
     e => {
       if ctx.verbose {
         println("[WARN] Failed to check staged changes: " + e.to_string())
       }
       @executor.CommandResult::failed("diff check failed: " + e.to_string())
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   if diff_result.is_success() {
     println("No changes to commit. Release PR is up to date.")
     // Return to original branch with try-catch-noraise pattern
-    let checkout_back_result = try @executor.run_git(ctx.repo, ["checkout", base_branch]) catch {
+    let checkout_back_result = try
+      @executor.run_git(ctx.repo, ["checkout", base_branch])
+    catch {
       e => {
         if ctx.verbose {
           println("[WARN] Failed to return to base branch: " + e.to_string())
         }
         @executor.CommandResult::failed("checkout failed: " + e.to_string())
       }
-    } noraise { r => r }
+    } noraise {
+      r => r
+    }
     if not(checkout_back_result.is_success()) && ctx.verbose {
-      println("[WARN] Could not checkout " + base_branch + ": " + checkout_back_result.stderr)
-      println("[WARN] You may need to manually checkout: git checkout " + base_branch)
+      println(
+        "[WARN] Could not checkout " +
+        base_branch +
+        ": " +
+        checkout_back_result.stderr,
+      )
+      println(
+        "[WARN] You may need to manually checkout: git checkout " + base_branch,
+      )
     }
     return
   }
 
   // Commit with try-catch-noraise pattern
-  let commit_msg = ctx.config.apply_pr_title_template(ctx.new_version.to_string())
-  let commit_result = try @executor.run_git(ctx.repo, ["commit", "-m", commit_msg]) catch {
+  let commit_msg = ctx.config.apply_pr_title_template(
+    ctx.new_version.to_string(),
+  )
+  let commit_result = try
+    @executor.run_git(ctx.repo, ["commit", "-m", commit_msg])
+  catch {
     e => {
       let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
-      raise GitError("Failed to commit: " + e.to_string() + branch_recovery_note)
+      raise GitError(
+        "Failed to commit: " + e.to_string() + branch_recovery_note,
+      )
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
   if not(commit_result.is_success()) {
     let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
-    raise GitError("Failed to commit: " + commit_result.stderr + branch_recovery_note)
+    raise GitError(
+      "Failed to commit: " + commit_result.stderr + branch_recovery_note,
+    )
   }
 
   // Push (force push to update)
@@ -836,14 +1156,27 @@ pub async fn run_release_pr(
   if ctx.verbose {
     println("Pushing with --force-with-lease (safe force push)...")
   }
-  let push_result = try @executor.run_git(ctx.repo, ["push", "-u", "--force-with-lease", "origin", branch_name]) catch {
+  let push_result = try
+    @executor.run_git(ctx.repo, [
+      "push", "-u", "--force-with-lease", "origin", branch_name,
+    ])
+  catch {
     e => {
       let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
-      raise GitError("Failed to push branch '" + branch_name + "' to origin: " + e.to_string() + branch_recovery_note)
+      raise GitError(
+        "Failed to push branch '" +
+        branch_name +
+        "' to origin: " +
+        e.to_string() +
+        branch_recovery_note,
+      )
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
   if not(push_result.is_success()) {
-    let hint = if push_result.stderr.contains("permission") || push_result.stderr.contains("denied") {
+    let hint = if push_result.stderr.contains("permission") ||
+      push_result.stderr.contains("denied") {
       " Check your GitHub permissions for this repository."
     } else if push_result.stderr.contains("force-with-lease") {
       " The remote branch has been updated since last fetch. Pull and resolve conflicts first."
@@ -851,21 +1184,36 @@ pub async fn run_release_pr(
       ""
     }
     let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
-    raise GitError("Failed to push branch '" + branch_name + "' to origin: " + push_result.stderr + hint + branch_recovery_note)
+    raise GitError(
+      "Failed to push branch '" +
+      branch_name +
+      "' to origin: " +
+      push_result.stderr +
+      hint +
+      branch_recovery_note,
+    )
   }
 
   // Return to original branch with try-catch-noraise pattern
-  let return_result = try @executor.run_git(ctx.repo, ["checkout", base_branch]) catch {
+  let return_result = try
+    @executor.run_git(ctx.repo, ["checkout", base_branch])
+  catch {
     e => {
       if ctx.verbose {
         println("[WARN] Failed to return to base branch: " + e.to_string())
       }
       @executor.CommandResult::failed("checkout failed: " + e.to_string())
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
   if not(return_result.is_success()) && ctx.verbose {
-    println("[WARN] Could not checkout " + base_branch + ": " + return_result.stderr)
-    println("[WARN] You may need to manually checkout: git checkout " + base_branch)
+    println(
+      "[WARN] Could not checkout " + base_branch + ": " + return_result.stderr,
+    )
+    println(
+      "[WARN] You may need to manually checkout: git checkout " + base_branch,
+    )
   }
 
   // Generate PR body (unified release-plz style format)
@@ -874,9 +1222,16 @@ pub async fn run_release_pr(
   match existing_pr {
     Some((pr_num, _)) => {
       // Update existing PR with try-catch-noraise pattern
-      let update_result = try @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body]) catch {
-        e => raise GitError("Failed to update PR: " + e.to_string() + branch_recovery_note)
-      } noraise { r => r }
+      let update_result = try
+        @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body])
+      catch {
+        e =>
+          raise GitError(
+            "Failed to update PR: " + e.to_string() + branch_recovery_note,
+          )
+      } noraise {
+        r => r
+      }
       if not(update_result.is_success()) {
         println("Warning: Failed to update PR body: " + update_result.stderr)
       }
@@ -902,19 +1257,32 @@ pub async fn run_release_pr(
 
       // Create PR with try-catch-noraise pattern
       let pr_result = try @executor.run_gh(gh_args) catch {
-        e => raise GitError("Failed to create pull request: " + e.to_string() + branch_recovery_note)
-      } noraise { r => r }
+        e =>
+          raise GitError(
+            "Failed to create pull request: " +
+            e.to_string() +
+            branch_recovery_note,
+          )
+      } noraise {
+        r => r
+      }
       if not(pr_result.is_success()) {
         let hint = if pr_result.stderr.contains("already exists") {
           " A pull request for this branch may already exist."
-        } else if pr_result.stderr.contains("permission") || pr_result.stderr.contains("denied") {
+        } else if pr_result.stderr.contains("permission") ||
+          pr_result.stderr.contains("denied") {
           " Check your GitHub permissions for this repository."
         } else if pr_result.stderr.contains("authentication") {
           " Run 'gh auth login' to authenticate with GitHub."
         } else {
           ""
         }
-        raise GitError("Failed to create pull request: " + pr_result.stderr + hint + branch_recovery_note)
+        raise GitError(
+          "Failed to create pull request: " +
+          pr_result.stderr +
+          hint +
+          branch_recovery_note,
+        )
       }
 
       println("Created pull request: " + pr_result.stdout_trimmed())
@@ -922,6 +1290,7 @@ pub async fn run_release_pr(
   }
 }
 
+///|
 /// Collect files to stage based on publish configuration
 fn collect_files_to_stage(ctx : ReleaseContext) -> Array[String] {
   let files : Array[String] = ["add"]
@@ -956,16 +1325,19 @@ fn collect_files_to_stage(ctx : ReleaseContext) -> Array[String] {
   files
 }
 
+///|
 /// Generate PR body from release context and package info
 async fn generate_pr_body(
   ctx : ReleaseContext,
-  monorepo_pkg_info : Array[PackageReleaseInfo]
+  monorepo_pkg_info : Array[PackageReleaseInfo],
 ) -> String raise WorkflowError {
   let is_monorepo = not(ctx.config.packages.is_empty())
 
   let pkg_name = try get_package_name() catch {
     _ => "this-package"
-  } noraise { n => n }
+  } noraise {
+    n => n
+  }
 
   let single_pkg_info = [
     PackageReleaseInfo::{
@@ -980,7 +1352,13 @@ async fn generate_pr_body(
     if ctx.verbose {
       println("Generating PR body for monorepo...")
     }
-    build_pr_body_unified(if monorepo_pkg_info.is_empty() { single_pkg_info } else { monorepo_pkg_info })
+    build_pr_body_unified(
+      if monorepo_pkg_info.is_empty() {
+        single_pkg_info
+      } else {
+        monorepo_pkg_info
+      },
+    )
   } else {
     if ctx.verbose {
       println("Generating PR body for single package...")
@@ -989,13 +1367,14 @@ async fn generate_pr_body(
   }
 }
 
+///|
 /// Find existing release PR
 /// Note: Returns None on any error (error suppression for optional lookup)
 /// Suppress: Error type is declared but all errors are caught and converted to None
 #warnings("-unused_error_type")
 async fn find_existing_release_pr(
   github : @github.GitHubClient,
-  branch_prefix : String
+  branch_prefix : String,
 ) -> (UInt, String)? raise Error {
   let list_cmd = github.list_pull_requests_command(state="open")
 
@@ -1008,7 +1387,9 @@ async fn find_existing_release_pr(
   // Run gh command with try-catch-noraise pattern
   let result = try @executor.run_gh(gh_args) catch {
     _ => return None
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   if not(result.is_success()) {
     return None
@@ -1017,7 +1398,9 @@ async fn find_existing_release_pr(
   // Parse PR list with try-catch-noraise pattern
   let prs = try @github.parse_pull_request_list_json(result.stdout) catch {
     _ => return None
-  } noraise { p => p }
+  } noraise {
+    p => p
+  }
 
   // Find PR with branch starting with release/
   for pr in prs {
@@ -1029,6 +1412,7 @@ async fn find_existing_release_pr(
   None
 }
 
+///|
 /// Pre-build JS target for npm publish (called before tag creation)
 /// This ensures build failures happen before any artifacts are created
 pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
@@ -1036,7 +1420,9 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
   if is_monorepo {
     // Monorepo: check package-level npm_publish
-    let has_npm_packages = ctx.config.packages.iter().any(fn(p) { p.npm_publish })
+    let has_npm_packages = ctx.config.packages
+      .iter()
+      .any(fn(p) { p.npm_publish })
     if not(has_npm_packages) {
       return
     }
@@ -1056,7 +1442,14 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
       let build_cmd_str = @executor.join_command_args(build_cmd)
 
       if ctx.dry_run {
-        println("[dry-run] Would pre-build JS target for " + pkg.name + " in " + pkg.path + ": " + build_cmd_str)
+        println(
+          "[dry-run] Would pre-build JS target for " +
+          pkg.name +
+          " in " +
+          pkg.path +
+          ": " +
+          build_cmd_str,
+        )
         continue
       }
 
@@ -1066,12 +1459,24 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
         println("  Working directory: " + pkg.path)
       }
 
-      let build_result = try @executor.run_command_in_dir(build_cmd, pkg.path) catch {
-        e => raise ExternalCommandError("Failed to build JS target for " + pkg.name + ": " + e.to_string())
-      } noraise { r => r }
+      let build_result = try
+        @executor.run_command_in_dir(build_cmd, pkg.path)
+      catch {
+        e =>
+          raise ExternalCommandError(
+            "Failed to build JS target for " + pkg.name + ": " + e.to_string(),
+          )
+      } noraise {
+        r => r
+      }
 
       if not(build_result.is_success()) {
-        raise ExternalCommandError("Failed to build JS target for " + pkg.name + ": " + build_result.stderr)
+        raise ExternalCommandError(
+          "Failed to build JS target for " +
+          pkg.name +
+          ": " +
+          build_result.stderr,
+        )
       }
 
       if ctx.verbose {
@@ -1099,11 +1504,18 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
     // Run build command - fail if build fails (before any tag/release creation)
     let build_result = try @executor.run_command(build_cmd) catch {
-      e => raise ExternalCommandError("Failed to build JS target: " + e.to_string())
-    } noraise { r => r }
+      e =>
+        raise ExternalCommandError(
+          "Failed to build JS target: " + e.to_string(),
+        )
+    } noraise {
+      r => r
+    }
 
     if not(build_result.is_success()) {
-      raise ExternalCommandError("Failed to build JS target: " + build_result.stderr)
+      raise ExternalCommandError(
+        "Failed to build JS target: " + build_result.stderr,
+      )
     }
 
     if ctx.verbose {
@@ -1112,10 +1524,11 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 }
 
+///|
 /// release command: create tag and release
 pub async fn run_release(
   ctx : ReleaseContext,
-  github : @github.GitHubClient
+  github : @github.GitHubClient,
 ) -> Unit raise WorkflowError {
   if ctx.verbose {
     println("Running release workflow...")
@@ -1143,7 +1556,9 @@ pub async fn run_release(
     GitHubRelease(..) | TagOnly =>
       match validate_git_ref_name(tag_name) {
         Some(reason) =>
-          raise InputValidationError("Invalid tag name '\{tag_name}': \{reason}")
+          raise InputValidationError(
+            "Invalid tag name '\{tag_name}': \{reason}",
+          )
         None => ()
       }
     NoGitRelease => ()
@@ -1163,7 +1578,8 @@ pub async fn run_release(
     if not(ctx.config.packages.is_empty()) {
       for pkg in ctx.config.packages {
         match pkg.publish_target() {
-          MooncakesOnly => println("[dry-run] Would publish " + pkg.name + " to mooncakes.io")
+          MooncakesOnly =>
+            println("[dry-run] Would publish " + pkg.name + " to mooncakes.io")
           NpmOnly(_) => println("[dry-run] Would npm publish " + pkg.name)
           Both(_) => {
             println("[dry-run] Would publish " + pkg.name + " to mooncakes.io")
@@ -1190,16 +1606,24 @@ pub async fn run_release(
   match release_mode {
     GitHubRelease(..) | TagOnly => {
       let tag_msg = release_title
-      let tag_result = try @executor.run_git(ctx.repo, ["tag", "-a", "-m", tag_msg, "--", tag_name]) catch {
+      let tag_result = try
+        @executor.run_git(ctx.repo, ["tag", "-a", "-m", tag_msg, "--", tag_name])
+      catch {
         e => raise GitError("Failed to create tag: " + e.to_string())
-      } noraise { r => r }
+      } noraise {
+        r => r
+      }
       if not(tag_result.is_success()) {
         raise GitError("Failed to create tag: " + tag_result.stderr)
       }
 
-      let push_result = try @executor.run_git(ctx.repo, ["push", "origin", tag_name]) catch {
+      let push_result = try
+        @executor.run_git(ctx.repo, ["push", "origin", tag_name])
+      catch {
         e => raise GitError("Failed to push tag: " + e.to_string())
-      } noraise { r => r }
+      } noraise {
+        r => r
+      }
       if not(push_result.is_success()) {
         raise GitError("Failed to push tag: " + push_result.stderr)
       }
@@ -1216,7 +1640,10 @@ pub async fn run_release(
         Some(template) =>
           template
           .replace(old="{{ version }}", new=ctx.new_version.to_string())
-          .replace(old="{{ changelog }}", new=generate_release_notes(ctx.commits))
+          .replace(
+            old="{{ changelog }}",
+            new=generate_release_notes(ctx.commits),
+          )
         None => generate_release_notes(ctx.commits)
       }
       let release_cmd = github.create_release_command(
@@ -1236,14 +1663,26 @@ pub async fn run_release(
       let release_result = try @executor.run_gh(gh_args) catch {
         e => {
           println("Warning: Failed to create GitHub release: " + e.to_string())
-          println("Tag '" + tag_name + "' was already pushed. Create the release manually.")
+          println(
+            "Tag '" +
+            tag_name +
+            "' was already pushed. Create the release manually.",
+          )
           release_caught_error = true
           @executor.CommandResult::failed("release creation failed")
         }
-      } noraise { r => r }
+      } noraise {
+        r => r
+      }
       if not(release_result.is_success()) && not(release_caught_error) {
-        println("Warning: Failed to create GitHub release: " + release_result.stderr)
-        println("Tag '" + tag_name + "' was already pushed. Create the release manually.")
+        println(
+          "Warning: Failed to create GitHub release: " + release_result.stderr,
+        )
+        println(
+          "Tag '" +
+          tag_name +
+          "' was already pushed. Create the release manually.",
+        )
       } else if release_result.is_success() {
         println("Created GitHub release: " + tag_name)
       }
@@ -1268,6 +1707,7 @@ pub async fn run_release(
   }
 }
 
+///|
 /// publish command: publish to mooncakes.io
 pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   if ctx.verbose {
@@ -1287,7 +1727,9 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
         println("Continuing with publish...")
         @semver_check.CheckResult::new(@semver_check.ApiDiff::empty())
       }
-    } noraise { r => r }
+    } noraise {
+      r => r
+    }
 
     if check_result.diff.has_breaking() {
       println("")
@@ -1299,7 +1741,9 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
       println("  2. Using BREAKING CHANGE: in your commit messages")
       println("")
     } else if ctx.verbose {
-      println("Semver check passed: " + @semver_check.format_summary(check_result))
+      println(
+        "Semver check passed: " + @semver_check.format_summary(check_result),
+      )
     }
   }
 
@@ -1322,9 +1766,13 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   // Run publish with try-catch-noraise pattern
-  let publish_result = try @executor.run_command_with_timeout(publish_cmd, timeout) catch {
+  let publish_result = try
+    @executor.run_command_with_timeout(publish_cmd, timeout)
+  catch {
     e => raise PublishError("Failed to publish: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   match publish_result {
     None => {
@@ -1346,6 +1794,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   println("Published to mooncakes.io")
 }
 
+///|
 /// npm publish command: publish to npm registry
 /// Note: JS build is handled by pre_build_js() before tag creation
 pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
@@ -1369,9 +1818,13 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
   }
 
   // Run npm publish with try-catch-noraise pattern
-  let publish_result = try @executor.run_command_with_timeout(publish_cmd, timeout) catch {
+  let publish_result = try
+    @executor.run_command_with_timeout(publish_cmd, timeout)
+  catch {
     e => raise PublishError("Failed to publish to npm: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   match publish_result {
     None => {
@@ -1417,6 +1870,7 @@ pub async fn run_npm_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
 // Shared monorepo version resolution pipeline (Phase 3 DDD)
 // ============================================================================
 
+///|
 /// Resolved version plan for a single package
 /// Output of the shared 3-phase pipeline: collect → consolidate → apply
 pub(all) struct PackageVersionPlan {
@@ -1428,6 +1882,7 @@ pub(all) struct PackageVersionPlan {
   commits : Array[(@conventional.ConventionalCommit, String)]
 }
 
+///|
 /// Shared 3-phase monorepo version resolution pipeline
 /// Phase 1: Collect per-package info (version, commits, raw bump)
 /// Phase 2: Consolidate bump types by version_group
@@ -1437,21 +1892,32 @@ async fn resolve_version_plan(
   repo : @git.Repository,
   forced_bump : @semver.BumpType?,
   verbose : Bool,
-  bump_all~ : Bool = false
+  bump_all? : Bool = false,
 ) -> Array[PackageVersionPlan] raise WorkflowError {
   if config.packages.is_empty() {
     return []
   }
 
   // Pre-compute effective bump for bump_all mode
-  let effective_bump = compute_effective_bump(config, repo, forced_bump, bump_all)
+  let effective_bump = compute_effective_bump(
+    config, repo, forced_bump, bump_all,
+  )
 
   if bump_all && effective_bump is None {
     return []
   }
 
   // Phase 1: Collect per-package info
-  let entries : Array[(String, String, @semver.Version, @semver.BumpType, Array[(@conventional.ConventionalCommit, String)], String?)] = []
+  let entries : Array[
+    (
+      String,
+      String,
+      @semver.Version,
+      @semver.BumpType,
+      Array[(@conventional.ConventionalCommit, String)],
+      String?,
+    ),
+  ] = []
 
   for pkg in config.packages {
     if verbose {
@@ -1478,11 +1944,18 @@ async fn resolve_version_plan(
     let commits = try get_package_commits(repo, pkg.path) catch {
       e => {
         if verbose {
-          println("  Warning: Could not get commits for " + pkg.name + ": " + e.to_string())
+          println(
+            "  Warning: Could not get commits for " +
+            pkg.name +
+            ": " +
+            e.to_string(),
+          )
         }
         continue
       }
-    } noraise { c => c }
+    } noraise {
+      c => c
+    }
 
     if commits.is_empty() && not(bump_all) {
       if verbose {
@@ -1494,11 +1967,12 @@ async fn resolve_version_plan(
     let bump_type = match effective_bump {
       Some(fb) => fb
       None =>
-        match @semver.determine_bump_with_custom(
-          commits.map(fn(c) { c.0 }),
-          config.custom_major_increment_regex,
-          config.custom_minor_increment_regex,
-        ) {
+        match
+          @semver.determine_bump_with_custom(
+            commits.map(fn(c) { c.0 }),
+            config.custom_major_increment_regex,
+            config.custom_minor_increment_regex,
+          ) {
           Some(t) => t
           None => {
             if verbose {
@@ -1509,7 +1983,16 @@ async fn resolve_version_plan(
         }
     }
 
-    entries.push((pkg.name, pkg.path, current_version, bump_type, commits, pkg.version_group))
+    entries.push(
+      (
+        pkg.name,
+        pkg.path,
+        current_version,
+        bump_type,
+        commits,
+        pkg.version_group,
+      ),
+    )
   }
 
   // Phase 2: Consolidate bump types by version_group
@@ -1546,21 +2029,20 @@ async fn resolve_version_plan(
     }
 
     let new_version = @semver.bump(old_version, final_bump)
-    plans.push(
-      PackageVersionPlan::{
-        name,
-        path,
-        old_version,
-        new_version,
-        bump_type: final_bump,
-        commits,
-      },
-    )
+    plans.push(PackageVersionPlan::{
+      name,
+      path,
+      old_version,
+      new_version,
+      bump_type: final_bump,
+      commits,
+    })
   }
 
   plans
 }
 
+///|
 /// Package release info (for PR body generation)
 pub struct PackageReleaseInfo {
   name : String
@@ -1569,16 +2051,23 @@ pub struct PackageReleaseInfo {
   commits : Array[(@conventional.ConventionalCommit, String)]
 }
 
+///|
 /// Collect package release info for monorepo PR body
 /// Delegates to resolve_version_plan for the shared 3-phase pipeline
 pub async fn collect_package_release_info(
   config : @config.Config,
   repo : @git.Repository,
   verbose : Bool,
-  forced_bump~ : @semver.BumpType? = None,
-  bump_all~ : Bool = false
+  forced_bump? : @semver.BumpType? = None,
+  bump_all? : Bool = false,
 ) -> Array[PackageReleaseInfo] raise WorkflowError {
-  let plans = resolve_version_plan(config, repo, forced_bump, verbose, bump_all~)
+  let plans = resolve_version_plan(
+    config,
+    repo,
+    forced_bump,
+    verbose,
+    bump_all~,
+  )
 
   plans.map(fn(plan) {
     PackageReleaseInfo::{
@@ -1590,6 +2079,7 @@ pub async fn collect_package_release_info(
   })
 }
 
+///|
 /// Monorepo: update multiple packages
 /// Delegates to resolve_version_plan for the shared 3-phase pipeline,
 /// then applies file updates based on the resolved plan.
@@ -1598,8 +2088,8 @@ pub async fn run_update_packages(
   repo : @git.Repository,
   dry_run : Bool,
   verbose : Bool,
-  forced_bump~ : @semver.BumpType? = None,
-  bump_all~ : Bool = false
+  forced_bump? : @semver.BumpType? = None,
+  bump_all? : Bool = false,
 ) -> Unit raise WorkflowError {
   if config.packages.is_empty() {
     if verbose {
@@ -1612,7 +2102,13 @@ pub async fn run_update_packages(
     println("Updating \{config.packages.length()} packages...")
   }
 
-  let plans = resolve_version_plan(config, repo, forced_bump, verbose, bump_all~)
+  let plans = resolve_version_plan(
+    config,
+    repo,
+    forced_bump,
+    verbose,
+    bump_all~,
+  )
 
   if plans.is_empty() {
     if verbose {
@@ -1645,10 +2141,14 @@ pub async fn run_update_packages(
     }
 
     if dry_run {
-      println("  [dry-run] Would update \{plan.name}\{group_info}: \{plan.old_version.to_string()} -> \{plan.new_version.to_string()}")
+      println(
+        "  [dry-run] Would update \{plan.name}\{group_info}: \{plan.old_version.to_string()} -> \{plan.new_version.to_string()}",
+      )
       match pkg.publish_target() {
-        MooncakesOnly => println("  [dry-run] Would update " + pkg_path + "moon.mod.json")
-        NpmOnly(_) => println("  [dry-run] Would update " + pkg_path + "package.json")
+        MooncakesOnly =>
+          println("  [dry-run] Would update " + pkg_path + "moon.mod.json")
+        NpmOnly(_) =>
+          println("  [dry-run] Would update " + pkg_path + "package.json")
         Both(_) => {
           println("  [dry-run] Would update " + pkg_path + "moon.mod.json")
           println("  [dry-run] Would update " + pkg_path + "package.json")
@@ -1667,22 +2167,35 @@ pub async fn run_update_packages(
             println("  Warning: Could not read " + mmp)
             ""
           }
-        } noraise { c => c }
+        } noraise {
+          c => c
+        }
 
         if not(content.is_empty()) {
-          let updated_content = try @moon_mod.update_version(content, plan.new_version) catch {
+          let updated_content = try
+            @moon_mod.update_version(content, plan.new_version)
+          catch {
             e => {
-              println("  Warning: Could not update version in " + mmp + ": " + e.to_string())
+              println(
+                "  Warning: Could not update version in " +
+                mmp +
+                ": " +
+                e.to_string(),
+              )
               continue
             }
-          } noraise { c => c }
+          } noraise {
+            c => c
+          }
 
           try @fs.write_file(mmp, updated_content, create=0o644) catch {
             _ => {
               println("  Warning: Could not write " + mmp)
               continue
             }
-          } noraise { _ => () }
+          } noraise {
+            _ => ()
+          }
         }
       }
       _ => ()
@@ -1692,42 +2205,64 @@ pub async fn run_update_packages(
     match pkg.publish_target() {
       NpmOnly(_) | Both(_) => {
         let pkg_json_path = pkg_path + "package.json"
-        match update_package_json_version(plan.new_version, path=pkg_json_path) {
+        match
+          update_package_json_version(plan.new_version, path=pkg_json_path) {
           Some(updated_pkg_json) => {
-            try @fs.write_file(pkg_json_path, updated_pkg_json, create=0o644) catch {
-              _ => {
-                println("  Warning: Could not write " + pkg_json_path)
-              }
-            } noraise { _ => () }
+            try
+              @fs.write_file(pkg_json_path, updated_pkg_json, create=0o644)
+            catch {
+              _ => println("  Warning: Could not write " + pkg_json_path)
+            } noraise {
+              _ => ()
+            }
             println("  Updated " + pkg_json_path)
           }
           None =>
-            println("  Warning: npm_publish enabled for " + plan.name + " but " + pkg_json_path + " not found")
+            println(
+              "  Warning: npm_publish enabled for " +
+              plan.name +
+              " but " +
+              pkg_json_path +
+              " not found",
+            )
         }
       }
       _ => ()
     }
 
-    println("  Updated \{plan.name}\{group_info}: \{plan.old_version.to_string()} -> \{plan.new_version.to_string()}")
+    println(
+      "  Updated \{plan.name}\{group_info}: \{plan.old_version.to_string()} -> \{plan.new_version.to_string()}",
+    )
   }
 }
 
+///|
 /// Get commits for a package (with path filter)
 async fn get_package_commits(
   repo : @git.Repository,
-  path : String
+  path : String,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
   // Get latest tag with try-catch-noraise (failure is expected if no tags exist yet)
-  let tag_result = try @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"]) catch {
+  let tag_result = try
+    @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
+  catch {
     e => @executor.CommandResult::failed("no tags found: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let log_cmd = if tag_result.is_success() {
     let tag = tag_result.stdout_trimmed()
     if tag.is_empty() {
       ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", "--", path]
     } else {
-      ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", tag + "..HEAD", "--", path]
+      [
+        "log",
+        "--pretty=format:%H%x1E%s%x1E%an%x1E%aI",
+        tag + "..HEAD",
+        "--",
+        path,
+      ]
     }
   } else {
     ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", "--", path]
@@ -1736,12 +2271,15 @@ async fn get_package_commits(
   // Get log with try-catch-noraise pattern
   let log_result = try @executor.run_git(repo, log_cmd) catch {
     e => raise GitError("Failed to get commits: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let git_commits = @git.parse_commit_log(log_result.stdout)
   @git.parse_conventional_commits(git_commits)
 }
 
+///|
 /// Monorepo: publish multiple packages
 // Suppress: WorkflowError declared for API consistency. Errors are handled internally
 // with warnings printed to stdout, allowing partial success in monorepo scenarios.
@@ -1749,7 +2287,7 @@ async fn get_package_commits(
 pub async fn run_publish_packages(
   config : @config.Config,
   dry_run : Bool,
-  verbose : Bool
+  verbose : Bool,
 ) -> Unit raise WorkflowError {
   if config.packages.is_empty() {
     if verbose {
@@ -1791,21 +2329,33 @@ pub async fn run_publish_packages(
       publish_cmd.push("--frozen")
     }
     let timeout = config.moon_publish_timeout
-    let publish_result = try @executor.run_command_with_timeout(publish_cmd, timeout) catch {
+    let publish_result = try
+      @executor.run_command_with_timeout(publish_cmd, timeout)
+    catch {
       e => {
-        println("  Warning: Failed to publish " + pkg.name + ": " + e.to_string())
+        println(
+          "  Warning: Failed to publish " + pkg.name + ": " + e.to_string(),
+        )
         continue
       }
-    } noraise { r => r }
+    } noraise {
+      r => r
+    }
 
     match publish_result {
       None => {
-        println("  Warning: Publish timed out for " + pkg.name + " after \{timeout} seconds")
+        println(
+          "  Warning: Publish timed out for " +
+          pkg.name +
+          " after \{timeout} seconds",
+        )
         continue
       }
       Some(result) =>
         if not(result.is_success()) {
-          println("  Warning: Failed to publish " + pkg.name + ": " + result.stderr)
+          println(
+            "  Warning: Failed to publish " + pkg.name + ": " + result.stderr,
+          )
           continue
         }
     }
@@ -1814,6 +2364,7 @@ pub async fn run_publish_packages(
   }
 }
 
+///|
 /// Monorepo: npm publish for packages with npm_publish enabled
 // Suppress: WorkflowError declared for API consistency. Errors are handled internally
 // with warnings printed to stdout, allowing partial success in monorepo scenarios.
@@ -1821,7 +2372,7 @@ pub async fn run_publish_packages(
 pub async fn run_npm_publish_packages(
   config : @config.Config,
   dry_run : Bool,
-  verbose : Bool
+  verbose : Bool,
 ) -> Unit raise WorkflowError {
   if config.packages.is_empty() {
     return
@@ -1870,21 +2421,36 @@ pub async fn run_npm_publish_packages(
 
     // Use npm_publish_timeout from config, run in package directory
     let timeout = config.npm_publish_timeout
-    let publish_result = try @executor.run_command_in_dir_with_timeout(publish_cmd, pkg.path, timeout) catch {
+    let publish_result = try
+      @executor.run_command_in_dir_with_timeout(publish_cmd, pkg.path, timeout)
+    catch {
       e => {
-        println("  Warning: Failed to npm publish " + pkg.name + ": " + e.to_string())
+        println(
+          "  Warning: Failed to npm publish " + pkg.name + ": " + e.to_string(),
+        )
         continue
       }
-    } noraise { r => r }
+    } noraise {
+      r => r
+    }
 
     match publish_result {
       None => {
-        println("  Warning: npm publish timed out for " + pkg.name + " after \{timeout} seconds")
+        println(
+          "  Warning: npm publish timed out for " +
+          pkg.name +
+          " after \{timeout} seconds",
+        )
         continue
       }
       Some(result) =>
         if not(result.is_success()) {
-          println("  Warning: Failed to npm publish " + pkg.name + ": " + result.stderr)
+          println(
+            "  Warning: Failed to npm publish " +
+            pkg.name +
+            ": " +
+            result.stderr,
+          )
           continue
         }
     }
@@ -1893,16 +2459,18 @@ pub async fn run_npm_publish_packages(
   }
 }
 
+///|
 /// Get version from registry
 // Suppress: WorkflowError declared for API consistency with other workflow functions.
 // Errors are caught internally and returned as None (package not found).
 #warnings("-unused_error_type")
 pub async fn get_registry_version(
-  package_name : String
+  package_name : String,
 ) -> @semver.Version? raise WorkflowError {
   // Get package info with try? + unwrap_or pattern
-  let result = (try? @executor.run_command(["moon", "info", package_name]))
-    .unwrap_or(@executor.CommandResult::failed("moon info command failed"))
+  let result = (try? @executor.run_command(["moon", "info", package_name])).unwrap_or(
+    @executor.CommandResult::failed("moon info command failed"),
+  )
 
   if not(result.is_success()) {
     return None
@@ -1933,11 +2501,12 @@ pub async fn get_registry_version(
   None
 }
 
+///|
 /// Compare registry and local version to check if release is needed
 pub async fn should_release(
   local_version : @semver.Version,
   package_name : String,
-  verbose : Bool
+  verbose : Bool,
 ) -> Bool raise WorkflowError {
   let registry_version = get_registry_version(package_name)
 
@@ -1952,12 +2521,16 @@ pub async fn should_release(
       let cmp = local_version.compare(reg_ver)
       if cmp > 0 {
         if verbose {
-          println("  Local version (\{local_version.to_string()}) > registry version (\{reg_ver.to_string()})")
+          println(
+            "  Local version (\{local_version.to_string()}) > registry version (\{reg_ver.to_string()})",
+          )
         }
         true
       } else {
         if verbose {
-          println("  Local version (\{local_version.to_string()}) <= registry version (\{reg_ver.to_string()}). Skipping.")
+          println(
+            "  Local version (\{local_version.to_string()}) <= registry version (\{reg_ver.to_string()}). Skipping.",
+          )
         }
         false
       }
@@ -1965,10 +2538,11 @@ pub async fn should_release(
   }
 }
 
+///|
 /// Run semver check
 pub async fn run_semver_check(
   repo : @git.Repository,
-  verbose : Bool
+  verbose : Bool,
 ) -> @semver_check.CheckResult raise WorkflowError {
   if verbose {
     println("Running semver check...")
@@ -1976,12 +2550,16 @@ pub async fn run_semver_check(
 
   // 1. Get latest tag
   // Get tag with try-catch-noraise pattern
-  let tag_result = try @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"]) catch {
+  let tag_result = try
+    @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
+  catch {
     _ =>
       raise GitError(
         "No tags found. Cannot perform semver check without a previous version.",
       )
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   if not(tag_result.is_success()) {
     raise GitError(
@@ -1995,9 +2573,13 @@ pub async fn run_semver_check(
   }
 
   // 2. Save current branch name with try-catch-noraise pattern
-  let branch_result = try @executor.run_git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]) catch {
+  let branch_result = try
+    @executor.run_git(repo, ["rev-parse", "--abbrev-ref", "HEAD"])
+  catch {
     e => raise GitError("Failed to get current branch: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
   if not(branch_result.is_success()) {
     raise GitError("Failed to get current branch: " + branch_result.stderr)
   }
@@ -2010,22 +2592,23 @@ pub async fn run_semver_check(
   // Run moon doc with try-catch-noraise pattern
   let doc_result = try @executor.run_command(["moon", "doc"]) catch {
     e => raise ExternalCommandError("Failed to run moon doc: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
   if not(doc_result.is_success()) {
     raise ExternalCommandError("Failed to generate docs: " + doc_result.stderr)
   }
 
   // 4. Load current package_data.json with try-catch-noraise pattern
-  let current_apis = try load_package_apis("target/doc") catch {
+  let current_apis = try load_package_apis("_build/doc") catch {
     e => raise WorkflowError("Failed to load current API: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // 5. Checkout tag and get old API (ensure safe branch restoration)
   let old_apis = get_old_apis_with_safe_checkout(
-    repo,
-    latest_tag,
-    current_branch,
-    verbose,
+    repo, latest_tag, current_branch, verbose,
   )
 
   // 6. Compare APIs
@@ -2042,12 +2625,13 @@ pub async fn run_semver_check(
   result
 }
 
+///|
 /// Checkout tag and get old API, ensuring restoration to original branch
 async fn get_old_apis_with_safe_checkout(
   repo : @git.Repository,
   tag : String,
   original_branch : String,
-  verbose : Bool
+  verbose : Bool,
 ) -> @semver_check.PackageApi raise WorkflowError {
   // Checkout tag with try-catch-noraise pattern
   if verbose {
@@ -2055,7 +2639,9 @@ async fn get_old_apis_with_safe_checkout(
   }
   let checkout_result = try @executor.run_git(repo, ["checkout", tag]) catch {
     e => raise GitError("Failed to checkout tag: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
   if not(checkout_result.is_success()) {
     raise GitError("Failed to checkout tag: " + checkout_result.stderr)
   }
@@ -2069,24 +2655,35 @@ async fn get_old_apis_with_safe_checkout(
   let old_doc_result = try @executor.run_command(["moon", "doc"]) catch {
     e => {
       let _ = try? restore_branch(repo, original_branch, verbose)
-      raise ExternalCommandError("Failed to run moon doc on tag: " + e.to_string())
+      raise ExternalCommandError(
+        "Failed to run moon doc on tag: " + e.to_string(),
+      )
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // Load package_data.json with try-catch-noraise pattern
   let old_apis = if old_doc_result.is_success() {
-    try load_package_apis("target/doc") catch {
+    try load_package_apis("_build/doc") catch {
       e => {
         if verbose {
-          println("[WARN] Failed to load API from previous version: " + e.to_string())
+          println(
+            "[WARN] Failed to load API from previous version: " + e.to_string(),
+          )
           println("[WARN] Continuing with empty API baseline...")
         }
         @semver_check.PackageApi::empty()
       }
-    } noraise { r => r }
+    } noraise {
+      r => r
+    }
   } else {
     if verbose {
-      println("[WARN] Failed to generate docs for previous version: " + old_doc_result.stderr)
+      println(
+        "[WARN] Failed to generate docs for previous version: " +
+        old_doc_result.stderr,
+      )
       println("[WARN] Continuing with empty API baseline...")
     }
     @semver_check.PackageApi::empty()
@@ -2098,11 +2695,12 @@ async fn get_old_apis_with_safe_checkout(
   old_apis
 }
 
+///|
 /// Return to original branch (errors are handled as warnings)
 async fn restore_branch(
   repo : @git.Repository,
   branch : String,
-  verbose : Bool
+  verbose : Bool,
 ) -> Unit {
   if verbose {
     println("  Restoring original branch...")
@@ -2114,43 +2712,59 @@ async fn restore_branch(
       println("You may need to manually checkout: git checkout " + branch)
       return
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
   if not(result.is_success()) {
     println("Warning: Failed to restore branch: " + result.stderr)
     println("You may need to manually checkout: git checkout " + branch)
   }
 }
 
-/// Load package_data.json from target/doc
+///|
+/// Load package_data.json from _build/doc
 /// Uses @fs.walk for cross-platform compatibility (no external find command)
-async fn load_package_apis(doc_dir : String) -> @semver_check.PackageApi raise WorkflowError {
+async fn load_package_apis(
+  doc_dir : String,
+) -> @semver_check.PackageApi raise WorkflowError {
   let all_apis : Array[@semver_check.PackageApi] = []
 
   // Walk directory tree to find all package_data.json files with try-catch-noraise pattern
-  try @fs.walk(
-    doc_dir,
-    async fn(dir_path, files) {
-      for file in files {
-        if file == "package_data.json" {
-          let file_path = dir_path + "/" + file
-          // Read file with try-catch-noraise pattern
-          let content = try @fs.read_file(file_path).text() catch {
-            _ => continue
-          } noraise { c => c }
+  try
+    @fs.walk(
+      doc_dir,
+      async fn(dir_path, files) {
+        for file in files {
+          if file == "package_data.json" {
+            let file_path = dir_path + "/" + file
+            // Read file with try-catch-noraise pattern
+            let content = try @fs.read_file(file_path).text() catch {
+              _ => continue
+            } noraise {
+              c => c
+            }
 
-          // Parse with try-catch-noraise pattern
-          let api = try @semver_check.parse_package_data(content) catch {
-            _ => continue
-          } noraise { a => a }
+            // Parse with try-catch-noraise pattern
+            let api = try @semver_check.parse_package_data(content) catch {
+              _ => continue
+            } noraise {
+              a => a
+            }
 
-          all_apis.push(api)
+            all_apis.push(api)
+          }
         }
-      }
-    },
-    max_concurrency=1, // Sequential for deterministic results
-  ) catch {
-    e => raise ExternalCommandError("Failed to scan for package_data.json files: " + e.to_string())
-  } noraise { _ => () }
+      },
+      max_concurrency=1, // Sequential for deterministic results
+    )
+  catch {
+    e =>
+      raise ExternalCommandError(
+        "Failed to scan for package_data.json files: " + e.to_string(),
+      )
+  } noraise {
+    _ => ()
+  }
 
   @semver_check.merge_package_apis(all_apis)
 }

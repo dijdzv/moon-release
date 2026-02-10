@@ -1,24 +1,31 @@
+///|
 /// Validated git branch name (git-check-ref-format compliant)
 /// Constructed only via BranchName::new() which performs validation
 pub(all) struct BranchName(String) derive(Show, Eq)
 
+///|
 /// Validated git tag name (git-check-ref-format compliant)
 pub(all) struct TagName(String) derive(Show, Eq)
 
+///|
 /// Validated commit hash (hex characters, 7-40 chars)
 pub(all) struct CommitHash(String) derive(Show, Eq)
 
+///|
 /// Validated package path (no directory traversal, relative only)
 pub(all) struct PackagePath(String) derive(Show, Eq)
 
+///|
 /// Validated GitHub repository slug ("owner/repo" format)
 pub(all) struct RepositorySlug(String) derive(Show, Eq)
 
+///|
 /// Validation error
 pub suberror ValidationError {
   ValidationError(String)
 }
 
+///|
 /// Convert ValidationError to string
 pub fn ValidationError::to_string(self : ValidationError) -> String {
   match self {
@@ -30,14 +37,17 @@ pub fn ValidationError::to_string(self : ValidationError) -> String {
 // BranchName
 // ============================================================================
 
+///|
 /// Create a validated BranchName
 pub fn BranchName::new(s : String) -> BranchName raise ValidationError {
   match validate_git_ref_name_impl(s) {
-    Some(reason) => raise ValidationError("Invalid branch name '\{s}': \{reason}")
+    Some(reason) =>
+      raise ValidationError("Invalid branch name '\{s}': \{reason}")
     None => BranchName(s)
   }
 }
 
+///|
 /// Get the underlying string value
 pub fn BranchName::value(self : BranchName) -> String {
   self.0
@@ -47,6 +57,7 @@ pub fn BranchName::value(self : BranchName) -> String {
 // TagName
 // ============================================================================
 
+///|
 /// Create a validated TagName
 pub fn TagName::new(s : String) -> TagName raise ValidationError {
   match validate_git_ref_name_impl(s) {
@@ -55,6 +66,7 @@ pub fn TagName::new(s : String) -> TagName raise ValidationError {
   }
 }
 
+///|
 /// Get the underlying string value
 pub fn TagName::value(self : TagName) -> String {
   self.0
@@ -64,6 +76,7 @@ pub fn TagName::value(self : TagName) -> String {
 // CommitHash
 // ============================================================================
 
+///|
 /// Create a validated CommitHash
 pub fn CommitHash::new(s : String) -> CommitHash raise ValidationError {
   if s.is_empty() {
@@ -73,29 +86,29 @@ pub fn CommitHash::new(s : String) -> CommitHash raise ValidationError {
   let len = chars.length()
   // Allow 7 (short) to 40 (full) character hashes
   if len < 7 || len > 40 {
-    raise ValidationError(
-      "commit hash must be 7-40 characters, got \{len}",
-    )
+    raise ValidationError("commit hash must be 7-40 characters, got \{len}")
   }
   // Must be hex characters only
   for i = 0; i < len; i = i + 1 {
     let c = chars[i]
     if not(
-      (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'),
-    ) {
-      raise ValidationError(
-        "commit hash contains non-hex character '\{c}'",
-      )
+        (c >= '0' && c <= '9') ||
+        (c >= 'a' && c <= 'f') ||
+        (c >= 'A' && c <= 'F'),
+      ) {
+      raise ValidationError("commit hash contains non-hex character '\{c}'")
     }
   }
   CommitHash(s)
 }
 
+///|
 /// Get the underlying string value
 pub fn CommitHash::value(self : CommitHash) -> String {
   self.0
 }
 
+///|
 /// Get the short (7-char) version of the hash
 pub fn CommitHash::short(self : CommitHash) -> String {
   let s = self.0
@@ -114,6 +127,7 @@ pub fn CommitHash::short(self : CommitHash) -> String {
 // PackagePath
 // ============================================================================
 
+///|
 /// Create a validated PackagePath
 pub fn PackagePath::new(s : String) -> PackagePath raise ValidationError {
   match validate_path_full(s, allow_absolute=false) {
@@ -126,16 +140,17 @@ pub fn PackagePath::new(s : String) -> PackagePath raise ValidationError {
       raise ValidationError(
         "package path '\{s}' is absolute (only relative paths allowed)",
       )
-    NullByte =>
-      raise ValidationError("package path contains NUL byte")
+    NullByte => raise ValidationError("package path contains NUL byte")
   }
 }
 
+///|
 /// Get the underlying string value
 pub fn PackagePath::value(self : PackagePath) -> String {
   self.0
 }
 
+///|
 /// Get the path prefix for file operations (adds trailing "/" unless "." or empty)
 pub fn PackagePath::prefix(self : PackagePath) -> String {
   let s = self.0
@@ -150,10 +165,11 @@ pub fn PackagePath::prefix(self : PackagePath) -> String {
 // RepositorySlug
 // ============================================================================
 
+///|
 /// Create a validated RepositorySlug from "owner/repo" format
 pub fn RepositorySlug::new(
   owner : String,
-  repo : String
+  repo : String,
 ) -> RepositorySlug raise ValidationError {
   if not(validate_repo_component_impl(owner)) {
     raise ValidationError(
@@ -168,22 +184,31 @@ pub fn RepositorySlug::new(
   RepositorySlug(owner + "/" + repo)
 }
 
+///|
 /// Get the underlying string value
 pub fn RepositorySlug::value(self : RepositorySlug) -> String {
   self.0
 }
 
+///|
 /// Get the owner part
 pub fn RepositorySlug::owner(self : RepositorySlug) -> String {
   let s = self.0
-  let parts : Array[String] = s.split("/").map(fn(sv) { sv.to_string() }).collect()
+  let parts : Array[String] = s
+    .split("/")
+    .map(fn(sv) { sv.to_string() })
+    .collect()
   parts[0]
 }
 
+///|
 /// Get the repo part
 pub fn RepositorySlug::repo(self : RepositorySlug) -> String {
   let s = self.0
-  let parts : Array[String] = s.split("/").map(fn(sv) { sv.to_string() }).collect()
+  let parts : Array[String] = s
+    .split("/")
+    .map(fn(sv) { sv.to_string() })
+    .collect()
   parts[1]
 }
 
@@ -191,6 +216,7 @@ pub fn RepositorySlug::repo(self : RepositorySlug) -> String {
 // Shared validation logic
 // ============================================================================
 
+///|
 /// Validate git ref name (branch/tag) according to git-check-ref-format rules
 /// Returns None if valid, Some(reason) if invalid
 pub fn validate_git_ref_name_impl(name : String) -> String? {
@@ -231,7 +257,13 @@ pub fn validate_git_ref_name_impl(name : String) -> String? {
     }
 
     // Invalid special characters: ~ ^ : \ ? * [
-    if c == '~' || c == '^' || c == ':' || c == '\\' || c == '?' || c == '*' || c == '[' {
+    if c == '~' ||
+      c == '^' ||
+      c == ':' ||
+      c == '\\' ||
+      c == '?' ||
+      c == '*' ||
+      c == '[' {
       return Some("ref name cannot contain special characters (~^:\\?*[)")
     }
 
@@ -254,6 +286,7 @@ pub fn validate_git_ref_name_impl(name : String) -> String? {
   None
 }
 
+///|
 /// Validate a GitHub repository component (owner or repo name)
 pub fn validate_repo_component_impl(s : String) -> Bool {
   if s.is_empty() {
@@ -275,8 +308,13 @@ pub fn validate_repo_component_impl(s : String) -> Bool {
   for i = 0; i < chars.length(); i = i + 1 {
     let c = chars[i]
     if not(
-      (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.',
-    ) {
+        (c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') ||
+        c == '-' ||
+        c == '_' ||
+        c == '.',
+      ) {
       return false
     }
   }

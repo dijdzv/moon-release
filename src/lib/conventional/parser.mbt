@@ -1,6 +1,8 @@
+///|
 /// Length of "BREAKING CHANGE:" and "BREAKING-CHANGE:" (both 16 characters)
 let breaking_change_prefix_len : Int = 16
 
+///|
 /// Parse commit message and return ConventionalCommit
 pub fn parse(message : String) -> ConventionalCommit? {
   let lines : Array[String] = message
@@ -24,22 +26,14 @@ pub fn parse(message : String) -> ConventionalCommit? {
 
   // Set breaking = true if BREAKING CHANGE footer exists
   let breaking = breaking_mark ||
-    footers.iter().any(fn(f) {
-      f.0 == "BREAKING CHANGE" || f.0 == "BREAKING-CHANGE"
-    })
+    footers
+    .iter()
+    .any(fn(f) { f.0 == "BREAKING CHANGE" || f.0 == "BREAKING-CHANGE" })
 
-  Some(
-    ConventionalCommit::{
-      typ,
-      scope,
-      description,
-      body,
-      breaking,
-      footers,
-    },
-  )
+  Some(ConventionalCommit::{ typ, scope, description, body, breaking, footers })
 }
 
+///|
 /// Parse header line
 fn parse_header(header : String) -> (CommitType, String?, Bool, String)? {
   // Find position of ": "
@@ -86,6 +80,7 @@ fn parse_header(header : String) -> (CommitType, String?, Bool, String)? {
   Some((typ, scope, breaking, description))
 }
 
+///|
 /// Convert type string to CommitType
 fn parse_type(s : String) -> CommitType? {
   if s.is_empty() {
@@ -107,6 +102,7 @@ fn parse_type(s : String) -> CommitType? {
   }
 }
 
+///|
 /// Get substring (safe version, char-index based)
 fn substr(s : String, start : Int, end : Int) -> String {
   let chars : Array[Char] = s.to_array()
@@ -121,6 +117,7 @@ fn substr(s : String, start : Int, end : Int) -> String {
   result.to_string()
 }
 
+///|
 /// Find position of substring (char-index based)
 fn find_substring(haystack : String, needle : String) -> Int? {
   let h_chars : Array[Char] = haystack.to_array()
@@ -145,9 +142,10 @@ fn find_substring(haystack : String, needle : String) -> Int? {
   None
 }
 
+///|
 /// Parse body and footers
 fn parse_body_and_footers(
-  lines : Array[String]
+  lines : Array[String],
 ) -> (String?, Array[(String, String)]) {
   if lines.length() <= 1 {
     return (None, [])
@@ -167,8 +165,8 @@ fn parse_body_and_footers(
   // Find footer start position by scanning backwards from the end
   // Look for the last block of consecutive footer lines preceded by an empty line
   let mut footer_start = -1
+  // Scan backwards to find the last footer line
   {
-    // Scan backwards to find the last footer line
     let mut last_footer = -1
     for i = rest.length() - 1; i >= 0; i = i - 1 {
       if rest[i].trim().is_empty() {
@@ -230,6 +228,7 @@ fn parse_body_and_footers(
   (body, footers)
 }
 
+///|
 /// Build body string from body lines
 fn build_body(lines : Array[String]) -> String? {
   if lines.is_empty() {
@@ -268,6 +267,7 @@ fn build_body(lines : Array[String]) -> String? {
   }
 }
 
+///|
 /// Check if line is a footer line
 fn is_footer_line(line : String) -> Bool {
   let trimmed = line.trim().to_string()
@@ -305,12 +305,15 @@ fn is_footer_line(line : String) -> Bool {
   false
 }
 
+///|
 /// Check if token is valid (alphanumeric and hyphens only)
 fn is_valid_token(token : String) -> Bool {
   if token.is_empty() {
     return false
   }
-  token.iter().all(fn(c) {
+  token
+  .iter()
+  .all(fn(c) {
     (c >= 'a' && c <= 'z') ||
     (c >= 'A' && c <= 'Z') ||
     (c >= '0' && c <= '9') ||
@@ -318,6 +321,7 @@ fn is_valid_token(token : String) -> Bool {
   })
 }
 
+///|
 /// Parse footer lines
 fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
   let footers : Array[(String, String)] = []
@@ -331,13 +335,17 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
 
     // "BREAKING CHANGE: value" format
     if trimmed.has_prefix("BREAKING CHANGE:") {
-      let value = substr(trimmed, breaking_change_prefix_len, trimmed.length()).trim().to_string()
+      let value = substr(trimmed, breaking_change_prefix_len, trimmed.length())
+        .trim()
+        .to_string()
       footers.push(("BREAKING CHANGE", value))
       continue
     }
 
     if trimmed.has_prefix("BREAKING-CHANGE:") {
-      let value = substr(trimmed, breaking_change_prefix_len, trimmed.length()).trim().to_string()
+      let value = substr(trimmed, breaking_change_prefix_len, trimmed.length())
+        .trim()
+        .to_string()
       footers.push(("BREAKING-CHANGE", value))
       continue
     }

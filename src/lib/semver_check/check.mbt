@@ -1,3 +1,4 @@
+///|
 /// Semver check result
 pub struct CheckResult {
   suggested_bump : @semver.BumpType?
@@ -5,11 +6,13 @@ pub struct CheckResult {
   messages : Array[String]
 } derive(Show)
 
+///|
 /// Check if result indicates success (no breaking changes)
 pub fn CheckResult::is_success(self : CheckResult) -> Bool {
   not(self.diff.has_breaking())
 }
 
+///|
 /// Create check result
 pub fn CheckResult::new(diff : ApiDiff) -> CheckResult {
   let messages : Array[String] = []
@@ -28,7 +31,9 @@ pub fn CheckResult::new(diff : ApiDiff) -> CheckResult {
     messages.push("BREAKING CHANGES detected:")
     for change in diff.changes {
       if change.kind == Breaking {
-        messages.push("  - [\{change.category}] \{change.name}: \{change.description}")
+        messages.push(
+          "  - [\{change.category}] \{change.name}: \{change.description}",
+        )
       }
     }
   }
@@ -37,7 +42,9 @@ pub fn CheckResult::new(diff : ApiDiff) -> CheckResult {
     messages.push("New additions:")
     for change in diff.changes {
       if change.kind == Addition {
-        messages.push("  + [\{change.category}] \{change.name}: \{change.description}")
+        messages.push(
+          "  + [\{change.category}] \{change.name}: \{change.description}",
+        )
       }
     }
   }
@@ -45,6 +52,7 @@ pub fn CheckResult::new(diff : ApiDiff) -> CheckResult {
   CheckResult::{ suggested_bump, diff, messages }
 }
 
+///|
 /// Convert result to display string
 pub fn CheckResult::format(self : CheckResult) -> String {
   let lines : Array[String] = []
@@ -75,10 +83,18 @@ pub fn CheckResult::format(self : CheckResult) -> String {
   if not(self.is_success()) {
     lines.push("")
     lines.push("WARNING: Breaking changes detected!")
-    lines.push("Consider bumping the major version or documenting the breaking changes.")
+    lines.push(
+      "Consider bumping the major version or documenting the breaking changes.",
+    )
   }
 
-  lines.iter().fold(init="", fn(acc, line) {
-    if acc.is_empty() { line } else { acc + "\n" + line }
+  lines
+  .iter()
+  .fold(init="", fn(acc, line) {
+    if acc.is_empty() {
+      line
+    } else {
+      acc + "\n" + line
+    }
   })
 }

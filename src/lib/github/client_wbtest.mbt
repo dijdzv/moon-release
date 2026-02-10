@@ -1,17 +1,22 @@
+///|
 test "client new" {
   let client = GitHubClient::new("owner", "repo")
   assert_eq(client.owner, "owner")
   assert_eq(client.repo, "repo")
 }
 
+///|
 test "repo string" {
   let client = GitHubClient::new("moonbitlang", "core")
   assert_eq(client.repo_string(), "moonbitlang/core")
 }
 
+///|
 test "create release command" {
   let client = GitHubClient::new("owner", "repo")
-  let cmd = client.create_release_command("v1.0.0", "Release 1.0.0", "Notes here")
+  let cmd = client.create_release_command(
+    "v1.0.0", "Release 1.0.0", "Notes here",
+  )
   assert_true(cmd.iter().any(fn(s) { s == "gh" }))
   assert_true(cmd.iter().any(fn(s) { s == "release" }))
   assert_true(cmd.iter().any(fn(s) { s == "create" }))
@@ -19,6 +24,7 @@ test "create release command" {
   assert_true(cmd.iter().any(fn(s) { s == "owner/repo" }))
 }
 
+///|
 test "create release command with draft" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.create_release_command(
@@ -30,6 +36,7 @@ test "create release command with draft" {
   assert_true(cmd.iter().any(fn(s) { s == "--draft" }))
 }
 
+///|
 test "create release command with prerelease" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.create_release_command(
@@ -41,6 +48,7 @@ test "create release command with prerelease" {
   assert_true(cmd.iter().any(fn(s) { s == "--prerelease" }))
 }
 
+///|
 test "create release command with latest true" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.create_release_command(
@@ -53,6 +61,7 @@ test "create release command with latest true" {
   assert_false(cmd.iter().any(fn(s) { s == "--latest=false" }))
 }
 
+///|
 test "create release command with latest false" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.create_release_command(
@@ -64,6 +73,7 @@ test "create release command with latest false" {
   assert_true(cmd.iter().any(fn(s) { s == "--latest=false" }))
 }
 
+///|
 test "get release command" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.get_release_command("v1.0.0")
@@ -72,6 +82,7 @@ test "get release command" {
   assert_true(cmd.iter().any(fn(s) { s == "--json" }))
 }
 
+///|
 test "get latest release command" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.get_latest_release_command()
@@ -80,13 +91,11 @@ test "get latest release command" {
   assert_true(cmd.iter().any(fn(s) { s == "1" }))
 }
 
+///|
 test "create pull request command" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.create_pull_request_command(
-    "Fix bug",
-    "Description",
-    "feature-branch",
-    "main",
+    "Fix bug", "Description", "feature-branch", "main",
   )
   assert_true(cmd.iter().any(fn(s) { s == "pr" }))
   assert_true(cmd.iter().any(fn(s) { s == "create" }))
@@ -95,6 +104,7 @@ test "create pull request command" {
   assert_true(cmd.iter().any(fn(s) { s == "main" }))
 }
 
+///|
 test "create pull request command with draft" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.create_pull_request_command(
@@ -107,6 +117,7 @@ test "create pull request command with draft" {
   assert_true(cmd.iter().any(fn(s) { s == "--draft" }))
 }
 
+///|
 test "get pull request command" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.get_pull_request_command(123U)
@@ -114,6 +125,7 @@ test "get pull request command" {
   assert_true(cmd.iter().any(fn(s) { s == "123" }))
 }
 
+///|
 test "list pull requests command" {
   let client = GitHubClient::new("owner", "repo")
   let cmd = client.list_pull_requests_command()
@@ -122,6 +134,7 @@ test "list pull requests command" {
   assert_true(cmd.iter().any(fn(s) { s == "open" }))
 }
 
+///|
 test "parse release json" {
   let json =
     #|{
@@ -131,11 +144,7 @@ test "parse release json" {
     #|  "isDraft": false,
     #|  "isPrerelease": false
     #|}
-  let release = try {
-    parse_release_json(json)
-  } catch {
-    _ => fail("Unexpected error")
-  }
+  let release = parse_release_json(json) catch { _ => fail("Unexpected error") }
   assert_eq(release.tag_name, "v1.0.0")
   assert_eq(release.name, "Release 1.0.0")
   assert_eq(release.body, "Release notes")
@@ -143,6 +152,7 @@ test "parse release json" {
   assert_eq(release.prerelease, false)
 }
 
+///|
 test "parse release json with draft" {
   let json =
     #|{
@@ -152,23 +162,18 @@ test "parse release json with draft" {
     #|  "isDraft": true,
     #|  "isPrerelease": false
     #|}
-  let release = try {
-    parse_release_json(json)
-  } catch {
-    _ => fail("Unexpected error")
-  }
+  let release = parse_release_json(json) catch { _ => fail("Unexpected error") }
   assert_eq(release.draft, true)
 }
 
+///|
 test "parse release list json" {
   let json =
     #|[
     #|  {"tagName": "v2.0.0", "name": "Release 2", "isDraft": false, "isPrerelease": false},
     #|  {"tagName": "v1.0.0", "name": "Release 1", "isDraft": false, "isPrerelease": true}
     #|]
-  let releases = try {
-    parse_release_list_json(json)
-  } catch {
+  let releases = parse_release_list_json(json) catch {
     _ => fail("Unexpected error")
   }
   assert_eq(releases.length(), 2)
@@ -177,6 +182,7 @@ test "parse release list json" {
   assert_eq(releases[1].prerelease, true)
 }
 
+///|
 test "parse pull request json" {
   let json =
     #|{
@@ -186,11 +192,7 @@ test "parse pull request json" {
     #|  "headRefName": "feature-branch",
     #|  "baseRefName": "main"
     #|}
-  let pr = try {
-    parse_pull_request_json(json)
-  } catch {
-    _ => fail("Unexpected error")
-  }
+  let pr = parse_pull_request_json(json) catch { _ => fail("Unexpected error") }
   assert_eq(pr.number, 42U)
   assert_eq(pr.title, "Add feature")
   assert_eq(pr.body, "This PR adds a feature")
@@ -198,15 +200,14 @@ test "parse pull request json" {
   assert_eq(pr.base, "main")
 }
 
+///|
 test "parse pull request list json" {
   let json =
     #|[
     #|  {"number": 10, "title": "PR 10", "headRefName": "branch-10", "baseRefName": "main"},
     #|  {"number": 9, "title": "PR 9", "headRefName": "branch-9", "baseRefName": "develop"}
     #|]
-  let prs = try {
-    parse_pull_request_list_json(json)
-  } catch {
+  let prs = parse_pull_request_list_json(json) catch {
     _ => fail("Unexpected error")
   }
   assert_eq(prs.length(), 2)
@@ -215,6 +216,7 @@ test "parse pull request list json" {
   assert_eq(prs[1].base, "develop")
 }
 
+///|
 test "parse invalid release json" {
   let json = "not json"
   try {
@@ -226,6 +228,7 @@ test "parse invalid release json" {
   }
 }
 
+///|
 test "parse invalid pr json" {
   let json = "[]"
   try {
@@ -237,6 +240,7 @@ test "parse invalid pr json" {
   }
 }
 
+///|
 test "client new - rejects empty owner" {
   try {
     let _ = GitHubClient::new("", "repo")
@@ -247,6 +251,7 @@ test "client new - rejects empty owner" {
   }
 }
 
+///|
 test "client new - rejects empty repo" {
   try {
     let _ = GitHubClient::new("owner", "")
@@ -257,6 +262,7 @@ test "client new - rejects empty repo" {
   }
 }
 
+///|
 test "client new - rejects owner with slash" {
   try {
     let _ = GitHubClient::new("owner/evil", "repo")
@@ -267,6 +273,7 @@ test "client new - rejects owner with slash" {
   }
 }
 
+///|
 test "client new - rejects repo with space" {
   try {
     let _ = GitHubClient::new("owner", "my repo")
@@ -277,6 +284,7 @@ test "client new - rejects repo with space" {
   }
 }
 
+///|
 test "parse release json - missing tagName raises error" {
   let json =
     #|{
@@ -294,6 +302,7 @@ test "parse release json - missing tagName raises error" {
   }
 }
 
+///|
 test "parse release json - null tagName raises error" {
   let json =
     #|{
@@ -314,10 +323,17 @@ test "parse release json - null tagName raises error" {
 
 // create_pull_request_command with labels
 
+///|
 test "create_pull_request_command - with labels" {
-  let client = try { GitHubClient::new("owner", "repo") } catch { _ => fail("Unexpected error") }
+  let client = GitHubClient::new("owner", "repo") catch {
+    _ => fail("Unexpected error")
+  }
   let cmd = client.create_pull_request_command(
-    "title", "body", "head", "base", labels=["release", "automated"],
+    "title",
+    "body",
+    "head",
+    "base",
+    labels=["release", "automated"],
   )
   let mut label_count = 0
   for i = 0; i < cmd.length(); i = i + 1 {
@@ -342,20 +358,27 @@ test "create_pull_request_command - with labels" {
 
 // parse list JSON with empty arrays
 
+///|
 test "parse_pull_request_list_json - empty array" {
   let json = "[]"
-  let result = try { parse_pull_request_list_json(json) } catch { _ => fail("Unexpected error") }
+  let result = parse_pull_request_list_json(json) catch {
+    _ => fail("Unexpected error")
+  }
   assert_eq(result.length(), 0)
 }
 
+///|
 test "parse_release_list_json - empty array" {
   let json = "[]"
-  let result = try { parse_release_list_json(json) } catch { _ => fail("Unexpected error") }
+  let result = parse_release_list_json(json) catch {
+    _ => fail("Unexpected error")
+  }
   assert_eq(result.length(), 0)
 }
 
 // PR number boundary tests
 
+///|
 test "parse_pull_request_json - negative number treated as 0" {
   let json =
     #|{
@@ -364,10 +387,11 @@ test "parse_pull_request_json - negative number treated as 0" {
     #|  "headRefName": "branch",
     #|  "baseRefName": "main"
     #|}
-  let pr = try { parse_pull_request_json(json) } catch { _ => fail("Unexpected error") }
+  let pr = parse_pull_request_json(json) catch { _ => fail("Unexpected error") }
   assert_eq(pr.number, 0U)
 }
 
+///|
 test "parse_pull_request_json - missing number treated as 0" {
   let json =
     #|{
@@ -375,12 +399,13 @@ test "parse_pull_request_json - missing number treated as 0" {
     #|  "headRefName": "branch",
     #|  "baseRefName": "main"
     #|}
-  let pr = try { parse_pull_request_json(json) } catch { _ => fail("Unexpected error") }
+  let pr = parse_pull_request_json(json) catch { _ => fail("Unexpected error") }
   assert_eq(pr.number, 0U)
 }
 
 // parse_release_list_json - non-object elements are skipped
 
+///|
 test "parse_release_list_json - skips non-object elements" {
   let json =
     #|[
@@ -389,7 +414,9 @@ test "parse_release_list_json - skips non-object elements" {
     #|  42,
     #|  null
     #|]
-  let releases = try { parse_release_list_json(json) } catch { _ => fail("Unexpected error") }
+  let releases = parse_release_list_json(json) catch {
+    _ => fail("Unexpected error")
+  }
   assert_eq(releases.length(), 1)
   assert_eq(releases[0].tag_name, "v1.0.0")
 }

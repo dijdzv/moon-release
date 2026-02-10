@@ -17,79 +17,13 @@ jobs:
       - name: Setup MoonBit
         uses: hustcer/setup-moonbit@v1
 
-      - name: Fetch dependencies and trigger source download
-        run: |
-          moon update
-          # Try to build to trigger source download, expect it to fail
-          moon build --target native 2>&1 || true
-
-      - name: Find and patch moonbitlang/async (temporary fix for issue #288)
-        shell: pwsh
-        run: |
-          Write-Host "=== Searching for thread_pool.c ==="
-
-          # Search everywhere
-          $searchPaths = @(".", "$env:USERPROFILE\.moon")
-          foreach ($path in $searchPaths) {
-            Write-Host "Searching in: $path"
-            $files = Get-ChildItem -Path $path -Recurse -Filter "thread_pool.c" -ErrorAction SilentlyContinue
-            if ($files) {
-              foreach ($f in $files) {
-                Write-Host "  Found: $($f.FullName)"
-              }
-            }
-          }
-
-          # Find the async package's thread_pool.c
-          $file = Get-ChildItem -Path "." -Recurse -Filter "thread_pool.c" -ErrorAction SilentlyContinue |
-                  Where-Object { $_.FullName -like "*async*event_loop*" } |
-                  Select-Object -First 1
-
-          if (-not $file) {
-            $file = Get-ChildItem -Path "$env:USERPROFILE\.moon" -Recurse -Filter "thread_pool.c" -ErrorAction SilentlyContinue |
-                    Where-Object { $_.FullName -like "*async*event_loop*" } |
-                    Select-Object -First 1
-          }
-
-          if (-not $file) {
-            Write-Host "ERROR: thread_pool.c not found!"
-            Write-Host "=== Directory structure ==="
-            Get-ChildItem -Path "." -Recurse -Directory -Depth 4 | Where-Object { $_.Name -eq "async" -or $_.Name -eq "mooncakes" -or $_.Name -eq "moonbitlang" }
-            exit 1
-          }
-
-          Write-Host "`n=== Patching: $($file.FullName) ==="
-
-          # Show before
-          $lines = Get-Content $file.FullName
-          Write-Host "Line 1655 before: $($lines[1654])"
-
-          $content = Get-Content $file.FullName -Raw
-
-          # Patch 1: startup_info.cb -> startup_info.StartupInfo.cb (line 1655)
-          $content = $content -replace 'startup_info\.cb = sizeof\(STARTUPINFOEXW\);', 'startup_info.StartupInfo.cb = sizeof(STARTUPINFOEXW);'
-
-          # Patch 2: Replace all 'attrs' with 'startup_info.lpAttributeList'
-          # This handles lines 1669, 1675, 1682
-          $content = $content -replace '\battrsi\b', 'startup_info.lpAttributeList'
-          $content = $content -replace 'free\(attrs\)', 'free(startup_info.lpAttributeList)'
-          $content = $content -replace 'UpdateProcThreadAttributeList\(\s*attrs,', 'UpdateProcThreadAttribute(startup_info.lpAttributeList,'
-
-          # Patch 3: UpdateProcThreadAttributeList -> UpdateProcThreadAttribute (for any remaining)
-          $content = $content -replace 'UpdateProcThreadAttributeList\(', 'UpdateProcThreadAttribute('
-
-          Set-Content $file.FullName $content -NoNewline
-
-          # Show after
-          $lines = Get-Content $file.FullName
-          Write-Host "Line 1655 after: $($lines[1654])"
-
-          Write-Host "Patch applied successfully!"
+      - name: Fetch dependencies
+        run: moon update
 
       - name: Build (with prebuild script for linker flags)
         run: moon build --target native
 
       - name: Test binary
         run: |
-          .\target\native\release\build\src\main\main.exe --help
-          .\target\native\release\build\src\main\main.exe check --dry-run 2>&1 || true
+          .\_build\native\release\build\src\main\main.exe --help
+          .\_build\native\release\build\src\main\main.exe check --dry-run 2>&1 || true

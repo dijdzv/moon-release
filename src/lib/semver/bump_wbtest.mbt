@@ -1,5 +1,12 @@
+///|
 test "bump major" {
-  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: None, build_metadata: None }
+  let v = Version::{
+    major: 1,
+    minor: 2,
+    patch: 3,
+    prerelease: None,
+    build_metadata: None,
+  }
   let result = bump(v, Major)
   assert_eq(result.major, 2)
   assert_eq(result.minor, 0)
@@ -7,8 +14,15 @@ test "bump major" {
   assert_eq(result.prerelease, None)
 }
 
+///|
 test "bump minor" {
-  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: None, build_metadata: None }
+  let v = Version::{
+    major: 1,
+    minor: 2,
+    patch: 3,
+    prerelease: None,
+    build_metadata: None,
+  }
   let result = bump(v, Minor)
   assert_eq(result.major, 1)
   assert_eq(result.minor, 3)
@@ -16,8 +30,15 @@ test "bump minor" {
   assert_eq(result.prerelease, None)
 }
 
+///|
 test "bump patch" {
-  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: None, build_metadata: None }
+  let v = Version::{
+    major: 1,
+    minor: 2,
+    patch: 3,
+    prerelease: None,
+    build_metadata: None,
+  }
   let result = bump(v, Patch)
   assert_eq(result.major, 1)
   assert_eq(result.minor, 2)
@@ -25,12 +46,20 @@ test "bump patch" {
   assert_eq(result.prerelease, None)
 }
 
+///|
 test "bump removes prerelease" {
-  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: Some("alpha"), build_metadata: None }
+  let v = Version::{
+    major: 1,
+    minor: 2,
+    patch: 3,
+    prerelease: Some("alpha"),
+    build_metadata: None,
+  }
   let result = bump(v, Patch)
   assert_eq(result.prerelease, None)
 }
 
+///|
 test "determine_bump with parse" {
   // Create test data using parse function
   let commit = @conventional.parse("feat!: breaking change")
@@ -43,6 +72,7 @@ test "determine_bump with parse" {
   }
 }
 
+///|
 test "determine_bump feat" {
   let commit = @conventional.parse("feat: add feature")
   match commit {
@@ -54,6 +84,7 @@ test "determine_bump feat" {
   }
 }
 
+///|
 test "determine_bump fix" {
   let commit = @conventional.parse("fix: correct bug")
   match commit {
@@ -65,6 +96,7 @@ test "determine_bump fix" {
   }
 }
 
+///|
 test "determine_bump chore returns None" {
   let commit = @conventional.parse("chore: update deps")
   match commit {
@@ -76,6 +108,7 @@ test "determine_bump chore returns None" {
   }
 }
 
+///|
 test "bump_with_prerelease alpha" {
   let v = Version::{
     major: 1,
@@ -96,6 +129,7 @@ test "bump_with_prerelease alpha" {
   }
 }
 
+///|
 test "bump_with_prerelease rc.1" {
   let v = Version::{
     major: 2,
@@ -115,6 +149,7 @@ test "bump_with_prerelease rc.1" {
   }
 }
 
+///|
 test "bump_with_prerelease None clears prerelease" {
   let v = Version::{
     major: 1,
@@ -135,6 +170,7 @@ test "bump_with_prerelease None clears prerelease" {
 
 // determine_bump_with_custom tests
 
+///|
 test "determine_bump_with_custom - custom major pattern" {
   let commit = @conventional.parse("fix: BREAKING fix something")
   match commit {
@@ -147,6 +183,7 @@ test "determine_bump_with_custom - custom major pattern" {
   }
 }
 
+///|
 test "determine_bump_with_custom - custom minor pattern" {
   let commit = @conventional.parse("chore: add NEW feature")
   match commit {
@@ -159,6 +196,7 @@ test "determine_bump_with_custom - custom minor pattern" {
   }
 }
 
+///|
 test "determine_bump_with_custom - both patterns None falls back to standard" {
   let commit = @conventional.parse("feat: add feature")
   match commit {
@@ -171,6 +209,7 @@ test "determine_bump_with_custom - both patterns None falls back to standard" {
   }
 }
 
+///|
 test "determine_bump_with_custom - breaking takes priority over custom major" {
   let commit = @conventional.parse("feat!: breaking change")
   match commit {
@@ -184,12 +223,17 @@ test "determine_bump_with_custom - breaking takes priority over custom major" {
   }
 }
 
+///|
 test "determine_bump_with_custom - custom major priority over custom minor" {
   let commit = @conventional.parse("chore: MAJOR and MINOR keywords")
   match commit {
     Some(c) => {
       let commits = [c]
-      let result = determine_bump_with_custom(commits, Some("MAJOR"), Some("MINOR"))
+      let result = determine_bump_with_custom(
+        commits,
+        Some("MAJOR"),
+        Some("MINOR"),
+      )
       // Major pattern should match first and return immediately
       assert_eq(result, Some(Major))
     }
@@ -197,30 +241,47 @@ test "determine_bump_with_custom - custom major priority over custom minor" {
   }
 }
 
+///|
 test "determine_bump_with_custom - no match returns None" {
   let commit = @conventional.parse("docs: update readme")
   match commit {
     Some(c) => {
       let commits = [c]
-      let result = determine_bump_with_custom(commits, Some("BREAKING"), Some("NEW"))
+      let result = determine_bump_with_custom(
+        commits,
+        Some("BREAKING"),
+        Some("NEW"),
+      )
       assert_eq(result, None)
     }
     None => fail("parse failed")
   }
 }
 
+///|
 test "determine_bump - empty commits returns None" {
   let commits : Array[@conventional.ConventionalCommit] = []
   assert_eq(determine_bump(commits), None)
 }
 
+///|
 test "determine_bump_with_custom - empty commits returns None" {
   let commits : Array[@conventional.ConventionalCommit] = []
-  assert_eq(determine_bump_with_custom(commits, Some("BREAKING"), Some("NEW")), None)
+  assert_eq(
+    determine_bump_with_custom(commits, Some("BREAKING"), Some("NEW")),
+    None,
+  )
 }
 
+///|
 test "bump major - clears prerelease and build_metadata" {
-  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: Some("alpha"), build_metadata: Some("build.1") }
+  let v = Version::{
+    major: 1,
+    minor: 2,
+    patch: 3,
+    prerelease: Some("alpha"),
+    build_metadata: Some("build.1"),
+  }
   let result = bump(v, Major)
   assert_eq(result.major, 2)
   assert_eq(result.minor, 0)
@@ -229,8 +290,15 @@ test "bump major - clears prerelease and build_metadata" {
   assert_eq(result.build_metadata, None)
 }
 
+///|
 test "bump minor - clears prerelease" {
-  let v = Version::{ major: 1, minor: 2, patch: 3, prerelease: Some("beta.1"), build_metadata: None }
+  let v = Version::{
+    major: 1,
+    minor: 2,
+    patch: 3,
+    prerelease: Some("beta.1"),
+    build_metadata: None,
+  }
   let result = bump(v, Minor)
   assert_eq(result.major, 1)
   assert_eq(result.minor, 3)
@@ -238,6 +306,7 @@ test "bump minor - clears prerelease" {
   assert_eq(result.prerelease, None)
 }
 
+///|
 test "bump_with_prerelease rejects invalid prerelease" {
   let v = Version::{
     major: 1,

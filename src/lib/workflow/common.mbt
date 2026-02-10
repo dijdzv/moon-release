@@ -1,3 +1,4 @@
+///|
 /// Shared helper: extract first 7 characters of a hash string
 pub fn short_hash(hash : String) -> String {
   if hash.length() >= 7 {
@@ -12,6 +13,7 @@ pub fn short_hash(hash : String) -> String {
   }
 }
 
+///|
 /// Get path prefix for file operations: "." → "", otherwise path + "/"
 fn package_path_prefix(path : String) -> String {
   if path == "." || path.is_empty() {
@@ -21,6 +23,7 @@ fn package_path_prefix(path : String) -> String {
   }
 }
 
+///|
 /// Return priority of BumpType (Major > Minor > Patch)
 pub fn bump_priority(bump : @semver.BumpType) -> Int {
   match bump {
@@ -30,12 +33,14 @@ pub fn bump_priority(bump : @semver.BumpType) -> Int {
   }
 }
 
+///|
 /// Validate path does not contain directory traversal
 /// Delegates to util module for common validation logic
 pub fn validate_path(path : String) -> Bool {
   @util.is_safe_path(path)
 }
 
+///|
 /// Validate git ref name (branch/tag) according to git-check-ref-format rules
 /// Returns None if valid, Some(reason) if invalid
 /// Delegates to util module for shared validation logic
@@ -43,6 +48,7 @@ pub fn validate_git_ref_name(name : String) -> String? {
   @util.validate_git_ref_name_impl(name)
 }
 
+///|
 /// Validate semver prerelease identifier (alphanumeric and hyphens only)
 /// Returns None if valid, Some(reason) if invalid
 pub fn validate_prerelease_identifier(id : String) -> String? {
@@ -54,7 +60,11 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
 
   for i = 0; i < chars.length(); i = i + 1 {
     let c = chars[i]
-    let is_valid = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '.'
+    let is_valid = (c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9') ||
+      c == '-' ||
+      c == '.'
 
     if not(is_valid) {
       return Some(
@@ -81,6 +91,7 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
   None
 }
 
+///|
 /// Get the npm build command (from config or default)
 /// Delegates to NpmConfig::build_args() via PublishTarget ADT
 pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
@@ -90,17 +101,22 @@ pub fn get_npm_build_command(config : @config.Config) -> Array[String] {
   }
 }
 
+///|
 /// Get the npm build command for a package (from package config or default)
 pub fn get_pkg_npm_build_command(pkg : @config.PackageConfig) -> Array[String] {
   match pkg.publish_target() {
     NpmOnly(npm) | Both(npm) => npm.build_args()
-    _ => abort("unreachable: npm build command requested for non-npm package config")
+    _ =>
+      abort(
+        "unreachable: npm build command requested for non-npm package config",
+      )
   }
 }
 
+///|
 /// Generate release notes (from commit summary)
 pub fn generate_release_notes(
-  commits : Array[(@conventional.ConventionalCommit, String)]
+  commits : Array[(@conventional.ConventionalCommit, String)],
 ) -> String {
   if commits.is_empty() {
     return "No changes."
@@ -122,9 +138,10 @@ pub fn generate_release_notes(
   sb.to_string()
 }
 
+///|
 /// Generate changelog for a single package
 fn generate_package_changelog(
-  commits : Array[(@conventional.ConventionalCommit, String)]
+  commits : Array[(@conventional.ConventionalCommit, String)],
 ) -> String {
   if commits.is_empty() {
     return "No changes.\n"
@@ -184,18 +201,18 @@ fn generate_package_changelog(
   sb.to_string()
 }
 
+///|
 /// Build PR body (apply template)
 pub fn build_pr_body(ctx : ReleaseContext) -> String {
   ctx.config.pr_body
-    .replace(old="{{ version }}", new=ctx.new_version.to_string())
-    .replace(old="{{ changelog }}", new=generate_release_notes(ctx.commits))
+  .replace(old="{{ version }}", new=ctx.new_version.to_string())
+  .replace(old="{{ changelog }}", new=generate_release_notes(ctx.commits))
 }
 
+///|
 /// Build PR body (release-plz style)
 /// Works for both single package and monorepo
-pub fn build_pr_body_unified(
-  packages : Array[PackageReleaseInfo]
-) -> String {
+pub fn build_pr_body_unified(packages : Array[PackageReleaseInfo]) -> String {
   if packages.is_empty() {
     return "No packages to release."
   }
@@ -208,11 +225,15 @@ pub fn build_pr_body_unified(
 
   // Package version list
   for pkg in packages {
-    sb.write_string("* `\{pkg.name}`: \{pkg.old_version.to_string()} -> \{pkg.new_version.to_string()}\n")
+    sb.write_string(
+      "* `\{pkg.name}`: \{pkg.old_version.to_string()} -> \{pkg.new_version.to_string()}\n",
+    )
   }
 
   // Collapsible changelog
-  sb.write_string("\n<details><summary><i><b>Changelog</b></i></summary><p>\n\n")
+  sb.write_string(
+    "\n<details><summary><i><b>Changelog</b></i></summary><p>\n\n",
+  )
 
   for pkg in packages {
     if not(pkg.commits.is_empty()) {

@@ -1,0 +1,8 @@
+import {
+  "moonbitlang/core/json",
+  "moon-release/src/lib/util",
+}
+
+options(
+  "is-main": false,
+)

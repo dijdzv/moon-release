@@ -1,0 +1,7 @@
+import {
+  "moon-release/src/lib/conventional",
+}
+
+options(
+  "is-main": false,
+)

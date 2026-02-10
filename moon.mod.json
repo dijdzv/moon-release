@@ -1,9 +1,8 @@
 {
   "name": "moon-release",
   "version": "0.1.0",
-  "--moonbit-unstable-prebuild": "scripts/prebuild.py",
   "deps": {
-    "moonbitlang/async": "0.16.4",
+    "moonbitlang/async": "0.16.6",
     "TheWaWaR/clap": "0.2.6"
   },
   "readme": "README.md",
@@ -15,5 +14,6 @@
     "semver",
     "conventional-commits"
   ],
-  "description": "Automated release management tool for MoonBit"
+  "description": "Automated release management tool for MoonBit",
+  "--moonbit-unstable-prebuild": "scripts/prebuild.py"
 }

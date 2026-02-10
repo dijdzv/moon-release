@@ -1,7 +1,0 @@
-{
-  "is-main": false,
-  "import": [
-    "moonbitlang/core/json",
-    "moon-release/src/lib/util"
-  ]
-}

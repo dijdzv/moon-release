@@ -50,7 +50,7 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
-          ./target/native/release/build/src/main/main.exe release-pr $DRY_RUN_FLAG --verbose
+          ./_build/native/release/build/src/main/main.exe release-pr $DRY_RUN_FLAG --verbose
 
   # Build binaries for multiple platforms
   # Triggered when a release PR is merged (commit message starts with "chore: release v")
@@ -82,47 +82,19 @@ jobs:
       - name: Fetch dependencies
         run: moon update
 
-      - name: Trigger source download (Windows)
-        if: runner.os == 'Windows'
-        run: moon build --target native 2>&1 || true
-
-      - name: Patch moonbitlang/async for Windows (temporary fix)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Find thread_pool.c in .mooncakes or registry
-          $file = Get-ChildItem -Recurse -Filter "thread_pool.c" -Path ".mooncakes" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $file) {
-            $file = Get-ChildItem -Recurse -Filter "thread_pool.c" -Path "$env:USERPROFILE/.moon/registry" -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-          if ($file) {
-            $content = Get-Content $file.FullName -Raw
-            # Patch 1: startup_info.cb -> startup_info.StartupInfo.cb
-            $content = $content -replace 'startup_info\.cb = sizeof\(STARTUPINFOEXW\);', 'startup_info.StartupInfo.cb = sizeof(STARTUPINFOEXW);'
-            # Patch 2: Replace all 'attrs' with 'startup_info.lpAttributeList'
-            $content = $content -replace 'free\(attrs\)', 'free(startup_info.lpAttributeList)'
-            $content = $content -replace 'UpdateProcThreadAttributeList\(\s*attrs,', 'UpdateProcThreadAttribute(startup_info.lpAttributeList,'
-            # Patch 3: UpdateProcThreadAttributeList -> UpdateProcThreadAttribute (remaining)
-            $content = $content -replace 'UpdateProcThreadAttributeList\(', 'UpdateProcThreadAttribute('
-            Set-Content $file.FullName $content -NoNewline
-            Write-Host "Patched thread_pool.c: $($file.FullName)"
-          } else {
-            Write-Host "WARNING: thread_pool.c not found, skipping patch"
-          }
-
       - name: Build
         run: moon build --target native
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
         run: |
-          cp ./target/native/release/build/src/main/main.exe ./${{ matrix.artifact }}
+          cp ./_build/native/release/build/src/main/main.exe ./${{ matrix.artifact }}
           chmod +x ./${{ matrix.artifact }}
 
       - name: Rename binary (Windows)
         if: runner.os == 'Windows'
         run: |
-          copy .\target\native\release\build\src\main\main.exe .\${{ matrix.artifact }}
+          copy .\_build\native\release\build\src\main\main.exe .\${{ matrix.artifact }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -174,7 +146,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Run moon-release to create tag and release
-          ./target/native/release/build/src/main/main.exe release --verbose
+          ./_build/native/release/build/src/main/main.exe release --verbose
 
       - name: Upload binaries to release
         env:

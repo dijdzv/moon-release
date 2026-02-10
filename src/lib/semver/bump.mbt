@@ -1,3 +1,4 @@
+///|
 /// Bump type
 pub(all) enum BumpType {
   Major
@@ -5,28 +6,28 @@ pub(all) enum BumpType {
   Patch
 } derive(Show, Eq)
 
+///|
 /// Bump version
 pub fn bump(version : Version, typ : BumpType) -> Version {
   // bump with None prerelease always succeeds
   match bump_with_prerelease(version, typ, None) {
     Some(v) => v
-    None => abort("unreachable: bump with None prerelease should always succeed")
+    None =>
+      abort("unreachable: bump with None prerelease should always succeed")
   }
 }
 
+///|
 /// Bump version (with optional prerelease)
 /// Returns None if the prerelease identifier is invalid
 pub fn bump_with_prerelease(
   version : Version,
   typ : BumpType,
-  prerelease : String?
+  prerelease : String?,
 ) -> Version? {
   // Validate prerelease if provided
   match prerelease {
-    Some(pre_str) =>
-      if not(validate_prerelease(pre_str)) {
-        return None
-      }
+    Some(pre_str) => if not(validate_prerelease(pre_str)) { return None }
     None => ()
   }
   // Note: UInt overflow is theoretically possible (e.g., version 4294967295.0.0 + major bump)
@@ -60,16 +61,20 @@ pub fn bump_with_prerelease(
   Some(result)
 }
 
+///|
 /// Determine bump type from commits
-pub fn determine_bump(commits : Array[@conventional.ConventionalCommit]) -> BumpType? {
+pub fn determine_bump(
+  commits : Array[@conventional.ConventionalCommit],
+) -> BumpType? {
   determine_bump_with_custom(commits, None, None)
 }
 
+///|
 /// Determine bump type with custom rules
 pub fn determine_bump_with_custom(
   commits : Array[@conventional.ConventionalCommit],
   custom_major_pattern : String?,
-  custom_minor_pattern : String?
+  custom_minor_pattern : String?,
 ) -> BumpType? {
   let mut has_feat = false
   let mut has_fix = false

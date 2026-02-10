@@ -1,0 +1,32 @@
+import {
+  "moon-release/src/lib/config",
+  "moon-release/src/lib/conventional",
+  "moon-release/src/lib/semver",
+  "moon-release/src/lib/git",
+  "moon-release/src/lib/moon_mod",
+  "moon-release/src/lib/workflow",
+  "moon-release/src/lib/util",
+  "TheWaWaR/clap",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/io",
+  "moonbitlang/core/json",
+  "moonbitlang/core/env",
+}
+
+options(
+  "is-main": true,
+  "pre-build": [
+    {
+      "command": ":embed -i $input -o $output --name embedded_moon_mod_json",
+      "input": "../../moon.mod.json",
+      "output": "version_info.mbt",
+    },
+  ],
+  targets: {
+    "completions.mbt": [ "native" ],
+    "main.mbt": [ "native" ],
+    "stub.mbt": [ "wasm", "wasm-gc", "js" ],
+    "version_info.mbt": [ "native" ],
+  },
+)

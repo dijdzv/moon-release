@@ -1,3 +1,4 @@
+///|
 /// moon.mod.json structure
 pub struct MoonMod {
   name : String
@@ -5,11 +6,13 @@ pub struct MoonMod {
   deps : @hashmap.HashMap[String, String]?
 } derive(Show)
 
+///|
 /// Parse error
 pub suberror ParseError {
   ParseError(String)
 }
 
+///|
 /// Convert ParseError to string
 pub fn ParseError::to_string(self : ParseError) -> String {
   match self {
@@ -17,11 +20,14 @@ pub fn ParseError::to_string(self : ParseError) -> String {
   }
 }
 
+///|
 /// Parse moon.mod.json with try-catch-noraise pattern
 pub fn parse(content : String) -> MoonMod raise ParseError {
   let json = try @json.parse(content) catch {
     e => raise ParseError("JSON parse error: " + e.to_string())
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let obj = match json {
     Object(o) => o
@@ -62,10 +68,11 @@ pub fn parse(content : String) -> MoonMod raise ParseError {
   MoonMod::{ name, version, deps }
 }
 
+///|
 /// Update version (change only version while preserving JSON)
 pub fn update_version(
   content : String,
-  new_version : @semver.Version
+  new_version : @semver.Version,
 ) -> String raise ParseError {
   // First parse to verify valid JSON
   let _ = parse(content)
@@ -75,11 +82,12 @@ pub fn update_version(
   replace_json_field(content, "version", version_str)
 }
 
+///|
 /// Replace JSON field value (preserving format)
 pub fn replace_json_field(
   content : String,
   field : String,
-  new_value : String
+  new_value : String,
 ) -> String raise ParseError {
   // Verify new_value doesn't contain JSON special characters
   for c in new_value {
@@ -142,6 +150,7 @@ pub fn replace_json_field(
   before + "\"" + new_value + "\"" + after
 }
 
+///|
 /// Find JSON key position (skips occurrences inside string values)
 /// Returns the char index of the key pattern, only if followed by ':'
 /// Only matches keys at brace depth 1 (top-level keys inside the root object)
@@ -213,6 +222,7 @@ fn find_json_key(haystack : String, needle : String) -> Int {
   -1
 }
 
+///|
 /// Get substring from character array
 fn substr_str(chars : Array[Char], start : Int, end : Int) -> String {
   let result = StringBuilder::new()

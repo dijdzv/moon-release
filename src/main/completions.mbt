@@ -4,6 +4,7 @@
 /// synced with the CLI parser definition in main.mbt whenever commands, subcommands,
 /// or flags are added/removed/changed.
 
+///|
 /// generate-completions command
 pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
   let shell : String = if subcmd.positional_args.length() > 0 {
@@ -27,6 +28,7 @@ pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
   }
 }
 
+///|
 /// Output bash completion script
 fn print_bash_completion() -> Unit {
   let script =
@@ -85,6 +87,7 @@ fn print_bash_completion() -> Unit {
   println(script)
 }
 
+///|
 /// Output zsh completion script
 fn print_zsh_completion() -> Unit {
   let script =
@@ -190,6 +193,7 @@ fn print_zsh_completion() -> Unit {
   println(script)
 }
 
+///|
 /// Output fish completion script
 fn print_fish_completion() -> Unit {
   let script =

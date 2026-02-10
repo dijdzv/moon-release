@@ -1,6 +1,8 @@
+///|
 /// Maximum value for safe UInt conversion from Double
 pub let uint_max_as_double : Double = 4294967295.0
 
+///|
 /// Escape JSON string
 /// RFC 8259 compliant escaping
 pub fn escape_json_string(s : String) -> String {
@@ -12,8 +14,8 @@ pub fn escape_json_string(s : String) -> String {
       '\n' => result.write_string("\\n")
       '\r' => result.write_string("\\r")
       '\t' => result.write_string("\\t")
-      '\u0008' => result.write_string("\\b")  // backspace
-      '\u000C' => result.write_string("\\f")  // form feed
+      '\u0008' => result.write_string("\\b") // backspace
+      '\u000C' => result.write_string("\\f") // form feed
       _ =>
         // Control characters (U+0000 - U+001F) are escaped as \uXXXX
         if c.to_uint() < 0x20 {
@@ -31,6 +33,7 @@ pub fn escape_json_string(s : String) -> String {
   result.to_string()
 }
 
+///|
 /// Convert number to hexadecimal digit
 fn hex_digit(n : UInt) -> Char {
   match n {
@@ -54,11 +57,13 @@ fn hex_digit(n : UInt) -> Char {
   }
 }
 
+///|
 /// Create JSON string literal (with quotes)
 pub fn json_string(s : String) -> String {
   "\"" + escape_json_string(s) + "\""
 }
 
+///|
 /// Build JSON object
 /// Keys are escaped to prevent injection attacks
 /// Values must be pre-formatted JSON (use json_string() for strings, .to_string() for numbers/booleans)
@@ -79,6 +84,7 @@ pub fn build_json_object(pairs : Array[(String, String)]) -> String {
   result.to_string()
 }
 
+///|
 /// Build JSON array
 /// Items must be pre-formatted JSON (use json_string() for strings, .to_string() for numbers/booleans)
 pub fn build_json_array(items : Array[String]) -> String {

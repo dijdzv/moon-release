@@ -1,8 +1,10 @@
+///|
 /// Git repository
 pub struct Repository {
   path : String
 } derive(Show, Eq)
 
+///|
 /// Git commit
 pub struct GitCommit {
   hash : String
@@ -11,11 +13,13 @@ pub struct GitCommit {
   date : String
 } derive(Show, Eq)
 
+///|
 /// Git error
 pub suberror GitError {
   GitError(String)
 }
 
+///|
 /// GitError to string
 pub fn GitError::to_string(self : GitError) -> String {
   match self {
@@ -23,6 +27,7 @@ pub fn GitError::to_string(self : GitError) -> String {
   }
 }
 
+///|
 /// Validates that a git ref name doesn't contain dangerous characters
 fn validate_ref_param(ref_name : String) -> Bool {
   if ref_name.is_empty() {
@@ -32,9 +37,28 @@ fn validate_ref_param(ref_name : String) -> Bool {
   for i = 0; i < chars.length(); i = i + 1 {
     let c = chars[i]
     // Reject shell metacharacters, git special chars, and control characters
-    if c == ' ' || c == '\n' || c == '\r' || c == '\u0000' || c == '|' || c == ';' || c == '`' ||
-      c == '$' || c == '&' || c == '>' || c == '<' || c == '(' || c == ')' || c == '{' || c == '}' ||
-      c == '~' || c == '^' || c == ':' || c == '?' || c == '*' || c == '[' || c == '\\' {
+    if c == ' ' ||
+      c == '\n' ||
+      c == '\r' ||
+      c == '\u0000' ||
+      c == '|' ||
+      c == ';' ||
+      c == '`' ||
+      c == '$' ||
+      c == '&' ||
+      c == '>' ||
+      c == '<' ||
+      c == '(' ||
+      c == ')' ||
+      c == '{' ||
+      c == '}' ||
+      c == '~' ||
+      c == '^' ||
+      c == ':' ||
+      c == '?' ||
+      c == '*' ||
+      c == '[' ||
+      c == '\\' {
       return false
     }
   }
@@ -49,6 +73,7 @@ fn validate_ref_param(ref_name : String) -> Bool {
   true
 }
 
+///|
 /// Validate repository path for security
 /// Rejects paths containing ".." (directory traversal)
 /// Delegates to util module for common validation logic
@@ -62,6 +87,7 @@ fn validate_repo_path(path : String) -> String? {
   @util.validate_path_full(path, allow_absolute=true).error_message()
 }
 
+///|
 /// Open repository with path validation
 /// Returns error if path is dangerous (e.g., contains "..")
 pub fn Repository::open(path : String) -> Repository raise GitError {
@@ -75,32 +101,37 @@ pub fn Repository::open(path : String) -> Repository raise GitError {
   Repository::{ path: normalized_path }
 }
 
+///|
 /// Open repository without validation (for internal use and testing)
 /// Use Repository::open for untrusted paths
 pub fn Repository::open_unchecked(path : String) -> Repository {
-  Repository::{ path }
+  Repository::{ path, }
 }
 
+///|
 /// Open repository at current directory
 pub fn Repository::current() -> Repository {
   Repository::{ path: "." }
 }
 
+///|
 /// Get command to list tags
 pub fn Repository::get_tags_command(self : Repository) -> Array[String] {
   ["git", "-C", self.path, "tag", "--sort=-v:refname"]
 }
 
+///|
 /// Get command to retrieve latest tag
 pub fn Repository::get_latest_tag_command(self : Repository) -> Array[String] {
   ["git", "-C", self.path, "describe", "--tags", "--abbrev=0"]
 }
 
+///|
 /// Get command to retrieve commits between two refs
 pub fn Repository::get_commits_command(
   self : Repository,
   from : String,
-  to : String
+  to : String,
 ) -> Array[String] raise GitError {
   if not(validate_ref_param(from)) {
     raise GitError("Invalid git ref: '" + from + "'")
@@ -118,10 +149,11 @@ pub fn Repository::get_commits_command(
   ]
 }
 
+///|
 /// Get command to retrieve commits from tag to HEAD
 pub fn Repository::get_commits_since_tag_command(
   self : Repository,
-  tag : String
+  tag : String,
 ) -> Array[String] raise GitError {
   if not(validate_ref_param(tag)) {
     raise GitError("Invalid git ref: '" + tag + "'")
@@ -136,32 +168,36 @@ pub fn Repository::get_commits_since_tag_command(
   ]
 }
 
+///|
 /// Get command to retrieve all commits (when no tags exist)
 pub fn Repository::get_all_commits_command(self : Repository) -> Array[String] {
   ["git", "-C", self.path, "log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI"]
 }
 
+///|
 /// Get command to create a tag
 pub fn Repository::create_tag_command(
   self : Repository,
   tag_name : String,
-  message : String
+  message : String,
 ) -> Array[String] {
   ["git", "-C", self.path, "tag", "-a", "-m", message, "--", tag_name]
 }
 
+///|
 /// Get command to create a commit
 pub fn Repository::create_commit_command(
   self : Repository,
-  message : String
+  message : String,
 ) -> Array[String] {
   ["git", "-C", self.path, "commit", "-m", message]
 }
 
+///|
 /// Get command to stage files
 pub fn Repository::stage_files_command(
   self : Repository,
-  files : Array[String]
+  files : Array[String],
 ) -> Array[String] {
   let cmd : Array[String] = ["git", "-C", self.path, "add"]
   for file in files {
@@ -170,10 +206,11 @@ pub fn Repository::stage_files_command(
   cmd
 }
 
+///|
 /// Get command to push
 pub fn Repository::push_command(
   self : Repository,
-  include_tags : Bool
+  include_tags : Bool,
 ) -> Array[String] {
   if include_tags {
     ["git", "-C", self.path, "push", "--follow-tags"]
@@ -182,6 +219,7 @@ pub fn Repository::push_command(
   }
 }
 
+///|
 /// Parse commit log output
 /// Format: hash\x1Esubject\x1Eauthor\x1Edate (using Record Separator U+001E)
 /// Subject may contain any printable character safely since \x1E is a control character
@@ -238,9 +276,10 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
   commits
 }
 
+///|
 /// Parse GitCommit array to ConventionalCommit array
 pub fn parse_conventional_commits(
-  commits : Array[GitCommit]
+  commits : Array[GitCommit],
 ) -> Array[(@conventional.ConventionalCommit, String)] {
   let result : Array[(@conventional.ConventionalCommit, String)] = []
 
@@ -255,6 +294,7 @@ pub fn parse_conventional_commits(
   result
 }
 
+///|
 /// Get command to retrieve current date
 pub fn get_date_command() -> Array[String] {
   ["date", "+%Y-%m-%d"]

@@ -1,12 +1,15 @@
 /// moon-release CLI
 /// Automated release tool
 
+///|
 /// Version extracted from embedded moon.mod.json (generated at build time)
 let version : String = extract_version(embedded_moon_mod_json)
 
+///|
 /// Maximum number of commits to display in verbose output
 let max_verbose_commits : Int = 10
 
+///|
 /// Extract version from embedded moon.mod.json content
 fn extract_version(json_str : String) -> String {
   // Use try? + to_option for consistent error handling
@@ -20,9 +23,11 @@ fn extract_version(json_str : String) -> String {
   }
 }
 
+///|
 /// Exit with status code (FFI to libc)
 extern "C" fn c_exit(status : Int) -> Unit = "exit"
 
+///|
 /// Exit with error (non-zero status code)
 /// Uses panic() to satisfy type checker since exit never returns
 fn[T] exit_error() -> T {
@@ -34,6 +39,7 @@ fn[T] exit_error() -> T {
 // Output helpers for consistent error/warning formatting
 // ============================================================================
 
+///|
 /// Output error message (supports JSON and text formats)
 fn output_error(msg : String, json_output : Bool) -> Unit {
   if json_output {
@@ -43,8 +49,13 @@ fn output_error(msg : String, json_output : Bool) -> Unit {
   }
 }
 
+///|
 /// Output error message with hint (text mode only shows hint)
-fn output_error_with_hint(msg : String, hint : String, json_output : Bool) -> Unit {
+fn output_error_with_hint(
+  msg : String,
+  hint : String,
+  json_output : Bool,
+) -> Unit {
   if json_output {
     println("{\"error\": " + @util.json_string(msg) + "}")
   } else {
@@ -53,11 +64,12 @@ fn output_error_with_hint(msg : String, hint : String, json_output : Bool) -> Un
   }
 }
 
+///|
 /// Handle workflow error with automatic hint from error variant
 fn handle_workflow_error(
   e : @workflow.WorkflowError,
   json_output : Bool,
-  hint_override~ : String = ""
+  hint_override? : String = "",
 ) -> Unit {
   let hint = if hint_override.is_empty() { e.hint() } else { hint_override }
   if hint.is_empty() {
@@ -67,6 +79,7 @@ fn handle_workflow_error(
   }
 }
 
+///|
 /// Output warning message (suppressed in JSON mode)
 fn output_warning(msg : String, json_output : Bool) -> Unit {
   if not(json_output) {
@@ -74,6 +87,7 @@ fn output_warning(msg : String, json_output : Bool) -> Unit {
   }
 }
 
+///|
 /// Get dry-run flag from subcommand (combines global and subcommand flags)
 fn get_dry_run_flag(subcmd : @clap.SimpleValue, global_dry_run : Bool) -> Bool {
   let subcmd_dry_run = match subcmd.get_flag("dry-run") {
@@ -83,6 +97,7 @@ fn get_dry_run_flag(subcmd : @clap.SimpleValue, global_dry_run : Bool) -> Bool {
   global_dry_run || subcmd_dry_run
 }
 
+///|
 /// Get output format from subcommand (returns true if JSON)
 fn get_json_output(subcmd : @clap.SimpleValue) -> Bool {
   // Use try? + unwrap_or pattern for consistent error handling
@@ -90,13 +105,14 @@ fn get_json_output(subcmd : @clap.SimpleValue) -> Bool {
   output_format == "json"
 }
 
+///|
 /// Print verbose header for command
 fn print_verbose_header(
   cmd_name : String,
   config_path : String,
   dry_run : Bool,
   verbose : Bool,
-  json_output : Bool
+  json_output : Bool,
 ) -> Unit {
   if verbose && not(json_output) {
     println("Running " + cmd_name + " command...")
@@ -105,6 +121,7 @@ fn print_verbose_header(
   }
 }
 
+///|
 /// Create CLI parser
 fn create_parser() -> @clap.Parser {
   @clap.Parser::new(
@@ -196,15 +213,12 @@ fn create_parser() -> @clap.Parser {
           ),
         },
       ),
-      "init": @clap.SubCommand::new(
-        help="Initialize release configuration",
-        args={
-          "force": @clap.Arg::flag(
-            short='f',
-            help="Overwrite existing configuration",
-          ),
-        },
-      ),
+      "init": @clap.SubCommand::new(help="Initialize release configuration", args={
+        "force": @clap.Arg::flag(
+          short='f',
+          help="Overwrite existing configuration",
+        ),
+      }),
       "version": @clap.SubCommand::new(help="Show version information"),
       "check": @clap.SubCommand::new(
         help="Check the current state without making changes",
@@ -246,6 +260,7 @@ fn create_parser() -> @clap.Parser {
   )
 }
 
+///|
 /// Main function (async)
 async fn main {
   let parser = create_parser()
@@ -264,7 +279,9 @@ async fn main {
       println("Error: " + e.to_string())
       exit_error()
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // Display help message if returned and exit
   match help_message {
@@ -310,12 +327,13 @@ async fn main {
   }
 }
 
+///|
 /// update command
 async fn cmd_update(
   subcmd : @clap.SimpleValue,
   global_dry_run : Bool,
   verbose : Bool,
-  config_path : String
+  config_path : String,
 ) -> Unit {
   let dry_run = get_dry_run_flag(subcmd, global_dry_run)
   let json_output = get_json_output(subcmd)
@@ -336,7 +354,9 @@ async fn cmd_update(
       }
       exit_error()
     }
-  } noraise { _ => () }
+  } noraise {
+    _ => ()
+  }
 
   // Parse bump options before monorepo branching
   let forced_bump = get_bump_type(subcmd)
@@ -356,21 +376,50 @@ async fn cmd_update(
   if packages_mode || not(config.packages.is_empty()) {
     // Hint: --bump only controls bump type, not scope
     if forced_bump is Some(_) && not(bump_all) && not(json_output) {
-      println("Note: --bump applies only to packages with changes. Use --bump-all to include all packages.")
+      println(
+        "Note: --bump applies only to packages with changes. Use --bump-all to include all packages.",
+      )
     }
-    try @workflow.run_update_packages(config, repo, dry_run, verbose, forced_bump~, bump_all~) catch {
-      e => { handle_workflow_error(e, json_output) ; exit_error() }
-    } noraise { _ => () }
+    try
+      @workflow.run_update_packages(
+        config,
+        repo,
+        dry_run,
+        verbose,
+        forced_bump~,
+        bump_all~,
+      )
+    catch {
+      e => {
+        handle_workflow_error(e, json_output)
+        exit_error()
+      }
+    } noraise {
+      _ => ()
+    }
     return
   }
 
   // Analyze version bump
-  let analysis = try @workflow.analyze_version_bump(config, repo, forced_bump~, max_commits=config.max_analyze_commits) catch {
+  let analysis = try
+    @workflow.analyze_version_bump(
+      config,
+      repo,
+      forced_bump~,
+      max_commits=config.max_analyze_commits,
+    )
+  catch {
     e => {
-      handle_workflow_error(e, json_output, hint_override="Use Conventional Commits (feat:, fix:) or --bump to force a version bump")
+      handle_workflow_error(
+        e,
+        json_output,
+        hint_override="Use Conventional Commits (feat:, fix:) or --bump to force a version bump",
+      )
       exit_error()
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   let current_version = analysis.current_version
   let new_version = analysis.new_version
@@ -383,7 +432,10 @@ async fn cmd_update(
     let pkg_name = match (try? load_moon_mod("moon.mod.json")).to_option() {
       Some(m) => m.name
       None =>
-        match (try? load_package_json_name("package.json")).to_option().bind(fn(x) { x }) {
+        match
+          (try? load_package_json_name("package.json"))
+          .to_option()
+          .bind(fn(x) { x }) {
           Some(name) => name
           None => {
             output_warning(
@@ -395,16 +447,22 @@ async fn cmd_update(
         }
     }
     if not(pkg_name.is_empty()) {
-      let should_rel = try @workflow.should_release(new_version, pkg_name, verbose) catch {
+      let should_rel = try
+        @workflow.should_release(new_version, pkg_name, verbose)
+      catch {
         e => {
           output_warning("Registry check failed: " + e.to_string(), json_output)
           true // Continue release on error
         }
-      } noraise { r => r }
+      } noraise {
+        r => r
+      }
 
       if not(should_rel) {
         output_error(
-          "Version " + new_version.to_string() + " is not newer than registry version. Nothing to update.",
+          "Version " +
+          new_version.to_string() +
+          " is not newer than registry version. Nothing to update.",
           json_output,
         )
         exit_error()
@@ -425,63 +483,90 @@ async fn cmd_update(
 
   // Run update
   try @workflow.run_update(ctx) catch {
-    e => { handle_workflow_error(e, json_output) ; exit_error() }
-  } noraise { _ =>
-    if json_output {
-      let bump_str = match bump_type {
-        @semver.Major => "major"
-        @semver.Minor => "minor"
-        @semver.Patch => "patch"
-      }
-      let json_str = @util.build_json_object([
-        ("old_version", @util.json_string(current_version.to_string())),
-        ("new_version", @util.json_string(new_version.to_string())),
-        ("bump_type", @util.json_string(bump_str)),
-        ("commits_count", commits.length().to_string()),
-        ("dry_run", dry_run.to_string()),
-        ("updated_files", {
-          let files : Array[String] = []
-          if config.moon_publish {
-            files.push("\"moon.mod.json\"")
-          }
-          if config.npm_publish {
-            files.push("\"package.json\"")
-          }
-          "[" + files.iter().fold(init="", fn(acc, s) {
-            if acc.is_empty() { s } else { acc + "," + s }
-          }) + "]"
-        }),
-      ])
-      println(json_str)
+    e => {
+      handle_workflow_error(e, json_output)
+      exit_error()
     }
+  } noraise {
+    _ =>
+      if json_output {
+        let bump_str = match bump_type {
+          @semver.Major => "major"
+          @semver.Minor => "minor"
+          @semver.Patch => "patch"
+        }
+        let json_str = @util.build_json_object([
+          ("old_version", @util.json_string(current_version.to_string())),
+          ("new_version", @util.json_string(new_version.to_string())),
+          ("bump_type", @util.json_string(bump_str)),
+          ("commits_count", commits.length().to_string()),
+          ("dry_run", dry_run.to_string()),
+          (
+            "updated_files",
+            {
+              let files : Array[String] = []
+              if config.moon_publish {
+                files.push("\"moon.mod.json\"")
+              }
+              if config.npm_publish {
+                files.push("\"package.json\"")
+              }
+              "[" +
+              files
+              .iter()
+              .fold(init="", fn(acc, s) {
+                if acc.is_empty() {
+                  s
+                } else {
+                  acc + "," + s
+                }
+              }) +
+              "]"
+            },
+          ),
+        ])
+        println(json_str)
+      }
   }
 }
 
+///|
 /// Load config, validate publish settings, and check for dirty state.
 /// Shared setup for release-pr and release commands.
 async fn prepare_release_config(
   config_path : String,
   verbose : Bool,
-  json_output : Bool
+  json_output : Bool,
 ) -> (@config.Config, @git.Repository) {
   let config = load_config(config_path, verbose~, json_output~)
   let repo = @git.Repository::current()
 
   try @workflow.validate_publish_config(config, verbose~) catch {
-    e => { handle_workflow_error(e, json_output) ; exit_error() }
-  } noraise { _ => () }
+    e => {
+      handle_workflow_error(e, json_output)
+      exit_error()
+    }
+  } noraise {
+    _ => ()
+  }
 
   try @workflow.check_working_directory(config, repo, verbose~) catch {
-    e => { handle_workflow_error(e, json_output) ; exit_error() }
-  } noraise { _ => () }
+    e => {
+      handle_workflow_error(e, json_output)
+      exit_error()
+    }
+  } noraise {
+    _ => ()
+  }
 
   (config, repo)
 }
 
+///|
 /// Extract bump flags from subcmd (shared by release-pr and release commands).
 fn get_bump_flags(
   subcmd : @clap.SimpleValue,
-  config : @config.Config
+  config : @config.Config,
 ) -> (@semver.BumpType?, Bool) {
   let forced_bump = get_bump_type(subcmd)
   let cli_bump_all = match subcmd.get_flag("bump-all") {
@@ -492,12 +577,13 @@ fn get_bump_flags(
   (forced_bump, bump_all)
 }
 
+///|
 /// release-pr command
 async fn cmd_release_pr(
   subcmd : @clap.SimpleValue,
   global_dry_run : Bool,
   verbose : Bool,
-  config_path : String
+  config_path : String,
 ) -> Unit {
   let dry_run = get_dry_run_flag(subcmd, global_dry_run)
   let json_output = false // release-pr doesn't support JSON output
@@ -510,23 +596,51 @@ async fn cmd_release_pr(
 
   // Hint: --bump only controls bump type, not scope
   if is_monorepo && forced_bump is Some(_) && not(bump_all) {
-    println("Note: --bump applies only to packages with changes. Use --bump-all to include all packages.")
+    println(
+      "Note: --bump applies only to packages with changes. Use --bump-all to include all packages.",
+    )
   }
 
   // Get current version and new version
   let (current_version, new_version, commits) = if is_monorepo {
     // Monorepo: compute representative version from packages
-    try @workflow.get_monorepo_representative_version(config, repo, forced_bump, verbose, bump_all~) catch {
-      e => { handle_workflow_error(e, json_output) ; exit_error() }
-    } noraise { r => r }
-  } else {
-    // Single package: analyze version bump
-    let analysis = try @workflow.analyze_version_bump(config, repo, forced_bump~, max_commits=config.max_analyze_commits) catch {
+    try
+      @workflow.get_monorepo_representative_version(
+        config,
+        repo,
+        forced_bump,
+        verbose,
+        bump_all~,
+      )
+    catch {
       e => {
-        handle_workflow_error(e, json_output, hint_override="Use Conventional Commits or --bump to force a version bump")
+        handle_workflow_error(e, json_output)
         exit_error()
       }
-    } noraise { r => r }
+    } noraise {
+      r => r
+    }
+  } else {
+    // Single package: analyze version bump
+    let analysis = try
+      @workflow.analyze_version_bump(
+        config,
+        repo,
+        forced_bump~,
+        max_commits=config.max_analyze_commits,
+      )
+    catch {
+      e => {
+        handle_workflow_error(
+          e,
+          json_output,
+          hint_override="Use Conventional Commits or --bump to force a version bump",
+        )
+        exit_error()
+      }
+    } noraise {
+      r => r
+    }
     (analysis.current_version, analysis.new_version, analysis.commits)
   }
 
@@ -545,21 +659,32 @@ async fn cmd_release_pr(
 
   // Get GitHub client
   let github = try @workflow.get_github_client() catch {
-    e => { handle_workflow_error(e, json_output) ; exit_error() }
-  } noraise { r => r }
+    e => {
+      handle_workflow_error(e, json_output)
+      exit_error()
+    }
+  } noraise {
+    r => r
+  }
 
   // Run workflow
   try @workflow.run_release_pr(ctx, github) catch {
-    e => { handle_workflow_error(e, json_output) ; exit_error() }
-  } noraise { _ => () }
+    e => {
+      handle_workflow_error(e, json_output)
+      exit_error()
+    }
+  } noraise {
+    _ => ()
+  }
 }
 
+///|
 /// release command
 async fn cmd_release(
   subcmd : @clap.SimpleValue,
   global_dry_run : Bool,
   verbose : Bool,
-  config_path : String
+  config_path : String,
 ) -> Unit {
   let dry_run = get_dry_run_flag(subcmd, global_dry_run)
   let json_output = false // release doesn't support JSON output
@@ -593,8 +718,7 @@ async fn cmd_release(
   // Check if prerelease is allowed in config
   if prerelease is Some(_) && not(config.allow_prerelease) {
     output_error_with_hint(
-      "Prerelease is not allowed in configuration.",
-      "Set 'allow_prerelease: true' in release.json to enable prereleases",
+      "Prerelease is not allowed in configuration.", "Set 'allow_prerelease: true' in release.json to enable prereleases",
       json_output,
     )
     exit_error()
@@ -602,23 +726,53 @@ async fn cmd_release(
 
   // Hint: --bump only controls bump type, not scope
   if is_monorepo && forced_bump is Some(_) && not(bump_all) {
-    println("Note: --bump applies only to packages with changes. Use --bump-all to include all packages.")
+    println(
+      "Note: --bump applies only to packages with changes. Use --bump-all to include all packages.",
+    )
   }
 
   // Get current version and new version
   let (current_version, new_version, commits) = if is_monorepo {
     // Monorepo: compute representative version from packages
-    try @workflow.get_monorepo_representative_version(config, repo, forced_bump, verbose, bump_all~) catch {
-      e => { handle_workflow_error(e, json_output) ; exit_error() }
-    } noraise { r => r }
-  } else {
-    // Single package: analyze version bump
-    let analysis = try @workflow.analyze_version_bump(config, repo, forced_bump~, max_commits=config.max_analyze_commits, allow_empty_commits=true, default_bump=Some(@semver.Patch)) catch {
+    try
+      @workflow.get_monorepo_representative_version(
+        config,
+        repo,
+        forced_bump,
+        verbose,
+        bump_all~,
+      )
+    catch {
       e => {
-        handle_workflow_error(e, json_output, hint_override="Create new commits or use --bump to force a version bump")
+        handle_workflow_error(e, json_output)
         exit_error()
       }
-    } noraise { r => r }
+    } noraise {
+      r => r
+    }
+  } else {
+    // Single package: analyze version bump
+    let analysis = try
+      @workflow.analyze_version_bump(
+        config,
+        repo,
+        forced_bump~,
+        max_commits=config.max_analyze_commits,
+        allow_empty_commits=true,
+        default_bump=Some(@semver.Patch),
+      )
+    catch {
+      e => {
+        handle_workflow_error(
+          e,
+          json_output,
+          hint_override="Create new commits or use --bump to force a version bump",
+        )
+        exit_error()
+      }
+    } noraise {
+      r => r
+    }
     (analysis.current_version, analysis.new_version, analysis.commits)
   }
 
@@ -654,20 +808,31 @@ async fn cmd_release(
 
   // Get GitHub client
   let github = try @workflow.get_github_client() catch {
-    e => { handle_workflow_error(e, json_output) ; exit_error() }
-  } noraise { r => r }
+    e => {
+      handle_workflow_error(e, json_output)
+      exit_error()
+    }
+  } noraise {
+    r => r
+  }
 
   // Run workflow
   try @workflow.run_release(ctx, github) catch {
-    e => { handle_workflow_error(e, json_output) ; exit_error() }
-  } noraise { _ => () }
+    e => {
+      handle_workflow_error(e, json_output)
+      exit_error()
+    }
+  } noraise {
+    _ => ()
+  }
 }
 
+///|
 /// init command
 async fn cmd_init(
   subcmd : @clap.SimpleValue,
   dry_run : Bool,
-  _verbose : Bool
+  _verbose : Bool,
 ) -> Unit {
   let force = match subcmd.get_flag("force") {
     Some(v) => v
@@ -697,7 +862,9 @@ async fn cmd_init(
       println("Error: Failed to write release.json: " + e.to_string())
       exit_error()
     }
-  } noraise { _ => () }
+  } noraise {
+    _ => ()
+  }
 
   let config = @config.Config::default()
   println("Created release.json with defaults:")
@@ -713,6 +880,7 @@ async fn cmd_init(
   println("  base_branch: " + config.base_branch)
 }
 
+///|
 /// Generate default config JSON
 fn generate_default_config_json() -> String {
   let json =
@@ -750,6 +918,7 @@ fn generate_default_config_json() -> String {
   json
 }
 
+///|
 /// version command
 fn cmd_version() -> Unit {
   println("moon-release v" + version)
@@ -766,11 +935,12 @@ fn cmd_version() -> Unit {
   println("  - mooncakes.io publishing")
 }
 
+///|
 /// set-version command
 async fn cmd_set_version(
   subcmd : @clap.SimpleValue,
   global_dry_run : Bool,
-  verbose : Bool
+  verbose : Bool,
 ) -> Unit {
   // Check subcommand flags as well
   let subcmd_dry_run = match subcmd.get_flag("dry-run") {
@@ -808,7 +978,9 @@ async fn cmd_set_version(
       println("Error: Failed to read moon.mod.json: " + e.to_string())
       exit_error()
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // Get current version with try-catch-noraise pattern
   let moon_mod = try @moon_mod.parse(moon_mod_content) catch {
@@ -816,7 +988,9 @@ async fn cmd_set_version(
       println("Error: Failed to parse moon.mod.json: " + e.to_string())
       exit_error()
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   if dry_run {
     println("[dry-run] Would update moon.mod.json:")
@@ -826,12 +1000,16 @@ async fn cmd_set_version(
   }
 
   // Update version with try-catch-noraise pattern
-  let updated_content = try @moon_mod.update_version(moon_mod_content, new_version) catch {
+  let updated_content = try
+    @moon_mod.update_version(moon_mod_content, new_version)
+  catch {
     e => {
       println("Error: Failed to update version: " + e.to_string())
       exit_error()
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // Write file with try-catch-noraise pattern
   try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
@@ -839,18 +1017,21 @@ async fn cmd_set_version(
       println("Error: Failed to write moon.mod.json: " + e.to_string())
       exit_error()
     }
-  } noraise { _ => () }
+  } noraise {
+    _ => ()
+  }
 
   println("Updated moon.mod.json:")
   println("  " + moon_mod.version + " -> " + new_version.to_string())
 }
 
+///|
 /// check command
 async fn cmd_check(
   subcmd : @clap.SimpleValue,
   _dry_run : Bool,
   verbose : Bool,
-  config_path : String
+  config_path : String,
 ) -> Unit {
   // Use try? + unwrap_or pattern for consistent error handling
   let output_format = (try? subcmd.get_one("output")).unwrap_or("text")
@@ -871,7 +1052,9 @@ async fn cmd_check(
   // Get latest tag
   let latest_tag = try @workflow.get_latest_tag(repo) catch {
     _ => None
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   if not(json_output) {
     match latest_tag {
@@ -881,7 +1064,12 @@ async fn cmd_check(
   }
 
   // Get commits
-  let commits = try @workflow.get_commits_since_last_tag(repo, max_commits=config.max_analyze_commits) catch {
+  let commits = try
+    @workflow.get_commits_since_last_tag(
+      repo,
+      max_commits=config.max_analyze_commits,
+    )
+  catch {
     e => {
       if json_output {
         println("{\"error\": " + @util.json_string(e.to_string()) + "}")
@@ -890,7 +1078,9 @@ async fn cmd_check(
       }
       exit_error()
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // Determine bump type (uses custom bump rules from config if configured)
   let bump_type = if commits.length() > 0 {
@@ -934,9 +1124,17 @@ async fn cmd_check(
       ])
       commits_json_arr.push(commit_json)
     }
-    let commits_json = "[" + commits_json_arr.iter().fold(init="", fn(acc, s) {
-      if acc.is_empty() { s } else { acc + "," + s }
-    }) + "]"
+    let commits_json = "[" +
+      commits_json_arr
+      .iter()
+      .fold(init="", fn(acc, s) {
+        if acc.is_empty() {
+          s
+        } else {
+          acc + "," + s
+        }
+      }) +
+      "]"
 
     let json_str = @util.build_json_object([
       ("latest_tag", latest_tag_json),
@@ -963,7 +1161,9 @@ async fn cmd_check(
       }
       let breaking_str = if cc.breaking { "!" } else { "" }
       let short_hash = @workflow.short_hash(hash)
-      println("  \{short_hash} \{typ_str}\{scope_str}\{breaking_str}: \{cc.description}")
+      println(
+        "  \{short_hash} \{typ_str}\{scope_str}\{breaking_str}: \{cc.description}",
+      )
     }
     if commits.length() > max_verbose_commits {
       println("  ... and \{commits.length() - max_verbose_commits} more")
@@ -991,6 +1191,7 @@ async fn cmd_check(
   println("  moon-release release           # Create release")
 }
 
+///|
 /// Convert commit type to string
 fn commit_type_to_string(typ : @conventional.CommitType) -> String {
   match typ {
@@ -1011,36 +1212,49 @@ fn commit_type_to_string(typ : @conventional.CommitType) -> String {
 
 // ======== Helper functions ========
 
+///|
 /// Load configuration with try-catch-noraise pattern
 async fn load_config(
   path : String,
-  verbose~ : Bool = false,
-  json_output~ : Bool = false
+  verbose? : Bool = false,
+  json_output? : Bool = false,
 ) -> @config.Config {
   // Check if file exists with try-catch-noraise pattern
   let content = try @fs.read_file(path).text() catch {
     e => {
       if verbose {
         output_warning(
-          "Config file not found or unreadable (" + path + "): " + e.to_string() + ". Using default configuration.",
+          "Config file not found or unreadable (" +
+          path +
+          "): " +
+          e.to_string() +
+          ". Using default configuration.",
           json_output,
         )
       }
       return @config.Config::default()
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // Parse config - fail if file exists but is invalid
   let warnings : Array[String] = []
   let config = try @config.Config::parse(content, warnings~) catch {
     e => {
       output_error(
-        "Failed to parse config file (" + path + "): " + e.to_string() + ". Fix the configuration file or delete it to use defaults.",
+        "Failed to parse config file (" +
+        path +
+        "): " +
+        e.to_string() +
+        ". Fix the configuration file or delete it to use defaults.",
         json_output,
       )
       exit_error()
     }
-  } noraise { r => r }
+  } noraise {
+    r => r
+  }
 
   // Display warnings (suppressed in JSON mode)
   for w in warnings {
@@ -1050,14 +1264,16 @@ async fn load_config(
   config
 }
 
+///|
 /// Load moon.mod.json
-async fn load_moon_mod(path : String) -> @moon_mod.MoonMod raise {
+async fn load_moon_mod(path : String) -> @moon_mod.MoonMod {
   let content = @fs.read_file(path).text()
   @moon_mod.parse(content)
 }
 
+///|
 /// Read package name from package.json (best effort)
-async fn load_package_json_name(path : String) -> String? raise {
+async fn load_package_json_name(path : String) -> String? {
   let content = @fs.read_file(path).text()
   let json = @json.parse(content)
   match json {
@@ -1070,6 +1286,7 @@ async fn load_package_json_name(path : String) -> String? raise {
   }
 }
 
+///|
 /// Get bump type
 fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
   match subcmd.args.get("bump") {
@@ -1079,7 +1296,9 @@ fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
         "minor" => Some(@semver.Minor)
         "patch" => Some(@semver.Patch)
         bump_value => {
-          println("Error: Invalid bump value '\{bump_value}'. Expected 'major', 'minor', or 'patch'.")
+          println(
+            "Error: Invalid bump value '\{bump_value}'. Expected 'major', 'minor', or 'patch'.",
+          )
           exit_error()
         }
       }
@@ -1087,7 +1306,7 @@ fn get_bump_type(subcmd : @clap.SimpleValue) -> @semver.BumpType? {
   }
 }
 
-
+///|
 /// generate-schema command
 fn cmd_generate_schema() -> Unit {
   let schema =

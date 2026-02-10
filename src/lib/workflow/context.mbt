@@ -1,3 +1,4 @@
+///|
 /// Release context
 pub struct ReleaseContext {
   config : @config.Config
@@ -11,6 +12,7 @@ pub struct ReleaseContext {
   bump_all : Bool
 }
 
+///|
 /// Workflow error — structured variants for different failure categories
 pub(all) suberror WorkflowError {
   /// Git operation failure (tag, push, checkout, commit, etc.)
@@ -27,6 +29,7 @@ pub(all) suberror WorkflowError {
   WorkflowError(String)
 }
 
+///|
 /// Convert WorkflowError to string (with category prefix for non-generic variants)
 pub fn WorkflowError::to_string(self : WorkflowError) -> String {
   match self {
@@ -39,10 +42,11 @@ pub fn WorkflowError::to_string(self : WorkflowError) -> String {
   }
 }
 
+///|
 /// Append context to a WorkflowError while preserving its variant (category)
 pub fn WorkflowError::add_context(
   self : WorkflowError,
-  suffix : String
+  suffix : String,
 ) -> WorkflowError {
   match self {
     GitError(msg) => GitError(msg + suffix)
@@ -54,18 +58,22 @@ pub fn WorkflowError::add_context(
   }
 }
 
+///|
 /// Get a default hint for the error category
 pub fn WorkflowError::hint(self : WorkflowError) -> String {
   match self {
-    GitError(_) => "Make sure you are in a git repository with at least one commit"
+    GitError(_) =>
+      "Make sure you are in a git repository with at least one commit"
     ConfigValidationError(_) => "Check your release.json configuration"
     PublishError(_) => "Check publish credentials and network connection"
     InputValidationError(_) => "Check the input values and command arguments"
-    ExternalCommandError(_) => "Make sure required tools (git, gh, moon, npm) are installed"
+    ExternalCommandError(_) =>
+      "Make sure required tools (git, gh, moon, npm) are installed"
     WorkflowError(_) => ""
   }
 }
 
+///|
 /// Version analysis result (output of analyze_version_bump)
 pub struct VersionAnalysis {
   current_version : @semver.Version
@@ -74,6 +82,7 @@ pub struct VersionAnalysis {
   bump_type : @semver.BumpType
 }
 
+///|
 /// Create ReleaseContext
 pub fn ReleaseContext::new(
   config : @config.Config,
@@ -81,10 +90,10 @@ pub fn ReleaseContext::new(
   current_version : @semver.Version,
   new_version : @semver.Version,
   commits : Array[(@conventional.ConventionalCommit, String)],
-  dry_run~ : Bool = false,
-  verbose~ : Bool = false,
-  forced_bump~ : @semver.BumpType? = None,
-  bump_all~ : Bool = false
+  dry_run? : Bool = false,
+  verbose? : Bool = false,
+  forced_bump? : @semver.BumpType? = None,
+  bump_all? : Bool = false,
 ) -> ReleaseContext {
   ReleaseContext::{
     config,

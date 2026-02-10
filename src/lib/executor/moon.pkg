@@ -1,0 +1,15 @@
+import {
+  "moon-release/src/lib/git",
+  "moonbitlang/async",
+  "moonbitlang/async/process",
+  "moonbitlang/async/io",
+}
+
+options(
+  "native-stub": [ "getenv_stub.c" ],
+  targets: {
+    "runner.mbt": [ "native" ],
+    "runner_wbtest.mbt": [ "native" ],
+    "stub.mbt": [ "wasm", "wasm-gc", "js" ],
+  },
+)

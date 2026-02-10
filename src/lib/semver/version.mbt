@@ -1,3 +1,4 @@
+///|
 /// Semantic version
 pub struct Version {
   major : UInt
@@ -7,6 +8,7 @@ pub struct Version {
   build_metadata : String?
 } derive(Show, Eq)
 
+///|
 /// Parse version from string
 pub fn Version::parse(s : String) -> Version? {
   if s.is_empty() {
@@ -56,6 +58,7 @@ pub fn Version::parse(s : String) -> Version? {
   Some(Version::{ major, minor, patch, prerelease, build_metadata })
 }
 
+///|
 /// Split at character (first occurrence)
 fn split_at_char(s : String, c : Char) -> (String, String?) {
   let chars : Array[Char] = s.to_array()
@@ -69,6 +72,7 @@ fn split_at_char(s : String, c : Char) -> (String, String?) {
   (s, None)
 }
 
+///|
 /// Separate prerelease (after - following major.minor.patch)
 fn split_prerelease(s : String) -> (String, String?) {
   let chars : Array[Char] = s.to_array()
@@ -86,6 +90,7 @@ fn split_prerelease(s : String) -> (String, String?) {
   (s, None)
 }
 
+///|
 /// Get substring from character array
 fn substr_chars(chars : Array[Char], start : Int, end : Int) -> String {
   let result = StringBuilder::new()
@@ -97,6 +102,7 @@ fn substr_chars(chars : Array[Char], start : Int, end : Int) -> String {
   result.to_string()
 }
 
+///|
 /// Parse string to UInt
 /// Reject numbers with more than 9 digits to prevent overflow
 /// Reject leading zeros per SemVer 2.0.0 spec (e.g., "01" is invalid, "0" is valid)
@@ -126,26 +132,26 @@ fn parse_uint(s : String) -> UInt? {
   Some(result)
 }
 
+///|
 /// Create a new version with a prerelease identifier set
 /// Returns None if the prerelease identifier is invalid
 pub fn Version::with_prerelease(
   self : Version,
-  prerelease : String
+  prerelease : String,
 ) -> Version? {
   if not(validate_prerelease(prerelease)) {
     return None
   }
-  Some(
-    Version::{
-      major: self.major,
-      minor: self.minor,
-      patch: self.patch,
-      prerelease: Some(prerelease),
-      build_metadata: self.build_metadata,
-    },
-  )
+  Some(Version::{
+    major: self.major,
+    minor: self.minor,
+    patch: self.patch,
+    prerelease: Some(prerelease),
+    build_metadata: self.build_metadata,
+  })
 }
 
+///|
 /// Convert version to string
 pub fn Version::to_string(self : Version) -> String {
   let base = "\{self.major}.\{self.minor}.\{self.patch}"
@@ -159,6 +165,7 @@ pub fn Version::to_string(self : Version) -> String {
   }
 }
 
+///|
 /// Compare versions (SemVer 2.0.0 compliant)
 /// - Compare major.minor.patch
 /// - If equal, compare prerelease (no prerelease > with prerelease)
@@ -188,14 +195,21 @@ pub fn Version::compare(self : Version, other : Version) -> Int {
   }
 }
 
+///|
 /// Compare prerelease strings (SemVer 2.0.0 spec)
 /// - Split by . and compare each part
 /// - Numeric-only parts are compared as numbers
 /// - Others are compared lexicographically
 /// - Fewer parts means smaller (alpha < alpha.1)
 fn compare_prerelease(a : String, b : String) -> Int {
-  let a_parts : Array[String] = a.split(".").map(fn(sv) { sv.to_string() }).collect()
-  let b_parts : Array[String] = b.split(".").map(fn(sv) { sv.to_string() }).collect()
+  let a_parts : Array[String] = a
+    .split(".")
+    .map(fn(sv) { sv.to_string() })
+    .collect()
+  let b_parts : Array[String] = b
+    .split(".")
+    .map(fn(sv) { sv.to_string() })
+    .collect()
 
   let min_len = if a_parts.length() < b_parts.length() {
     a_parts.length()
@@ -220,6 +234,7 @@ fn compare_prerelease(a : String, b : String) -> Int {
   }
 }
 
+///|
 /// Compare each part of prerelease
 fn compare_prerelease_part(a : String, b : String) -> Int {
   let a_num = parse_uint(a)
@@ -227,14 +242,7 @@ fn compare_prerelease_part(a : String, b : String) -> Int {
 
   match (a_num, b_num) {
     // Both numeric → compare as numbers
-    (Some(an), Some(bn)) =>
-      if an < bn {
-        -1
-      } else if an > bn {
-        1
-      } else {
-        0
-      }
+    (Some(an), Some(bn)) => if an < bn { -1 } else if an > bn { 1 } else { 0 }
     // Only a is numeric → numeric comes first (smaller)
     (Some(_), None) => -1
     // Only b is numeric → numeric comes first (smaller)
@@ -244,6 +252,7 @@ fn compare_prerelease_part(a : String, b : String) -> Int {
   }
 }
 
+///|
 /// Compare strings lexicographically
 fn compare_string(a : String, b : String) -> Int {
   let a_chars = a.to_array()
@@ -271,6 +280,7 @@ fn compare_string(a : String, b : String) -> Int {
   }
 }
 
+///|
 /// Validate prerelease string (SemVer 2.0.0 compliant)
 /// - Only ASCII alphanumeric and hyphen [0-9A-Za-z-]
 /// - Dot-separated identifiers
@@ -295,6 +305,7 @@ pub fn validate_prerelease(prerelease : String) -> Bool {
   true
 }
 
+///|
 /// Validate a single prerelease identifier
 fn validate_prerelease_identifier(id : String) -> Bool {
   if id.is_empty() {
@@ -321,6 +332,7 @@ fn validate_prerelease_identifier(id : String) -> Bool {
   true
 }
 
+///|
 /// Validate build metadata string (SemVer 2.0.0 compliant)
 /// - Only ASCII alphanumeric and hyphen [0-9A-Za-z-]
 /// - Dot-separated identifiers
@@ -351,6 +363,7 @@ pub fn validate_build_metadata(metadata : String) -> Bool {
   true
 }
 
+///|
 /// Check if character is ASCII alphanumeric or hyphen
 fn is_alphanumeric_or_hyphen(c : Char) -> Bool {
   (c >= '0' && c <= '9') ||

@@ -1,7 +1,0 @@
-{
-  "is-main": false,
-  "import": [
-    "moon-release/src/lib/conventional",
-    "moon-release/src/lib/util"
-  ]
-}
