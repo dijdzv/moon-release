@@ -12,344 +12,29 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
 - **API Compatibility Check** - semver-checks for breaking change detection
 - **Monorepo Support** - Version synchronization via version_group
 
-## Installation
-
-### From mooncakes.io (recommended)
-
-```bash
-moon install dijdzv/moon-release
-```
-
-### Download binary
-
-Download pre-built binaries from [GitHub Releases](https://github.com/dijdzv/moon-release/releases/latest):
-
-```bash
-# Linux (x86_64)
-curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
-chmod +x moon-release
-
-# macOS (Apple Silicon)
-curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-macos-arm64
-chmod +x moon-release
-```
-
-### Build from source
-
-```bash
-git clone https://github.com/dijdzv/moon-release
-cd moon-release
-moon build --target native --release
-cp _build/native/release/build/src/main/main.exe ~/.local/bin/moon-release
-```
-
-## Quick Start
-
-```bash
-# Initialize configuration file
-moon-release init
-
-# Check current state
-moon-release check
-
-# Preview version update
-moon-release update --dry-run
-
-# Update version
-moon-release update
-
-# Create release PR
-moon-release release-pr
-
-# Create release (tag + GitHub Release + publish)
-moon-release release
-```
-
-## Commands
-
-### `moon-release check`
-
-Check the current state and display recommended version bump.
-
-```bash
-moon-release check
-moon-release check --verbose  # Show commit details
-moon-release check -o json    # Output in JSON format
-```
-
-### `moon-release update`
-
-Update the version in `moon.mod.json` (no commit/push).
-
-```bash
-moon-release update              # Auto-determine
-moon-release update --bump major # Force major bump (changed packages only)
-moon-release update --bump-all   # Bump all packages (monorepo)
-moon-release update --bump major --bump-all  # Force major bump on all packages
-moon-release update --dry-run    # Preview only
-moon-release update -o json      # Output in JSON format
-```
-
-### `moon-release release-pr`
-
-Create or update a release Pull Request.
-
-```bash
-moon-release release-pr
-moon-release release-pr --bump major           # Force major bump
-moon-release release-pr --bump-all             # Include all packages
-moon-release release-pr --bump major --bump-all # Force major on all packages
-moon-release release-pr --dry-run
-```
-
-### `moon-release release`
-
-Create Git tag and GitHub Release, and publish to mooncakes.io.
-
-```bash
-moon-release release
-moon-release release --bump major           # Force major bump
-moon-release release --bump-all             # Include all packages
-moon-release release --bump major --bump-all # Force major on all packages
-moon-release release --prerelease alpha     # Prerelease
-moon-release release --dry-run
-```
-
-### `moon-release set-version`
-
-Manually set the version.
-
-```bash
-moon-release set-version 1.0.0
-```
-
-### `moon-release init`
-
-Create the configuration file `release.json`.
-
-```bash
-moon-release init
-moon-release init --force  # Overwrite
-```
-
-### `moon-release generate-completions`
-
-Generate shell completion scripts.
-
-```bash
-moon-release generate-completions bash > ~/.local/share/bash-completion/completions/moon-release
-moon-release generate-completions zsh > ~/.zfunc/_moon-release
-moon-release generate-completions fish > ~/.config/fish/completions/moon-release.fish
-```
-
-### `moon-release generate-schema`
-
-Generate JSON Schema for the configuration file. Can be used for IDE autocompletion.
-
-```bash
-moon-release generate-schema > release-schema.json
-```
-
-## Configuration
-
-Customize behavior with `release.json`.
-
-```json
-{
-  "pr_title": "chore: release v{{ version }}",
-  "pr_draft": false,
-  "pr_labels": ["release"],
-  "pr_body": "## Release v{{ version }}",
-  "pr_branch_prefix": "release/",
-  "base_branch": "main",
-  "allow_prerelease": false,
-  "git_tag_enable": true,
-  "git_tag_name": "v{{ version }}",
-  "git_release_enable": true,
-  "git_release_draft": false,
-  "git_release_name": "Release v{{ version }}",
-  "git_release_body": "{{ changelog }}",
-  "git_release_latest": true,
-  "moon_publish": true,
-  "moon_publish_frozen": false,
-  "moon_publish_timeout": 300,
-  "npm_publish": false,
-  "npm_build_command": null,
-  "npm_publish_provenance": true,
-  "npm_publish_timeout": 300,
-  "semver_check": false,
-  "registry_check": false,
-  "allow_dirty": false,
-  "custom_major_increment_regex": null,
-  "custom_minor_increment_regex": null,
-  "max_analyze_commits": null,
-  "bump_all_packages": false,
-  "packages": []
-}
-```
-
-### Configuration Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `pr_title` | `"chore: release v{{ version }}"` | PR title template |
-| `pr_draft` | `false` | Create as draft PR |
-| `pr_labels` | `[]` | Labels to add to PR |
-| `pr_body` | - | PR body template |
-| `pr_branch_prefix` | `"release/"` | Release branch prefix |
-| `base_branch` | `"main"` | PR base branch |
-| `allow_prerelease` | `false` | Allow prerelease versions (e.g., `--prerelease alpha`) |
-| `git_tag_enable` | `true` | Whether to create Git tag |
-| `git_tag_name` | `"v{{ version }}"` | Tag name template |
-| `git_release_enable` | `true` | Whether to create GitHub Release |
-| `git_release_draft` | `false` | Create as draft release |
-| `git_release_name` | `"Release v{{ version }}"` | Release name template |
-| `git_release_body` | `null` | Release body template (null for auto-generate) |
-| `git_release_latest` | `true` | Mark GitHub Release as latest |
-| `moon_publish` | `true` | Whether to publish to mooncakes.io |
-| `moon_publish_frozen` | `false` | Use `moon publish --frozen` |
-| `moon_publish_timeout` | `300` | Publish timeout in seconds |
-| `npm_publish` | `false` | Whether to publish to npm registry |
-| `npm_build_command` | `null` | Custom build command before npm publish (default: `moon build --target js`). Note: split by spaces, paths with spaces are not supported. |
-| `npm_publish_provenance` | `true` | Use `--provenance` flag for npm publish. Set to `false` for local or non-GitHub CI publishing. |
-| `npm_publish_timeout` | `300` | npm publish timeout in seconds |
-| `semver_check` | `false` | Run API compatibility check |
-| `registry_check` | `false` | Check registry version before publish |
-| `allow_dirty` | `false` | Allow uncommitted changes |
-| `custom_major_increment_regex` | `null` | Custom substring pattern for major bump (matched against commit description) |
-| `custom_minor_increment_regex` | `null` | Custom substring pattern for minor bump (matched against commit description) |
-| `max_analyze_commits` | `null` | Maximum number of commits to analyze |
-| `bump_all_packages` | `false` | Bump all packages uniformly in monorepo mode (fixed versioning) |
-
-### Template Variables
-
-| Variable | Description |
-|----------|-------------|
-| `{{ version }}` | New version number |
-| `{{ changelog }}` | Auto-generated release notes (`git_release_body` only) |
-
-## Conventional Commits
-
-moon-release parses [Conventional Commits](https://www.conventionalcommits.org/) to automatically determine the version.
-
-| Commit Type | Bump | Example |
-|-------------|------|---------|
-| `feat` | Minor | `feat: add new feature` |
-| `fix` | Patch | `fix: resolve bug` |
-| `feat!` / `fix!` | Major | `feat!: breaking change` |
-| `BREAKING CHANGE:` | Major | In footer |
-
-Other types (`docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`) do not affect the version.
-
-## API Compatibility Check (semver_check)
-
-Setting `semver_check: true` detects breaking API changes before release.
-
-```json
-{
-  "semver_check": true
-}
-```
-
-### Detected Changes
-
-| Change | Impact |
-|--------|--------|
-| Removal of pub type/function/method | Breaking (Major) |
-| Signature change | Breaking (Major) |
-| Struct field removal/change | Breaking (Major) |
-| Addition of new pub type/function | Addition (Minor) |
-
-### How It Works
-
-1. Checkout latest tag → Generate API with `moon doc`
-2. Return to current code → Generate API with `moon doc`
-3. Compare the two `package_data.json` files
-4. Display warning if breaking changes are found
-
-## Monorepo Support
-
-For monorepos with multiple packages, configure each package individually with `packages`.
-
-```json
-{
-  "packages": [
-    {
-      "name": "core",
-      "path": "packages/core",
-      "moon_publish": true,
-      "npm_publish": true,
-      "version_group": "main"
-    },
-    {
-      "name": "utils",
-      "path": "packages/utils",
-      "moon_publish": true,
-      "npm_publish": false,
-      "version_group": "main"
-    },
-    {
-      "name": "internal",
-      "path": "packages/internal",
-      "moon_publish": false,
-      "npm_publish": false
-    }
-  ]
-}
-```
-
-### Versioning Strategies
-
-#### Independent (default)
-
-Only packages with changes are bumped. Each package gets its own bump type based on its commits.
-
-```bash
-# Only changed packages are bumped
-moon-release update
-
-# Force major bump on changed packages only
-moon-release update --bump major
-```
-
-#### Fixed (`bump_all_packages` or `--bump-all`)
-
-All packages are bumped uniformly using the highest bump type found across changed packages.
-
-```json
-{
-  "bump_all_packages": true
-}
-```
-
-Or use the CLI flag for one-time override:
-
-```bash
-# Bump all packages (uses max bump type from changed packages)
-moon-release update --bump-all
-
-# Force major bump on ALL packages
-moon-release update --bump major --bump-all
-```
-
-| Config `bump_all_packages` | CLI | Behavior |
-|---|---|---|
-| `false` | (none) | Changed packages only, auto bump type |
-| `false` | `--bump major` | Changed packages only, forced major |
-| `false` | `--bump-all` | All packages, max bump type from changes |
-| `false` | `--bump major --bump-all` | All packages, forced major |
-| `true` | (none) | All packages, max bump type from changes |
-| `true` | `--bump major` | All packages, forced major |
-
-> **Note:** `--bump` controls the bump **type** (major/minor/patch), while `--bump-all` controls the bump **scope** (changed-only vs all packages).
-
-### version_group
-
-Packages with the same `version_group` are aligned to the largest bump type within the group.
-
-Example: If `core` has a breaking change and `utils` has a feat, both will receive a major bump.
+## Table of Contents
+
+- [GitHub Actions (CI)](#github-actions)
+  - [Required Setup](#required-setup)
+  - [Publishing to mooncakes.io](#publishing-to-mooncakesio-optional)
+  - [Publishing to npm](#publishing-to-npm-optional)
+  - [Configuration Summary](#configuration-summary)
+  - [Workflow Template](#workflow-template)
+- [Configuration](#configuration)
+  - [Configuration Options](#configuration-options)
+  - [Template Variables](#template-variables)
+- [Conventional Commits](#conventional-commits)
+- [API Compatibility Check](#api-compatibility-check-semver_check)
+- [Monorepo Support](#monorepo-support)
+- [CLI Usage](#cli-usage)
+  - [Installation](#installation)
+  - [Quick Start](#quick-start)
+  - [Commands](#commands)
+- [Differences from release-plz](#differences-from-release-plz)
 
 ## GitHub Actions
+
+This is the primary way to use moon-release. Set up CI/CD to automatically create release PRs and publish packages.
 
 ### Required Setup
 
@@ -574,6 +259,347 @@ If the JS build fails, no tag or release is created (atomic operation).
 ### Workflow Template
 
 See [templates/release.yml](./templates/release.yml) for a complete example.
+
+## Configuration
+
+Customize behavior with `release.json`.
+
+```json
+{
+  "pr_title": "chore: release v{{ version }}",
+  "pr_draft": false,
+  "pr_labels": ["release"],
+  "pr_body": "## Release v{{ version }}",
+  "pr_branch_prefix": "release/",
+  "base_branch": "main",
+  "allow_prerelease": false,
+  "git_tag_enable": true,
+  "git_tag_name": "v{{ version }}",
+  "git_release_enable": true,
+  "git_release_draft": false,
+  "git_release_name": "Release v{{ version }}",
+  "git_release_body": "{{ changelog }}",
+  "git_release_latest": true,
+  "moon_publish": true,
+  "moon_publish_frozen": false,
+  "moon_publish_timeout": 300,
+  "npm_publish": false,
+  "npm_build_command": null,
+  "npm_publish_provenance": true,
+  "npm_publish_timeout": 300,
+  "semver_check": false,
+  "registry_check": false,
+  "allow_dirty": false,
+  "custom_major_increment_regex": null,
+  "custom_minor_increment_regex": null,
+  "max_analyze_commits": null,
+  "bump_all_packages": false,
+  "packages": []
+}
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `pr_title` | `"chore: release v{{ version }}"` | PR title template |
+| `pr_draft` | `false` | Create as draft PR |
+| `pr_labels` | `[]` | Labels to add to PR |
+| `pr_body` | - | PR body template |
+| `pr_branch_prefix` | `"release/"` | Release branch prefix |
+| `base_branch` | `"main"` | PR base branch |
+| `allow_prerelease` | `false` | Allow prerelease versions (e.g., `--prerelease alpha`) |
+| `git_tag_enable` | `true` | Whether to create Git tag |
+| `git_tag_name` | `"v{{ version }}"` | Tag name template |
+| `git_release_enable` | `true` | Whether to create GitHub Release |
+| `git_release_draft` | `false` | Create as draft release |
+| `git_release_name` | `"Release v{{ version }}"` | Release name template |
+| `git_release_body` | `null` | Release body template (null for auto-generate) |
+| `git_release_latest` | `true` | Mark GitHub Release as latest |
+| `moon_publish` | `true` | Whether to publish to mooncakes.io |
+| `moon_publish_frozen` | `false` | Use `moon publish --frozen` |
+| `moon_publish_timeout` | `300` | Publish timeout in seconds |
+| `npm_publish` | `false` | Whether to publish to npm registry |
+| `npm_build_command` | `null` | Custom build command before npm publish (default: `moon build --target js`). Note: split by spaces, paths with spaces are not supported. |
+| `npm_publish_provenance` | `true` | Use `--provenance` flag for npm publish. Set to `false` for local or non-GitHub CI publishing. |
+| `npm_publish_timeout` | `300` | npm publish timeout in seconds |
+| `semver_check` | `false` | Run API compatibility check |
+| `registry_check` | `false` | Check registry version before publish |
+| `allow_dirty` | `false` | Allow uncommitted changes |
+| `custom_major_increment_regex` | `null` | Custom substring pattern for major bump (matched against commit description) |
+| `custom_minor_increment_regex` | `null` | Custom substring pattern for minor bump (matched against commit description) |
+| `max_analyze_commits` | `null` | Maximum number of commits to analyze |
+| `bump_all_packages` | `false` | Bump all packages uniformly in monorepo mode (fixed versioning) |
+
+### Template Variables
+
+| Variable | Description |
+|----------|-------------|
+| `{{ version }}` | New version number |
+| `{{ changelog }}` | Auto-generated release notes (`git_release_body` only) |
+
+## Conventional Commits
+
+moon-release parses [Conventional Commits](https://www.conventionalcommits.org/) to automatically determine the version.
+
+| Commit Type | Bump | Example |
+|-------------|------|---------|
+| `feat` | Minor | `feat: add new feature` |
+| `fix` | Patch | `fix: resolve bug` |
+| `feat!` / `fix!` | Major | `feat!: breaking change` |
+| `BREAKING CHANGE:` | Major | In footer |
+
+Other types (`docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`) do not affect the version.
+
+## API Compatibility Check (semver_check)
+
+Setting `semver_check: true` detects breaking API changes before release.
+
+```json
+{
+  "semver_check": true
+}
+```
+
+### Detected Changes
+
+| Change | Impact |
+|--------|--------|
+| Removal of pub type/function/method | Breaking (Major) |
+| Signature change | Breaking (Major) |
+| Struct field removal/change | Breaking (Major) |
+| Addition of new pub type/function | Addition (Minor) |
+
+### How It Works
+
+1. Checkout latest tag → Generate API with `moon doc`
+2. Return to current code → Generate API with `moon doc`
+3. Compare the two `package_data.json` files
+4. Display warning if breaking changes are found
+
+## Monorepo Support
+
+For monorepos with multiple packages, configure each package individually with `packages`.
+
+```json
+{
+  "packages": [
+    {
+      "name": "core",
+      "path": "packages/core",
+      "moon_publish": true,
+      "npm_publish": true,
+      "version_group": "main"
+    },
+    {
+      "name": "utils",
+      "path": "packages/utils",
+      "moon_publish": true,
+      "npm_publish": false,
+      "version_group": "main"
+    },
+    {
+      "name": "internal",
+      "path": "packages/internal",
+      "moon_publish": false,
+      "npm_publish": false
+    }
+  ]
+}
+```
+
+### Versioning Strategies
+
+#### Independent (default)
+
+Only packages with changes are bumped. Each package gets its own bump type based on its commits.
+
+```bash
+# Only changed packages are bumped
+moon-release update
+
+# Force major bump on changed packages only
+moon-release update --bump major
+```
+
+#### Fixed (`bump_all_packages` or `--bump-all`)
+
+All packages are bumped uniformly using the highest bump type found across changed packages.
+
+```json
+{
+  "bump_all_packages": true
+}
+```
+
+Or use the CLI flag for one-time override:
+
+```bash
+# Bump all packages (uses max bump type from changed packages)
+moon-release update --bump-all
+
+# Force major bump on ALL packages
+moon-release update --bump major --bump-all
+```
+
+| Config `bump_all_packages` | CLI | Behavior |
+|---|---|---|
+| `false` | (none) | Changed packages only, auto bump type |
+| `false` | `--bump major` | Changed packages only, forced major |
+| `false` | `--bump-all` | All packages, max bump type from changes |
+| `false` | `--bump major --bump-all` | All packages, forced major |
+| `true` | (none) | All packages, max bump type from changes |
+| `true` | `--bump major` | All packages, forced major |
+
+> **Note:** `--bump` controls the bump **type** (major/minor/patch), while `--bump-all` controls the bump **scope** (changed-only vs all packages).
+
+### version_group
+
+Packages with the same `version_group` are aligned to the largest bump type within the group.
+
+Example: If `core` has a breaking change and `utils` has a feat, both will receive a major bump.
+
+## CLI Usage
+
+moon-release can also be used as a standalone CLI tool for local development and debugging.
+
+### Installation
+
+#### From mooncakes.io (recommended)
+
+```bash
+moon install dijdzv/moon-release
+```
+
+#### Download binary
+
+Download pre-built binaries from [GitHub Releases](https://github.com/dijdzv/moon-release/releases/latest):
+
+```bash
+# Linux (x86_64)
+curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
+chmod +x moon-release
+
+# macOS (Apple Silicon)
+curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-macos-arm64
+chmod +x moon-release
+```
+
+#### Build from source
+
+```bash
+git clone https://github.com/dijdzv/moon-release
+cd moon-release
+moon build --target native --release
+cp _build/native/release/build/src/main/main.exe ~/.local/bin/moon-release
+```
+
+### Quick Start
+
+```bash
+# Initialize configuration file
+moon-release init
+
+# Check current state
+moon-release check
+
+# Preview version update
+moon-release update --dry-run
+
+# Update version
+moon-release update
+
+# Create release PR
+moon-release release-pr
+
+# Create release (tag + GitHub Release + publish)
+moon-release release
+```
+
+### Commands
+
+#### `moon-release check`
+
+Check the current state and display recommended version bump.
+
+```bash
+moon-release check
+moon-release check --verbose  # Show commit details
+moon-release check -o json    # Output in JSON format
+```
+
+#### `moon-release update`
+
+Update the version in `moon.mod.json` (no commit/push).
+
+```bash
+moon-release update              # Auto-determine
+moon-release update --bump major # Force major bump (changed packages only)
+moon-release update --bump-all   # Bump all packages (monorepo)
+moon-release update --bump major --bump-all  # Force major bump on all packages
+moon-release update --dry-run    # Preview only
+moon-release update -o json      # Output in JSON format
+```
+
+#### `moon-release release-pr`
+
+Create or update a release Pull Request.
+
+```bash
+moon-release release-pr
+moon-release release-pr --bump major           # Force major bump
+moon-release release-pr --bump-all             # Include all packages
+moon-release release-pr --bump major --bump-all # Force major on all packages
+moon-release release-pr --dry-run
+```
+
+#### `moon-release release`
+
+Create Git tag and GitHub Release, and publish to mooncakes.io.
+
+```bash
+moon-release release
+moon-release release --bump major           # Force major bump
+moon-release release --bump-all             # Include all packages
+moon-release release --bump major --bump-all # Force major on all packages
+moon-release release --prerelease alpha     # Prerelease
+moon-release release --dry-run
+```
+
+#### `moon-release set-version`
+
+Manually set the version.
+
+```bash
+moon-release set-version 1.0.0
+```
+
+#### `moon-release init`
+
+Create the configuration file `release.json`.
+
+```bash
+moon-release init
+moon-release init --force  # Overwrite
+```
+
+#### `moon-release generate-completions`
+
+Generate shell completion scripts.
+
+```bash
+moon-release generate-completions bash > ~/.local/share/bash-completion/completions/moon-release
+moon-release generate-completions zsh > ~/.zfunc/_moon-release
+moon-release generate-completions fish > ~/.config/fish/completions/moon-release.fish
+```
+
+#### `moon-release generate-schema`
+
+Generate JSON Schema for the configuration file. Can be used for IDE autocompletion.
+
+```bash
+moon-release generate-schema > release-schema.json
+```
 
 ## Differences from release-plz
 
