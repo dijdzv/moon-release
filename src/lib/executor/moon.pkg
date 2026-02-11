@@ -1,5 +1,5 @@
 import {
-  "moon-release/src/lib/git",
+  "dijdzv/moon-release/src/lib/git",
   "moonbitlang/async",
   "moonbitlang/async/process",
   "moonbitlang/async/io",

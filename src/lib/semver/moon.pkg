@@ -1,5 +1,5 @@
 import {
-  "moon-release/src/lib/conventional",
+  "dijdzv/moon-release/src/lib/conventional",
 }
 
 options(

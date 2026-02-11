@@ -1,5 +1,5 @@
 import {
-  "moon-release/src/lib/semver",
+  "dijdzv/moon-release/src/lib/semver",
   "moonbitlang/core/hashmap",
   "moonbitlang/core/json",
 }
