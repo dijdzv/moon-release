@@ -761,6 +761,7 @@ async fn cmd_release(
   let commits = try
     @workflow.get_commits_since_last_tag(
       repo,
+      pr_title=config.pr_title,
       max_commits=config.max_analyze_commits,
     )
   catch {
@@ -1067,6 +1068,7 @@ async fn cmd_check(
   let commits = try
     @workflow.get_commits_since_last_tag(
       repo,
+      pr_title=config.pr_title,
       max_commits=config.max_analyze_commits,
     )
   catch {

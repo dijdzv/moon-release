@@ -240,8 +240,10 @@ pub fn get_latest_tag(_repo : @git.Repository) -> String? raise WorkflowError {
 /// Get commits since last tag (stub)
 pub fn get_commits_since_last_tag(
   _repo : @git.Repository,
+  pr_title~ : String = "",
   max_commits? : UInt? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
+  ignore(pr_title)
   ignore(max_commits)
   raise WorkflowError("Workflow requires native target")
 }

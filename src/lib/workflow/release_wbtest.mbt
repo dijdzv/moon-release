@@ -977,3 +977,35 @@ test "build_pr_body_unified - package with no commits" {
   // No changelog section for empty commits
   assert_false(result.contains("### Features"))
 }
+
+// Release commit pattern derivation tests
+// Validates the logic used in get_commits_since_last_tag and get_package_commits
+// to derive a search pattern from pr_title by removing "{{ version }}"
+
+///|
+test "pr_title pattern derivation - default template" {
+  let pr_title = "chore: release v{{ version }}"
+  let pattern = pr_title.replace(old="{{ version }}", new="")
+  assert_eq(pattern, "chore: release v")
+}
+
+///|
+test "pr_title pattern derivation - custom template" {
+  let pr_title = "release: {{ version }}"
+  let pattern = pr_title.replace(old="{{ version }}", new="")
+  assert_eq(pattern, "release: ")
+}
+
+///|
+test "pr_title pattern derivation - no placeholder" {
+  let pr_title = "fixed release title"
+  let pattern = pr_title.replace(old="{{ version }}", new="")
+  assert_eq(pattern, "fixed release title")
+}
+
+///|
+test "pr_title pattern derivation - version in middle" {
+  let pr_title = "Release {{ version }} is ready"
+  let pattern = pr_title.replace(old="{{ version }}", new="")
+  assert_eq(pattern, "Release  is ready")
+}

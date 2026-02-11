@@ -252,6 +252,38 @@ test "get_commits_since_tag_command - rejects double dots" {
   }
 }
 
+// find_release_commit_command tests
+
+///|
+test "find_release_commit_command - default pattern" {
+  let repo = Repository::open_unchecked("/repo")
+  let cmd = repo.find_release_commit_command("chore: release v")
+  assert_eq(cmd[0], "git")
+  assert_eq(cmd[1], "-C")
+  assert_eq(cmd[2], "/repo")
+  assert_eq(cmd[3], "log")
+  assert_eq(cmd[4], "--fixed-strings")
+  assert_eq(cmd[5], "--grep=chore: release v")
+  assert_eq(cmd[6], "--format=%H")
+  assert_eq(cmd[7], "-1")
+}
+
+///|
+test "find_release_commit_command - custom pattern" {
+  let repo = Repository::open_unchecked("/repo")
+  let cmd = repo.find_release_commit_command("release: ")
+  assert_eq(cmd[5], "--grep=release: ")
+}
+
+///|
+test "find_release_commit_command - uses fixed-strings for safe matching" {
+  let repo = Repository::open_unchecked("/repo")
+  // Pattern with regex-special characters should be safe due to --fixed-strings
+  let cmd = repo.find_release_commit_command("release (v1.0)")
+  assert_true(cmd.iter().any(fn(s) { s == "--fixed-strings" }))
+  assert_eq(cmd[5], "--grep=release (v1.0)")
+}
+
 // create_tag_command security separator
 
 ///|
