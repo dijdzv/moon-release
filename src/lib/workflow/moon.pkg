@@ -15,8 +15,10 @@ import {
 
 options(
   targets: {
+    "common.mbt": [ "native" ],
     "context.mbt": [ "native" ],
     "release.mbt": [ "native" ],
+    "release_wbtest.mbt": [ "native" ],
     "stub.mbt": [ "wasm", "wasm-gc", "js" ],
   },
 )
