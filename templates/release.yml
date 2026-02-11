@@ -1,7 +1,7 @@
 # Moon Release Workflow Template
 # Copy this file to .github/workflows/ in your MoonBit project
 #
-# Required repository settings:
+# Required setup:
 # 1. Settings → Actions → General → Workflow permissions
 #    - Select "Read and write permissions"
 #    - Check "Allow GitHub Actions to create and approve pull requests"
@@ -10,6 +10,11 @@
 # 2. Settings → Secrets and variables → Actions
 #    - MOONCAKES_TOKEN: from ~/.moon/credentials.json
 #    - MOONCAKES_USERNAME: from ~/.moon/credentials.json
+#
+# Customize:
+#   - Change BINARY_NAME to your project's binary name
+#     (last component of your main package path, e.g. "my-tool" for "user/my-tool")
+#   - Remove build/release jobs if you don't distribute native binaries
 
 name: Release
 
@@ -22,19 +27,24 @@ on:
         description: 'Dry run (no actual changes)'
         type: boolean
         default: false
+      build-only:
+        description: 'Build binaries only (skip release-pr)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
   pull-requests: write
 
 env:
-  MOON_RELEASE_VERSION: latest  # or specific version like "v0.2.2"
+  # Change this to your project's binary name
+  BINARY_NAME: my-tool
 
 jobs:
   # Create or update release PR on every push to main
   release-pr:
+    if: github.event.inputs.build-only != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !(startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v'))))
     runs-on: ubuntu-latest
-    if: "!(startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v'))"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,14 +56,10 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
-      - name: Download moon-release
+      - name: Install moon-release
         run: |
-          if [ "$MOON_RELEASE_VERSION" = "latest" ]; then
-            curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
-          else
-            curl -fsSL -o moon-release "https://github.com/dijdzv/moon-release/releases/download/${MOON_RELEASE_VERSION}/moon-release-linux-x86_64"
-          fi
-          chmod +x moon-release
+          curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Configure Git
         run: |
@@ -69,12 +75,81 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
-          ./moon-release release-pr $DRY_RUN_FLAG --verbose
+          moon-release release-pr $DRY_RUN_FLAG --verbose
 
-  # Create release when release PR is merged
+  # Build binaries for multiple platforms
+  build:
+    if: (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.build-only == 'true')
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_suffix: linux-x86_64
+          - os: macos-14
+            artifact_suffix: macos-arm64
+          - os: windows-latest
+            artifact_suffix: windows-x86_64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MoonBit (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+
+      - name: Setup MoonBit (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
+
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Fetch dependencies
+        run: moon update
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: moon build --target native --release
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        env:
+          CC: cl
+        run: moon build --target native --release
+
+      - name: Rename binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          ARTIFACT="${BINARY_NAME}-${{ matrix.artifact_suffix }}"
+          cp "./_build/native/release/build/${BINARY_NAME}.exe" "./${ARTIFACT}"
+          chmod +x "./${ARTIFACT}"
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $artifact = "$env:BINARY_NAME-${{ matrix.artifact_suffix }}"
+          copy ".\_build\native\release\build\$env:BINARY_NAME.exe" ".\$artifact"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ matrix.artifact_suffix }}
+          path: ${{ env.BINARY_NAME }}-${{ matrix.artifact_suffix }}
+
+  # Create release and upload binaries
   release:
+    needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,9 +161,18 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
-      # Configure mooncakes credentials (only if publishing to mooncakes.io)
-      # Remove this step if moon_publish is false in release.json
-      - name: Configure mooncakes credentials
+      - name: Install moon-release
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Configure mooncakes credentials (skip if no token configured)
+      - name: Setup mooncakes credentials
         env:
           MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
           MOONCAKES_USERNAME: ${{ secrets.MOONCAKES_USERNAME }}
@@ -102,16 +186,39 @@ jobs:
             '{"token": $token, "username": $username}' > ~/.moon/credentials.json
           chmod 600 ~/.moon/credentials.json
 
-      - name: Download moon-release
-        run: |
-          if [ "$MOON_RELEASE_VERSION" = "latest" ]; then
-            curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
-          else
-            curl -fsSL -o moon-release "https://github.com/dijdzv/moon-release/releases/download/${MOON_RELEASE_VERSION}/moon-release-linux-x86_64"
-          fi
-          chmod +x moon-release
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-      - name: Create Release
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -exec mv {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Get version from moon.mod.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' moon.mod.json)
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "ERROR: version not found in moon.mod.json"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./moon-release release --verbose
+        run: moon-release release --verbose
+
+      - name: Upload binaries to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "v${VERSION}" &>/dev/null; then
+            gh release upload "v${VERSION}" release-assets/* --clobber
+          else
+            echo "No release found for v${VERSION}, skipping binary upload"
+          fi
