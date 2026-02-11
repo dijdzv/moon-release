@@ -34,11 +34,9 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
 
 ## GitHub Actions
 
-This is the primary way to use moon-release. Set up CI/CD to automatically create release PRs and publish packages.
+This is the primary way to use moon-release. Set up CI/CD to automatically create release PRs, create GitHub Releases with tags, and optionally publish to mooncakes.io / npm.
 
 ### Required Setup
-
-Before using moon-release in GitHub Actions, you need to configure the following:
 
 #### 1. Repository Permissions
 
@@ -51,7 +49,7 @@ Go to **Settings → Actions → General → Workflow permissions**:
 
 #### 2. Workflow File Setup
 
-Create `.github/workflows/release.yml`:
+Create `.github/workflows/release.yml`. This base workflow creates release PRs and GitHub Releases (with Git tags):
 
 ```yaml
 name: Release
@@ -93,46 +91,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./moon-release release-pr --verbose
-```
 
-**Key points:**
-- `fetch-depth: 0` - Required to analyze commit history
-- Setup MoonBit - Installs MoonBit toolchain via official installer
-- Git config - Required for committing version changes
-- `GITHUB_TOKEN` - Automatically provided by GitHub Actions
-
-### Publishing to mooncakes.io (Optional)
-
-To automatically publish to mooncakes.io, additional configuration is required.
-
-#### 1. Get mooncakes Token
-
-```bash
-# Authenticate locally
-moon login
-
-# Check token
-cat ~/.moon/credentials.json
-# {"token": "xxxxx", "username": "your-username"}
-```
-
-#### 2. Configure GitHub Secrets
-
-Go to **Settings → Secrets and variables → Actions → New repository secret**:
-
-| Secret Name | Value |
-|-------------|-------|
-| `MOONCAKES_TOKEN` | The `token` value from credentials.json |
-| `MOONCAKES_USERNAME` | The `username` value from credentials.json |
-
-#### 3. Add to Workflow
-
-Add the release job that runs when a release PR is merged:
-
-```yaml
   release:
     runs-on: ubuntu-latest
-    # Run only when release PR is merged
     if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')
     steps:
       - name: Checkout
@@ -145,15 +106,6 @@ Add the release job that runs when a release PR is merged:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
-      - name: Configure mooncakes credentials
-        env:
-          MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
-          MOONCAKES_USERNAME: ${{ secrets.MOONCAKES_USERNAME }}
-        run: |
-          mkdir -p ~/.moon
-          jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
-            '{"token": $token, "username": $username}' > ~/.moon/credentials.json
-
       - name: Download moon-release
         run: |
           curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
@@ -165,9 +117,79 @@ Add the release job that runs when a release PR is merged:
         run: ./moon-release release --verbose
 ```
 
-> **⚠️ Security Notice**
->
-> mooncakes.io does not currently provide limited-scope tokens for CI use.
+**Key points:**
+- `fetch-depth: 0` - Required to analyze commit history
+- `release-pr` job - Runs on every push: creates/updates a release PR with version bump
+- `release` job - Runs only when a release PR is merged: creates Git tag + GitHub Release
+- `GITHUB_TOKEN` - Automatically provided by GitHub Actions
+
+With this base setup, merging a release PR will automatically create a Git tag and a GitHub Release with release notes. No additional secrets are needed.
+
+### Publishing to mooncakes.io (Optional)
+
+To also publish to mooncakes.io when releasing, add mooncakes credentials to the `release` job.
+
+#### 1. Configure GitHub Secrets
+
+First, authenticate locally and register the credentials as GitHub Secrets:
+
+```bash
+# Authenticate with mooncakes.io (creates ~/.moon/credentials.json)
+moon login
+```
+
+If you have `jq` and `gh` installed, you can register the secrets in one step:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+CREDS="$HOME/.moon/credentials.json"
+if [ ! -f "$CREDS" ]; then
+    echo "Error: $CREDS not found. Run 'moon login' first."
+    exit 1
+fi
+TOKEN=$(jq -r '.token' "$CREDS")
+USERNAME=$(jq -r '.username' "$CREDS")
+if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+    echo "Error: token not found in $CREDS"
+    exit 1
+fi
+if [ -z "$USERNAME" ] || [ "$USERNAME" = "null" ]; then
+    echo "Error: username not found in $CREDS"
+    exit 1
+fi
+echo "Setting MOONCAKES_TOKEN..."
+echo "$TOKEN" | gh secret set MOONCAKES_TOKEN
+echo "Setting MOONCAKES_USERNAME..."
+echo "$USERNAME" | gh secret set MOONCAKES_USERNAME
+echo "Done! Mooncakes credentials registered as GitHub Secrets."
+```
+
+Or set them manually at **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret Name | Value |
+|-------------|-------|
+| `MOONCAKES_TOKEN` | The `token` value from `~/.moon/credentials.json` |
+| `MOONCAKES_USERNAME` | The `username` value from `~/.moon/credentials.json` |
+
+#### 2. Add Credentials Step to Workflow
+
+Add the following step to the `release` job, **before** the "Download moon-release" step:
+
+```yaml
+      - name: Configure mooncakes credentials
+        env:
+          MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
+          MOONCAKES_USERNAME: ${{ secrets.MOONCAKES_USERNAME }}
+        run: |
+          mkdir -p ~/.moon
+          jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
+            '{"token": $token, "username": $username}' > ~/.moon/credentials.json
+```
+
+No changes to `release.json` are needed — `moon_publish` is `true` by default.
+
+> **Warning:** mooncakes.io does not currently provide limited-scope tokens for CI use.
 > The token in `~/.moon/credentials.json` may have full account permissions.
 > Use at your own risk with this understanding.
 
@@ -177,15 +199,14 @@ moon-release uses **npm Trusted Publishing** (OIDC) for secure, tokenless authen
 
 #### 1. Configure Trusted Publishing on npmjs.com
 
-1. Go to [npmjs.com](https://www.npmjs.com/) and log in
-2. Navigate to your package → **Settings** → **Configure Trusted Publishing**
-3. Add a new trusted publisher:
+1. Go to [npmjs.com](https://www.npmjs.com/) → your package → **Settings** → **Configure Trusted Publishing**
+2. Add a new trusted publisher:
    - **Repository owner**: Your GitHub username or organization
    - **Repository name**: Your repository name
    - **Workflow filename**: `release.yml` (or your workflow file)
    - **Environment**: (leave empty or set if using environments)
 
-> **💡 Note:** If this is a new package, you need to publish it once manually first:
+> If this is a new package, you need to publish it once manually first:
 > ```bash
 > npm publish --access public
 > ```
@@ -196,7 +217,6 @@ Enable npm publishing in `release.json`:
 
 ```json
 {
-  "moon_publish": true,
   "npm_publish": true,
   "npm_build_command": "moon build --target js"
 }
@@ -204,7 +224,7 @@ Enable npm publishing in `release.json`:
 
 #### 3. Update Workflow
 
-Add `id-token: write` permission to your workflow:
+Add `id-token: write` permission and a Node.js setup step to the `release` job:
 
 ```yaml
   release:
@@ -212,22 +232,18 @@ Add `id-token: write` permission to your workflow:
     permissions:
       contents: write
       id-token: write  # Required for npm Trusted Publishing
+    # ...
     steps:
-      # ... other steps ...
+      # ... (after Checkout, before Create Release)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Create Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./moon-release release --verbose
 ```
 
-> **🔒 Security:** Trusted Publishing is more secure than access tokens:
+> Trusted Publishing is more secure than access tokens:
 > - No secrets to store or rotate
 > - Short-lived tokens generated per-workflow
 > - Scoped to specific repository and workflow
