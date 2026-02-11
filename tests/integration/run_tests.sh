@@ -4,7 +4,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-BINARY="$PROJECT_ROOT/_build/native/release/build/src/main/main.exe"
+BINARY="$PROJECT_ROOT/_build/native/release/build/moon-release.exe"
 
 # Colored output
 RED='\033[0;31m'

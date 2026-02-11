@@ -1,6 +1,6 @@
 import {
   "moonbitlang/core/json",
-  "dijdzv/moon-release/src/lib/util",
+  "dijdzv/moon-release/lib/util",
 }
 
 options(

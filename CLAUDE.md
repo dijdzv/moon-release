@@ -19,9 +19,9 @@ moon test --target native            # Unit tests (471+ tests)
 ./tests/integration/run_tests.sh     # E2E tests (52+ tests, builds binary first)
 
 # Run
-moon run src/main -- <args>          # Run CLI directly
+moon run src -- <args>               # Run CLI directly
 # or after build:
-./_build/native/release/build/src/main/main.exe <args>
+./_build/native/release/build/moon-release.exe <args>
 ```
 
 The `justfile` provides shortcuts: `just test`, `just test-integration`, `just test-all`, `just check`, `just build-native`.
@@ -33,24 +33,24 @@ MoonBit release automation tool. CLI dispatches commands via `TheWaWaR/clap` par
 ### Package Dependency Flow
 
 ```
-src/main/          CLI entry point, command handlers, completions, schema
-  └── src/lib/workflow/   Orchestrates release operations (PR, tag, publish)
-        ├── src/lib/executor/    Subprocess execution (git, gh, moon CLI)
-        ├── src/lib/github/      GitHub API via gh CLI
-        ├── src/lib/semver_check/ API compatibility detection via moon doc
-        ├── src/lib/git/         Git repository operations
-        ├── src/lib/moon_mod/    moon.mod.json parser
-        ├── src/lib/config/      release.json parsing & Config struct
-        ├── src/lib/semver/      SemVer parsing, comparison, bumping
-        ├── src/lib/conventional/ Conventional Commits parser
-        └── src/lib/util/        JSON helpers, path validation
+src/               CLI entry point, command handlers, completions, schema
+  └── lib/workflow/      Orchestrates release operations (PR, tag, publish)
+        ├── lib/executor/      Subprocess execution (git, gh, moon CLI)
+        ├── lib/github/        GitHub API via gh CLI
+        ├── lib/semver_check/  API compatibility detection via moon doc
+        ├── lib/git/           Git repository operations
+        ├── lib/moon_mod/      moon.mod.json parser
+        ├── lib/config/        release.json parsing & Config struct
+        ├── lib/semver/        SemVer parsing, comparison, bumping
+        ├── lib/conventional/  Conventional Commits parser
+        └── lib/util/          JSON helpers, path validation
 ```
 
 ### Native/Stub Target Split
 
 This project targets **native only**. wasm-gc/js are not used for building or testing.
 
-executor, workflow, and main have stub files (`stub.mbt`) declared for `["wasm", "wasm-gc", "js"]` in `moon.pkg.json` `targets`. These exist solely because MoonBit requires all targets to compile — the stubs just raise errors and are never executed.
+executor, workflow, and the root package (src/) have stub files (`stub.mbt`) declared for `["wasm", "wasm-gc", "js"]` in `moon.pkg` `targets`. These exist solely because MoonBit requires all targets to compile — the stubs just raise errors and are never executed.
 
 When modifying struct fields or function signatures in native code, **always update the corresponding stub.mbt** to keep them in sync (otherwise `moon check` will fail).
 

@@ -58,7 +58,7 @@ update:
 
 # Run the CLI (native target)
 run *ARGS:
-    moon run src/main {{ARGS}}
+    moon run src {{ARGS}}
 
 # === Cleaning ===
 

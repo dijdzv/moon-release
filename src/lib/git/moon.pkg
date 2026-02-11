@@ -1,6 +1,6 @@
 import {
-  "dijdzv/moon-release/src/lib/conventional",
-  "dijdzv/moon-release/src/lib/util",
+  "dijdzv/moon-release/lib/conventional",
+  "dijdzv/moon-release/lib/util",
 }
 
 options(

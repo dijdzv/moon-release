@@ -507,7 +507,7 @@ chmod +x moon-release
 git clone https://github.com/dijdzv/moon-release
 cd moon-release
 moon build --target native --release
-cp _build/native/release/build/src/main/main.exe ~/.local/bin/moon-release
+cp _build/native/release/build/moon-release.exe ~/.local/bin/moon-release
 ```
 
 ### Quick Start

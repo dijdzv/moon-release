@@ -14,5 +14,6 @@
     "semver",
     "conventional-commits"
   ],
-  "description": "Automated release management tool for MoonBit"
+  "description": "Automated release management tool for MoonBit",
+  "source": "src"
 }

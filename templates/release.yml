@@ -28,7 +28,7 @@ permissions:
   pull-requests: write
 
 env:
-  MOON_RELEASE_VERSION: latest  # or specific version like "v0.1.0"
+  MOON_RELEASE_VERSION: latest  # or specific version like "v0.2.2"
 
 jobs:
   # Create or update release PR on every push to main
@@ -42,14 +42,16 @@ jobs:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
       - name: Download moon-release
         run: |
-          if [ "${{ env.MOON_RELEASE_VERSION }}" = "latest" ]; then
+          if [ "$MOON_RELEASE_VERSION" = "latest" ]; then
             curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
           else
-            curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/download/${{ env.MOON_RELEASE_VERSION }}/moon-release-linux-x86_64
+            curl -fsSL -o moon-release "https://github.com/dijdzv/moon-release/releases/download/${MOON_RELEASE_VERSION}/moon-release-linux-x86_64"
           fi
           chmod +x moon-release
 
@@ -61,17 +63,15 @@ jobs:
       - name: Create Release PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry-run }}
         run: |
           DRY_RUN_FLAG=""
-          if [ "${{ github.event.inputs.dry-run }}" = "true" ]; then
+          if [ "$DRY_RUN" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
           ./moon-release release-pr $DRY_RUN_FLAG --verbose
 
   # Create release when release PR is merged
-  # Triggered by commit message starting with "chore:" and containing "release v"
-  # Note: contains() does partial matching, so "release v" could match unintended
-  # commits. The startsWith('chore:') check narrows the scope significantly.
   release:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')
@@ -82,10 +82,12 @@ jobs:
           fetch-depth: 0
 
       - name: Setup MoonBit
-        uses: hustcer/setup-moonbit@v1
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
       # Configure mooncakes credentials (only if publishing to mooncakes.io)
-      # Remove this step if "publish": false in release.json
+      # Remove this step if moon_publish is false in release.json
       - name: Configure mooncakes credentials
         env:
           MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
@@ -102,10 +104,10 @@ jobs:
 
       - name: Download moon-release
         run: |
-          if [ "${{ env.MOON_RELEASE_VERSION }}" = "latest" ]; then
+          if [ "$MOON_RELEASE_VERSION" = "latest" ]; then
             curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
           else
-            curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/download/${{ env.MOON_RELEASE_VERSION }}/moon-release-linux-x86_64
+            curl -fsSL -o moon-release "https://github.com/dijdzv/moon-release/releases/download/${MOON_RELEASE_VERSION}/moon-release-linux-x86_64"
           fi
           chmod +x moon-release
 

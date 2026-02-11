@@ -120,7 +120,7 @@ runs:
         fi
 
         set +e
-        OUTPUT=$("$ACTION_PATH/_build/native/release/build/src/main/main.exe" \
+        OUTPUT=$("$ACTION_PATH/_build/native/release/build/moon-release.exe" \
           "$INPUT_COMMAND" \
           --config "$INPUT_CONFIG" \
           $BUMP_FLAG \

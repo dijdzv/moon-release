@@ -1,11 +1,11 @@
 import {
-  "dijdzv/moon-release/src/lib/config",
-  "dijdzv/moon-release/src/lib/conventional",
-  "dijdzv/moon-release/src/lib/semver",
-  "dijdzv/moon-release/src/lib/git",
-  "dijdzv/moon-release/src/lib/moon_mod",
-  "dijdzv/moon-release/src/lib/workflow",
-  "dijdzv/moon-release/src/lib/util",
+  "dijdzv/moon-release/lib/config",
+  "dijdzv/moon-release/lib/conventional",
+  "dijdzv/moon-release/lib/semver",
+  "dijdzv/moon-release/lib/git",
+  "dijdzv/moon-release/lib/moon_mod",
+  "dijdzv/moon-release/lib/workflow",
+  "dijdzv/moon-release/lib/util",
   "TheWaWaR/clap",
   "moonbitlang/async",
   "moonbitlang/async/fs",
@@ -20,7 +20,7 @@ options(
   "pre-build": [
     {
       "command": ":embed -i $input -o $output --name embedded_moon_mod_json",
-      "input": "../../moon.mod.json",
+      "input": "../moon.mod.json",
       "output": "version_info.mbt",
     },
   ],

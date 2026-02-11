@@ -59,7 +59,7 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
-          ./_build/native/release/build/src/main/main.exe release-pr $DRY_RUN_FLAG --verbose
+          ./_build/native/release/build/moon-release.exe release-pr $DRY_RUN_FLAG --verbose
 
   # Build binaries for multiple platforms
   # Triggered when a release PR is merged (commit message starts with "chore: release v")
@@ -117,13 +117,13 @@ jobs:
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
         run: |
-          cp ./_build/native/release/build/src/main/main.exe ./${{ matrix.artifact }}
+          cp ./_build/native/release/build/moon-release.exe ./${{ matrix.artifact }}
           chmod +x ./${{ matrix.artifact }}
 
       - name: Rename binary (Windows)
         if: runner.os == 'Windows'
         run: |
-          copy .\_build\native\release\build\src\main\main.exe .\${{ matrix.artifact }}
+          copy .\_build\native\release\build\moon-release.exe .\${{ matrix.artifact }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -198,7 +198,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Run moon-release to create tag and release
-          ./_build/native/release/build/src/main/main.exe release --verbose
+          ./_build/native/release/build/moon-release.exe release --verbose
 
       - name: Upload binaries to release
         env:
