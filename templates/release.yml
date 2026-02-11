@@ -14,6 +14,9 @@
 # Customize:
 #   - Change BINARY_NAME to your project's binary name
 #     (last component of your main package path, e.g. "my-tool" for "user/my-tool")
+#   - Build output path assumes the entry point is at the source root
+#     (e.g. "source": "src" in moon.mod.json with is-main at src/).
+#     If your entry point is at src/main/, adjust the path in "Rename binary" steps.
 #   - Remove build/release jobs if you don't distribute native binaries
 
 name: Release
@@ -42,6 +45,7 @@ env:
 
 jobs:
   # Create or update release PR on every push to main
+  # Skipped when: build-only mode, or the push is a release commit (handled by build+release jobs)
   release-pr:
     if: github.event.inputs.build-only != 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !(startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v'))))
     runs-on: ubuntu-latest
@@ -57,6 +61,8 @@ jobs:
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
       - name: Install moon-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
@@ -78,6 +84,8 @@ jobs:
           moon-release release-pr $DRY_RUN_FLAG --verbose
 
   # Build binaries for multiple platforms
+  # Triggered when: release PR merged (commit starts with "chore:" + contains "release v")
+  #                  OR manual workflow_dispatch with build-only option
   build:
     if: (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.build-only == 'true')
     strategy:
@@ -93,8 +101,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup MoonBit (Unix)
         if: runner.os != 'Windows'
@@ -136,6 +142,7 @@ jobs:
 
       - name: Rename binary (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           $artifact = "$env:BINARY_NAME-${{ matrix.artifact_suffix }}"
           copy ".\_build\native\release\build\$env:BINARY_NAME.exe" ".\$artifact"
@@ -162,6 +169,8 @@ jobs:
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
       - name: Install moon-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH

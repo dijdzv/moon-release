@@ -28,17 +28,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit (Unix)
-        if: runner.os != 'Windows'
+      - name: Setup MoonBit
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
-      - name: Setup MoonBit (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
-          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
       - name: Build moon-release
         run: |
@@ -82,8 +75,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          fetch-depth: 0
 
       - name: Setup MoonBit (Unix)
         if: runner.os != 'Windows'
@@ -92,6 +83,7 @@ jobs:
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
       - name: Setup MoonBit (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
           irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
@@ -122,6 +114,7 @@ jobs:
 
       - name: Rename binary (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           copy .\_build\native\release\build\moon-release.exe .\${{ matrix.artifact }}
 
@@ -141,17 +134,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup MoonBit (Unix)
-        if: runner.os != 'Windows'
+      - name: Setup MoonBit
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
-      - name: Setup MoonBit (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
-          "$env:USERPROFILE\.moon\bin" | Out-File -Append $env:GITHUB_PATH
 
       - name: Build moon-release
         run: |
@@ -163,6 +149,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
+      # Intentionally no "skip if empty" guard — we want CI to fail if credentials are missing
       - name: Setup mooncakes credentials
         env:
           MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
@@ -171,6 +158,7 @@ jobs:
           mkdir -p ~/.moon
           jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
             '{"token": $token, "username": $username}' > ~/.moon/credentials.json
+          chmod 600 ~/.moon/credentials.json
 
       - name: Download all artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -205,4 +193,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release upload "v${VERSION}" release-assets/* --clobber
+          if gh release view "v${VERSION}" &>/dev/null; then
+            gh release upload "v${VERSION}" release-assets/* --clobber
+          else
+            echo "No release found for v${VERSION}, skipping binary upload"
+          fi

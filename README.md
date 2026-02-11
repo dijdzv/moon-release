@@ -49,81 +49,28 @@ Go to **Settings → Actions → General → Workflow permissions**:
 
 #### 2. Workflow File Setup
 
-Create `.github/workflows/release.yml`. This base workflow creates release PRs and GitHub Releases (with Git tags):
+Copy [templates/release.yml](./templates/release.yml) to `.github/workflows/release.yml` and change `BINARY_NAME` to your project's binary name.
 
-```yaml
-name: Release
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: write
-  pull-requests: write
-
-jobs:
-  release-pr:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup MoonBit
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> $GITHUB_PATH
-
-      - name: Download moon-release
-        run: |
-          curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
-          chmod +x moon-release
-
-      - name: Configure Git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Create Release PR
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./moon-release release-pr --verbose
-
-  release:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup MoonBit
-        run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> $GITHUB_PATH
-
-      - name: Download moon-release
-        run: |
-          curl -fsSL -o moon-release https://github.com/dijdzv/moon-release/releases/latest/download/moon-release-linux-x86_64
-          chmod +x moon-release
-
-      - name: Create Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./moon-release release --verbose
+```bash
+mkdir -p .github/workflows
+curl -fsSL -o .github/workflows/release.yml \
+  https://raw.githubusercontent.com/dijdzv/moon-release/main/templates/release.yml
 ```
+
+The template includes three jobs:
+
+| Job | Trigger | Description |
+|-----|---------|-------------|
+| `release-pr` | Push to main (non-release commits) | Creates/updates a release PR with version bump |
+| `build` | Release PR merged | Builds binaries for Linux, macOS, Windows |
+| `release` | After `build` completes | Creates Git tag + GitHub Release + uploads binaries + publishes to mooncakes.io |
 
 **Key points:**
 - `fetch-depth: 0` - Required to analyze commit history
-- `release-pr` job - Runs on every push: creates/updates a release PR with version bump
-- `release` job - Runs only when a release PR is merged: creates Git tag + GitHub Release
 - `GITHUB_TOKEN` - Automatically provided by GitHub Actions
+- Supports `dry-run` and `build-only` modes via manual workflow dispatch
 
-With this base setup, merging a release PR will automatically create a Git tag and a GitHub Release with release notes. No additional secrets are needed.
+With this setup, merging a release PR will automatically create a Git tag, a GitHub Release with release notes, and upload cross-platform binaries. No additional secrets are needed for the base workflow.
 
 ### Publishing to mooncakes.io (Optional)
 
@@ -172,20 +119,9 @@ Or set them manually at **Settings → Secrets and variables → Actions → New
 | `MOONCAKES_TOKEN` | The `token` value from `~/.moon/credentials.json` |
 | `MOONCAKES_USERNAME` | The `username` value from `~/.moon/credentials.json` |
 
-#### 2. Add Credentials Step to Workflow
+#### 2. Workflow Configuration
 
-Add the following step to the `release` job, **before** the "Download moon-release" step:
-
-```yaml
-      - name: Configure mooncakes credentials
-        env:
-          MOONCAKES_TOKEN: ${{ secrets.MOONCAKES_TOKEN }}
-          MOONCAKES_USERNAME: ${{ secrets.MOONCAKES_USERNAME }}
-        run: |
-          mkdir -p ~/.moon
-          jq -n --arg token "$MOONCAKES_TOKEN" --arg username "$MOONCAKES_USERNAME" \
-            '{"token": $token, "username": $username}' > ~/.moon/credentials.json
-```
+The [template](./templates/release.yml) already includes the mooncakes credentials setup step. Just configure the GitHub Secrets above — no workflow changes are needed.
 
 No changes to `release.json` are needed — `moon_publish` is `true` by default.
 
@@ -487,6 +423,18 @@ moon-release can also be used as a standalone CLI tool for local development and
 moon install dijdzv/moon-release
 ```
 
+#### Install script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
+```
+
+Installs to `~/.local/bin` by default. Override with `INSTALL_DIR`:
+
+```bash
+INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
+```
+
 #### Download binary
 
 Download pre-built binaries from [GitHub Releases](https://github.com/dijdzv/moon-release/releases/latest):
@@ -627,8 +575,6 @@ moon-release generate-schema > release-schema.json
 | API Compatibility Check | `cargo-semver-checks` | Built-in (uses moon doc) |
 | Config Format | TOML | JSON |
 | Registry | crates.io | mooncakes.io |
-
-See [DESIGN_DECISIONS.md](./docs/DESIGN_DECISIONS.md) for details.
 
 ## License
 

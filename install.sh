@@ -53,9 +53,17 @@ detect_platform() {
 
 # Get latest release version
 get_latest_version() {
-    curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | \
-        grep '"tag_name"' | \
-        sed 's/.*"tag_name": *"v\([^"]*\)".*/\1/'
+    if ! command -v jq &>/dev/null; then
+        echo "Error: jq is required but not installed" >&2
+        echo "Install it with: apt-get install jq / brew install jq" >&2
+        exit 1
+    fi
+    local auth_header=()
+    if [ -n "$GITHUB_TOKEN" ]; then
+        auth_header=(-H "Authorization: token $GITHUB_TOKEN")
+    fi
+    curl -fsSL "${auth_header[@]}" "https://api.github.com/repos/$REPO/releases/latest" | \
+        jq -r '.tag_name' | sed 's/^v//'
 }
 
 # Main installation
