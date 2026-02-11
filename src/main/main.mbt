@@ -731,49 +731,35 @@ async fn cmd_release(
     )
   }
 
-  // Get current version and new version
-  let (current_version, new_version, commits) = if is_monorepo {
-    // Monorepo: compute representative version from packages
-    try
-      @workflow.get_monorepo_representative_version(
-        config,
-        repo,
-        forced_bump,
-        verbose,
-        bump_all~,
-      )
-    catch {
-      e => {
-        handle_workflow_error(e, json_output)
-        exit_error()
-      }
-    } noraise {
-      r => r
+  // The release command uses the version already set in moon.mod.json
+  // (by release-pr). No version bumping is needed — the file version IS
+  // the target release version.
+  let new_version = try @workflow.get_current_version(config) catch {
+    e => {
+      handle_workflow_error(e, json_output)
+      exit_error()
     }
-  } else {
-    // Single package: analyze version bump
-    let analysis = try
-      @workflow.analyze_version_bump(
-        config,
-        repo,
-        forced_bump~,
-        max_commits=config.max_analyze_commits,
-        allow_empty_commits=true,
-        default_bump=Some(@semver.Patch),
+  } noraise {
+    r => r
+  }
+  let current_version = new_version
+
+  let commits = try
+    @workflow.get_commits_since_last_tag(
+      repo,
+      max_commits=config.max_analyze_commits,
+    )
+  catch {
+    e => {
+      handle_workflow_error(
+        e,
+        json_output,
+        hint_override="Create new commits or use --bump to force a version bump",
       )
-    catch {
-      e => {
-        handle_workflow_error(
-          e,
-          json_output,
-          hint_override="Create new commits or use --bump to force a version bump",
-        )
-        exit_error()
-      }
-    } noraise {
-      r => r
+      exit_error()
     }
-    (analysis.current_version, analysis.new_version, analysis.commits)
+  } noraise {
+    r => r
   }
 
   // Apply prerelease if specified

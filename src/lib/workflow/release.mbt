@@ -916,18 +916,7 @@ pub async fn run_release_pr(
     println("Running release-pr workflow...")
   }
 
-  let branch_name = ctx.config.pr_branch_prefix +
-    "v\{ctx.new_version.to_string()}"
   let base_branch = ctx.config.base_branch
-
-  // Validate branch name
-  match validate_git_ref_name(branch_name) {
-    Some(reason) =>
-      raise InputValidationError(
-        "Invalid branch name '\{branch_name}': \{reason}",
-      )
-    None => ()
-  }
 
   // Validate base branch name
   match validate_git_ref_name(base_branch) {
@@ -945,6 +934,24 @@ pub async fn run_release_pr(
     _ => None
   } noraise {
     r => r
+  }
+
+  // Reuse existing PR's branch name to avoid closing/reopening PRs.
+  // The branch name is cosmetic — the actual version comes from
+  // moon.mod.json, commit message, and PR title.
+  let branch_name = match existing_pr {
+    Some((_, pr_branch)) => pr_branch
+    None =>
+      ctx.config.pr_branch_prefix + "v\{ctx.new_version.to_string()}"
+  }
+
+  // Validate branch name
+  match validate_git_ref_name(branch_name) {
+    Some(reason) =>
+      raise InputValidationError(
+        "Invalid branch name '\{branch_name}': \{reason}",
+      )
+    None => ()
   }
 
   if ctx.dry_run {
@@ -1221,9 +1228,12 @@ pub async fn run_release_pr(
 
   match existing_pr {
     Some((pr_num, _)) => {
-      // Update existing PR with try-catch-noraise pattern
+      // Update existing PR title and body
       let update_result = try
-        @executor.run_gh(["pr", "edit", pr_num.to_string(), "--body", pr_body])
+        @executor.run_gh([
+          "pr", "edit", pr_num.to_string(), "--title", commit_msg, "--body",
+          pr_body,
+        ])
       catch {
         e =>
           raise GitError(
