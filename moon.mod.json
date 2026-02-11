@@ -14,6 +14,5 @@
     "semver",
     "conventional-commits"
   ],
-  "description": "Automated release management tool for MoonBit",
-  "--moonbit-unstable-prebuild": "scripts/prebuild.py"
+  "description": "Automated release management tool for MoonBit"
 }

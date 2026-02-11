@@ -24,8 +24,8 @@ fn extract_version(json_str : String) -> String {
 }
 
 ///|
-/// Exit with status code (FFI to libc)
-extern "C" fn c_exit(status : Int) -> Unit = "exit"
+/// Exit with status code (wrapper to avoid MSVC C2371 conflict with stdlib exit)
+extern "C" fn c_exit(status : Int) -> Unit = "moon_release_exit"
 
 ///|
 /// Exit with error (non-zero status code)

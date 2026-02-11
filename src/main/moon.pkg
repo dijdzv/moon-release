@@ -16,6 +16,7 @@ import {
 
 options(
   "is-main": true,
+  "native-stub": [ "exit_wrapper.c" ],
   "pre-build": [
     {
       "command": ":embed -i $input -o $output --name embedded_moon_mod_json",

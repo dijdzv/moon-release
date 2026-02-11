@@ -26,7 +26,7 @@ jobs:
       - name: Fetch dependencies
         run: moon update
 
-      - name: Build (with prebuild script for linker flags)
+      - name: Build
         env:
           CC: cl
         run: moon build --target native --release
