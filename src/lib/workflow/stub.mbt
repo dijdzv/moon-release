@@ -23,6 +23,7 @@ pub(all) suberror WorkflowError {
   PublishError(String)
   InputValidationError(String)
   ExternalCommandError(String)
+  NoReleasableCommits(String)
   WorkflowError(String)
 }
 
@@ -37,6 +38,8 @@ pub fn WorkflowError::hint(self : WorkflowError) -> String {
     InputValidationError(_) => "Check the input values and command arguments"
     ExternalCommandError(_) =>
       "Make sure required tools (git, gh, moon, npm) are installed"
+    NoReleasableCommits(_) =>
+      "Use Conventional Commits or --bump to force a version bump"
     WorkflowError(_) => ""
   }
 }

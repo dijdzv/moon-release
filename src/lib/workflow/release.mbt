@@ -232,7 +232,9 @@ pub async fn analyze_version_bump(
 
   // Validate commits
   if commits.is_empty() && not(allow_empty_commits) {
-    raise WorkflowError("No commits found since last tag. Nothing to release.")
+    raise NoReleasableCommits(
+      "No commits found since last tag. Nothing to release.",
+    )
   }
 
   if commits.is_empty() && forced_bump is None && allow_empty_commits {
@@ -240,7 +242,7 @@ pub async fn analyze_version_bump(
     match default_bump {
       Some(_) => ()
       None =>
-        raise WorkflowError(
+        raise NoReleasableCommits(
           "No commits found since last tag. Nothing to release.",
         )
     }
@@ -261,7 +263,7 @@ pub async fn analyze_version_bump(
           match default_bump {
             Some(t) => t
             None =>
-              raise WorkflowError(
+              raise NoReleasableCommits(
                 "No releasable commits found (no feat, fix, or breaking changes)",
               )
           }
@@ -713,7 +715,7 @@ pub async fn get_monorepo_representative_version(
   )
 
   if plans.is_empty() {
-    raise WorkflowError("No releasable commits found across packages")
+    raise NoReleasableCommits("No releasable commits found across packages")
   }
 
   // Extract representative version (highest new_version) and deduplicated commits
@@ -747,12 +749,14 @@ pub async fn get_monorepo_representative_version(
 
   let current = match max_current {
     Some(v) => v
-    None => raise WorkflowError("No releasable commits found across packages")
+    None =>
+      raise NoReleasableCommits("No releasable commits found across packages")
   }
 
   let new_version = match max_new {
     Some(v) => v
-    None => raise WorkflowError("No releasable commits found across packages")
+    None =>
+      raise NoReleasableCommits("No releasable commits found across packages")
   }
 
   (current, new_version, all_commits)

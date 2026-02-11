@@ -613,6 +613,13 @@ async fn cmd_release_pr(
         bump_all~,
       )
     catch {
+      @workflow.NoReleasableCommits(msg) => {
+        println(msg)
+        println(
+          "Hint: Use Conventional Commits or --bump to force a version bump",
+        )
+        return
+      }
       e => {
         handle_workflow_error(e, json_output)
         exit_error()
@@ -630,6 +637,13 @@ async fn cmd_release_pr(
         max_commits=config.max_analyze_commits,
       )
     catch {
+      @workflow.NoReleasableCommits(msg) => {
+        println(msg)
+        println(
+          "Hint: Use Conventional Commits or --bump to force a version bump",
+        )
+        return
+      }
       e => {
         handle_workflow_error(
           e,
