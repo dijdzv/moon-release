@@ -1,3 +1,4 @@
 {
-  "moon_publish": true
+  "moon_publish": true,
+  "allow_dirty": true
 }
