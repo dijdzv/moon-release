@@ -493,6 +493,8 @@ pub async fn validate_publish_config(
 
 ///|
 /// Get package name from moon.mod.json
+/// Uses direct JSON parsing instead of @moon_mod.parse to avoid requiring
+/// the "version" field, which may not exist when moon_publish is disabled.
 async fn get_package_name() -> String {
   // Try to read package name from moon.mod.json
   let content = try @fs.read_file("moon.mod.json").text() catch {
@@ -501,14 +503,22 @@ async fn get_package_name() -> String {
     c => c
   }
 
-  let moon_mod = try @moon_mod.parse(content) catch {
+  let json = try @json.parse(content) catch {
     _ => return "this-package"
   } noraise {
-    m => m
+    j => j
+  }
+
+  let name = match json {
+    Object(o) =>
+      match o.get("name") {
+        Some(String(s)) => s
+        _ => return "this-package"
+      }
+    _ => return "this-package"
   }
 
   // Strip owner prefix from MoonBit module name (e.g., "dijdzv/moon-release" -> "moon-release")
-  let name = moon_mod.name
   let parts = name.split("/").map(fn(sv) { sv.to_string() }).collect()
   if parts.length() > 1 {
     parts[parts.length() - 1]
