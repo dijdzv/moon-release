@@ -30,6 +30,7 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
   - [Installation](#installation)
   - [Quick Start](#quick-start)
   - [Commands](#commands)
+- [Planned Features](#planned-features)
 - [Differences from release-plz](#differences-from-release-plz)
 
 ## GitHub Actions
@@ -564,6 +565,12 @@ Generate JSON Schema for the configuration file. Can be used for IDE autocomplet
 ```bash
 moon-release generate-schema > release-schema.json
 ```
+
+## Planned Features
+
+- **Per-package release PRs** - Create separate release PRs for each package (or version_group) in a monorepo, instead of bundling all changes into a single PR
+- **Per-package release** - Create tags and publish each package independently when its release PR is merged
+- **WebAssembly registry publishing** - Publish to a Wasm component registry (e.g., warg, wa.dev)
 
 ## Differences from release-plz
 
