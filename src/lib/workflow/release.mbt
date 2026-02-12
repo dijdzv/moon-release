@@ -507,7 +507,14 @@ async fn get_package_name() -> String {
     m => m
   }
 
-  moon_mod.name
+  // Strip owner prefix from MoonBit module name (e.g., "dijdzv/moon-release" -> "moon-release")
+  let name = moon_mod.name
+  let parts = name.split("/").map(fn(sv) { sv.to_string() }).collect()
+  if parts.length() > 1 {
+    parts[parts.length() - 1]
+  } else {
+    name
+  }
 }
 
 ///|
