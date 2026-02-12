@@ -495,16 +495,21 @@ pub async fn validate_publish_config(
 /// Get package name from moon.mod.json
 /// Uses direct JSON parsing instead of @moon_mod.parse to avoid requiring
 /// the "version" field, which may not exist when moon_publish is disabled.
-async fn get_package_name() -> String {
-  // Try to read package name from moon.mod.json
+async fn get_package_name() -> String raise WorkflowError {
   let content = try @fs.read_file("moon.mod.json").text() catch {
-    _ => return "this-package"
+    e =>
+      raise WorkflowError(
+        "Failed to read moon.mod.json: " + e.to_string(),
+      )
   } noraise {
     c => c
   }
 
   let json = try @json.parse(content) catch {
-    _ => return "this-package"
+    e =>
+      raise WorkflowError(
+        "Failed to parse moon.mod.json: " + e.to_string(),
+      )
   } noraise {
     j => j
   }
@@ -513,9 +518,9 @@ async fn get_package_name() -> String {
     Object(o) =>
       match o.get("name") {
         Some(String(s)) => s
-        _ => return "this-package"
+        _ => raise WorkflowError("Missing 'name' field in moon.mod.json")
       }
-    _ => return "this-package"
+    _ => raise WorkflowError("Invalid moon.mod.json: expected JSON object")
   }
 
   // Strip owner prefix from MoonBit module name (e.g., "dijdzv/moon-release" -> "moon-release")
@@ -994,11 +999,7 @@ pub async fn run_release_pr(
   let branch_name = match existing_pr {
     Some((_, pr_branch)) => pr_branch
     None => {
-      let pkg_name = try get_package_name() catch {
-        _ => "this-package"
-      } noraise {
-        n => n
-      }
+      let pkg_name = get_package_name()
       ctx.config.pr_branch_prefix + pkg_name
     }
   }
@@ -1401,11 +1402,7 @@ async fn generate_pr_body(
 ) -> String raise WorkflowError {
   let is_monorepo = not(ctx.config.packages.is_empty())
 
-  let pkg_name = try get_package_name() catch {
-    _ => "this-package"
-  } noraise {
-    n => n
-  }
+  let pkg_name = get_package_name()
 
   let single_pkg_info = [
     PackageReleaseInfo::{
