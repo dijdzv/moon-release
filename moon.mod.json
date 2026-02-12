@@ -1,6 +1,6 @@
 {
   "name": "dijdzv/moon-release",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "deps": {
     "moonbitlang/async": "0.16.6",
     "TheWaWaR/clap": "0.2.6"
