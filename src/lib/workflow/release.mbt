@@ -1295,10 +1295,12 @@ pub async fn run_release_pr(
 
       // Rename branch if version changed (GitHub updates the PR automatically)
       if branch_name != desired_branch_name {
+        // URL-encode slashes in branch name for REST API path
+        let encoded_branch = branch_name.replace(old="/", new="%2F")
         let rename_result = try
           @executor.run_gh([
             "api",
-            "repos/\{github.owner}/\{github.repo}/branches/\{branch_name}/rename",
+            "repos/\{github.owner}/\{github.repo}/branches/\{encoded_branch}/rename",
             "-f",
             "new_name=\{desired_branch_name}",
           ])
@@ -1320,9 +1322,24 @@ pub async fn run_release_pr(
             " -> " +
             desired_branch_name,
           )
-        } else if rename_result.stderr.length() > 0 {
+        } else {
           println(
-            "Warning: Failed to rename branch: " + rename_result.stderr,
+            "Warning: Failed to rename branch from '" +
+            branch_name +
+            "' to '" +
+            desired_branch_name +
+            "'",
+          )
+          if rename_result.stderr.length() > 0 {
+            println("  Reason: " + rename_result.stderr)
+          }
+          println(
+            "  Hint: If branch '" +
+            desired_branch_name +
+            "' already exists, delete it and re-run",
+          )
+          println(
+            "  The PR will continue to work with the current branch name",
           )
         }
       }
