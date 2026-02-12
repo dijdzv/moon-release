@@ -973,14 +973,17 @@ pub async fn run_release_pr(
     r => r
   }
 
-  // The desired branch name reflects the current version.
-  let desired_branch_name = ctx.config.pr_branch_prefix +
-    "v\{ctx.new_version.to_string()}"
-
-  // Reuse existing PR's branch name for push, then rename if needed.
+  // Reuse existing PR's branch name, or create a new one based on module name.
   let branch_name = match existing_pr {
     Some((_, pr_branch)) => pr_branch
-    None => desired_branch_name
+    None => {
+      let pkg_name = try get_package_name() catch {
+        _ => "this-package"
+      } noraise {
+        n => n
+      }
+      ctx.config.pr_branch_prefix + pkg_name
+    }
   }
 
   // Validate branch name
@@ -997,14 +1000,6 @@ pub async fn run_release_pr(
       Some((pr_num, _)) => {
         println("[dry-run] Would update existing PR #\{pr_num}")
         println("[dry-run] Would update branch: " + branch_name)
-        if branch_name != desired_branch_name {
-          println(
-            "[dry-run] Would rename branch: " +
-            branch_name +
-            " -> " +
-            desired_branch_name,
-          )
-        }
       }
       None => {
         println("[dry-run] Would create release branch: " + branch_name)
@@ -1292,57 +1287,6 @@ pub async fn run_release_pr(
         println("Warning: Failed to update PR body: " + update_result.stderr)
       }
       println("Updated pull request #\{pr_num}")
-
-      // Rename branch if version changed (GitHub updates the PR automatically)
-      if branch_name != desired_branch_name {
-        // URL-encode slashes in branch name for REST API path
-        let encoded_branch = branch_name.replace(old="/", new="%2F")
-        let rename_result = try
-          @executor.run_gh([
-            "api",
-            "repos/\{github.owner}/\{github.repo}/branches/\{encoded_branch}/rename",
-            "-f",
-            "new_name=\{desired_branch_name}",
-          ])
-        catch {
-          e => {
-            println(
-              "Warning: Failed to rename branch: " + e.to_string(),
-            )
-            // Non-fatal: PR still works with the old branch name
-            @executor.CommandResult::failed("rename failed")
-          }
-        } noraise {
-          r => r
-        }
-        if rename_result.is_success() {
-          println(
-            "Renamed branch: " +
-            branch_name +
-            " -> " +
-            desired_branch_name,
-          )
-        } else {
-          println(
-            "Warning: Failed to rename branch from '" +
-            branch_name +
-            "' to '" +
-            desired_branch_name +
-            "'",
-          )
-          if rename_result.stderr.length() > 0 {
-            println("  Reason: " + rename_result.stderr)
-          }
-          println(
-            "  Hint: If branch '" +
-            desired_branch_name +
-            "' already exists, delete it and re-run",
-          )
-          println(
-            "  The PR will continue to work with the current branch name",
-          )
-        }
-      }
     }
     None => {
       // Create new PR
