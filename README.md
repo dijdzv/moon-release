@@ -176,7 +176,7 @@ Add `id-token: write` permission and a Node.js setup step to the `release` job:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 ```
 
 > Trusted Publishing is more secure than access tokens:

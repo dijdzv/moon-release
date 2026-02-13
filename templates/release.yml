@@ -14,7 +14,7 @@
 # Optional (for npm Trusted Publishing):
 # 3. npmjs.com → Package Settings → Publishing access → Add trusted publisher
 #    - Repository owner/name, workflow filename, optional environment
-#    Requires Node.js 22+ (npm 11.5.1+) for OIDC authentication
+#    Requires Node.js 24+ (npm 11+) for OIDC authentication
 #
 # Customize:
 #   - Change BINARY_NAME to your project's binary name
@@ -180,7 +180,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Fetch dependencies
         run: moon update
