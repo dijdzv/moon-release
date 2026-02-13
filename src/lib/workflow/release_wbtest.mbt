@@ -537,11 +537,12 @@ test "get_npm_build_command - returns default when no custom command" {
     _ => fail("Unexpected error")
   }
   let cmd = get_npm_build_command(config)
-  assert_eq(cmd.length(), 4)
+  assert_eq(cmd.length(), 5)
   assert_eq(cmd[0], "moon")
   assert_eq(cmd[1], "build")
   assert_eq(cmd[2], "--target")
   assert_eq(cmd[3], "js")
+  assert_eq(cmd[4], "--release")
 }
 
 ///|
@@ -608,11 +609,12 @@ test "get_pkg_npm_build_command - default" {
     _ => fail("Unexpected error")
   }
   let cmd = get_pkg_npm_build_command(config.packages[0])
-  assert_eq(cmd.length(), 4)
+  assert_eq(cmd.length(), 5)
   assert_eq(cmd[0], "moon")
   assert_eq(cmd[1], "build")
   assert_eq(cmd[2], "--target")
   assert_eq(cmd[3], "js")
+  assert_eq(cmd[4], "--release")
 }
 
 ///|

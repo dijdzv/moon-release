@@ -725,6 +725,6 @@ pub fn PackageConfig::publish_target(self : PackageConfig) -> PublishTarget {
 pub fn NpmConfig::build_args(self : NpmConfig) -> Array[String] {
   match self.build_command {
     Some(c) => c.split(" ").map(fn(s) { s.to_string() }).collect()
-    None => ["moon", "build", "--target", "js"]
+    None => ["moon", "build", "--target", "js", "--release"]
   }
 }
