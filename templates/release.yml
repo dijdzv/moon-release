@@ -11,6 +11,11 @@
 #    - MOONCAKES_TOKEN: from ~/.moon/credentials.json
 #    - MOONCAKES_USERNAME: from ~/.moon/credentials.json
 #
+# Optional (for npm Trusted Publishing):
+# 3. npmjs.com → Package Settings → Publishing access → Add trusted publisher
+#    - Repository owner/name, workflow filename, optional environment
+#    Requires Node.js 22+ (npm 11.5.1+) for OIDC authentication
+#
 # Customize:
 #   - Change BINARY_NAME to your project's binary name
 #     (last component of your main package path, e.g. "my-tool" for "user/my-tool")
@@ -38,6 +43,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write # Required for npm Trusted Publishing (OIDC)
 
 env:
   # Change this to your project's binary name
@@ -170,6 +176,12 @@ jobs:
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Fetch dependencies
         run: moon update
