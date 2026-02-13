@@ -784,7 +784,7 @@ test "PackageConfig::publish_target - npm only" {
 ///|
 test "NpmConfig::build_args - default" {
   let npm = NpmConfig::{ build_command: None, provenance: true, timeout: 300 }
-  assert_eq(npm.build_args(), ["moon", "build", "--target", "js"])
+  assert_eq(npm.build_args(), ["moon", "build", "--target", "js", "--release"])
 }
 
 ///|

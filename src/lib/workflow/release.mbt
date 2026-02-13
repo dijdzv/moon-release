@@ -1565,10 +1565,13 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
     if ctx.verbose {
       println("Pre-building JS target for npm publish...")
       println("  Command: " + build_cmd_str)
+      println("  Working directory: " + ctx.repo.path)
     }
 
-    // Run build command - fail if build fails (before any tag/release creation)
-    let build_result = try @executor.run_command(build_cmd) catch {
+    // Run build command in repo directory - fail if build fails (before any tag/release creation)
+    let build_result = try
+      @executor.run_command_in_dir(build_cmd, ctx.repo.path)
+    catch {
       e =>
         raise ExternalCommandError(
           "Failed to build JS target: " + e.to_string(),
@@ -1578,8 +1581,13 @@ pub async fn pre_build_js(ctx : ReleaseContext) -> Unit raise WorkflowError {
     }
 
     if not(build_result.is_success()) {
+      let detail = if build_result.stderr.is_empty() {
+        build_result.stdout
+      } else {
+        build_result.stderr
+      }
       raise ExternalCommandError(
-        "Failed to build JS target: " + build_result.stderr,
+        "Failed to build JS target: " + detail,
       )
     }
 
