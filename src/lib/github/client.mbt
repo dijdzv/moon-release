@@ -1,8 +1,7 @@
 ///|
 /// GitHub API client (gh CLI command generation)
 pub struct GitHubClient {
-  owner : String
-  repo : String
+  slug : @util.RepositorySlug
 } derive(Show, Eq)
 
 ///|
@@ -33,32 +32,23 @@ pub suberror GitHubError {
 
 ///|
 /// Create client with owner/repo validation
-/// Delegates to @util.validate_repo_component_impl for shared validation logic.
+/// Delegates to RepositorySlug for shared validation logic.
 pub fn GitHubClient::new(
   owner : String,
   repo : String,
 ) -> GitHubClient raise GitHubError {
-  if not(@util.validate_repo_component_impl(owner)) {
-    raise GitHubError(
-      "Invalid GitHub owner: '" +
-      owner +
-      "' (only alphanumeric, hyphen, underscore, and dot allowed)",
-    )
+  let slug = try @util.RepositorySlug::new(owner, repo) catch {
+    @util.ValidationError(msg) => raise GitHubError(msg)
+  } noraise {
+    s => s
   }
-  if not(@util.validate_repo_component_impl(repo)) {
-    raise GitHubError(
-      "Invalid GitHub repo: '" +
-      repo +
-      "' (only alphanumeric, hyphen, underscore, and dot allowed)",
-    )
-  }
-  GitHubClient::{ owner, repo }
+  GitHubClient::{ slug, }
 }
 
 ///|
 /// Get repository string
 fn GitHubClient::repo_string(self : GitHubClient) -> String {
-  self.owner + "/" + self.repo
+  self.slug.value()
 }
 
 ///|

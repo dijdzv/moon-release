@@ -24,6 +24,16 @@ fn package_path_prefix(path : String) -> String {
 }
 
 ///|
+/// Strip the first element from a command array (e.g., remove "gh" prefix)
+pub fn strip_command_prefix(cmd : Array[String]) -> Array[String] {
+  let args : Array[String] = []
+  for i = 1; i < cmd.length(); i = i + 1 {
+    args.push(cmd[i])
+  }
+  args
+}
+
+///|
 /// Return priority of BumpType (Major > Minor > Patch)
 pub fn bump_priority(bump : @semver.BumpType) -> Int {
   match bump {
@@ -114,6 +124,20 @@ pub fn get_pkg_npm_build_command(pkg : @config.PackageConfig) -> Array[String] {
 }
 
 ///|
+/// Format a single commit as a markdown list item
+fn format_commit_line(
+  commit : @conventional.ConventionalCommit,
+  hash : String,
+) -> String {
+  let scope_str = match commit.scope {
+    Some(s) => "**\{s}**: "
+    None => ""
+  }
+  let shash = short_hash(hash)
+  "- \{scope_str}\{commit.description} (\{shash})"
+}
+
+///|
 /// Generate release notes (from commit summary)
 pub fn generate_release_notes(
   commits : Array[(@conventional.ConventionalCommit, String)],
@@ -127,12 +151,8 @@ pub fn generate_release_notes(
 
   for i = 0; i < commits.length(); i = i + 1 {
     let (commit, hash) = commits[i]
-    let scope_str = match commit.scope {
-      Some(s) => "**\{s}**: "
-      None => ""
-    }
-    let shash = short_hash(hash)
-    sb.write_string("- \{scope_str}\{commit.description} (\{shash})\n")
+    sb.write_string(format_commit_line(commit, hash))
+    sb.write_string("\n")
   }
 
   sb.to_string()
@@ -154,13 +174,7 @@ fn generate_package_changelog(
 
   for i = 0; i < commits.length(); i = i + 1 {
     let (commit, hash) = commits[i]
-    let shash = short_hash(hash)
-
-    let scope_str = match commit.scope {
-      Some(s) => "**\{s}**: "
-      None => ""
-    }
-    let line = "- \{scope_str}\{commit.description} (\{shash})"
+    let line = format_commit_line(commit, hash)
 
     match commit.typ {
       Feat => features.push(line)

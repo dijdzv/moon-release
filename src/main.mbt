@@ -12,14 +12,13 @@ let max_verbose_commits : Int = 10
 ///|
 /// Extract version from embedded moon.mod.json content
 fn extract_version(json_str : String) -> String {
-  // Use try? + to_option for consistent error handling
-  match (try? @json.parse(json_str)).to_option() {
-    Some(Object(obj)) =>
-      match obj.get("version") {
-        Some(String(v)) => v
-        _ => "unknown"
-      }
-    _ => "unknown"
+  let obj = match (try? @json.parse(json_str)).to_option() {
+    Some(Object(obj)) => obj
+    _ => panic()
+  }
+  match obj.get("version") {
+    Some(String(v)) => v
+    _ => panic()
   }
 }
 
@@ -88,13 +87,54 @@ fn output_warning(msg : String, json_output : Bool) -> Unit {
 }
 
 ///|
-/// Get dry-run flag from subcommand (combines global and subcommand flags)
-fn get_dry_run_flag(subcmd : @clap.SimpleValue, global_dry_run : Bool) -> Bool {
-  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
+/// Get a boolean flag from a SimpleValue, defaulting to false if not set
+fn get_flag_or_false(sv : @clap.SimpleValue, name : String) -> Bool {
+  match sv.get_flag(name) {
     Some(v) => v
     None => false
   }
-  global_dry_run || subcmd_dry_run
+}
+
+///|
+/// Get dry-run flag from subcommand (combines global and subcommand flags)
+fn get_dry_run_flag(subcmd : @clap.SimpleValue, global_dry_run : Bool) -> Bool {
+  global_dry_run || get_flag_or_false(subcmd, "dry-run")
+}
+
+///|
+/// Handle workflow error and exit (combines handle_workflow_error + exit_error)
+fn[T] fail_workflow(
+  e : @workflow.WorkflowError,
+  json_output : Bool,
+  hint_override~ : String = "",
+) -> T {
+  handle_workflow_error(e, json_output, hint_override~)
+  exit_error()
+}
+
+///|
+/// Join an array of strings with a separator
+fn join_strings(arr : Array[String], sep : String) -> String {
+  arr
+  .iter()
+  .fold(init="", fn(acc, s) {
+    if acc.is_empty() { s } else { acc + sep + s }
+  })
+}
+
+///|
+/// Print monorepo --bump hint if applicable
+fn print_bump_hint(
+  is_monorepo : Bool,
+  forced_bump : @semver.BumpType?,
+  bump_all : Bool,
+  json_output : Bool,
+) -> Unit {
+  if is_monorepo && forced_bump is Some(_) && not(bump_all) && not(json_output) {
+    println(
+      "Note: --bump applies only to packages with changes. Use --bump-all to include all packages.",
+    )
+  }
 }
 
 ///|
@@ -293,14 +333,8 @@ async fn main {
   }
 
   // Global options
-  let dry_run = match value.get_flag("dry-run") {
-    Some(v) => v
-    None => false
-  }
-  let verbose = match value.get_flag("verbose") {
-    Some(v) => v
-    None => false
-  }
+  let dry_run = get_flag_or_false(value, "dry-run")
+  let verbose = get_flag_or_false(value, "verbose")
   // Use try? + unwrap_or pattern for consistent error handling
   let config_path = (try? value.get_one("config")).unwrap_or("release.json")
 
@@ -317,7 +351,7 @@ async fn main {
         "set-version" => cmd_set_version(subcmd, dry_run, verbose)
         "generate-completions" => cmd_generate_completions(subcmd)
         "generate-schema" => cmd_generate_schema()
-        _ => println("Unknown command: " + subcmd.name)
+        _ => panic()
       }
     None => {
       println("moon-release v" + version)
@@ -360,26 +394,14 @@ async fn cmd_update(
 
   // Parse bump options before monorepo branching
   let forced_bump = get_bump_type(subcmd)
-  let cli_bump_all = match subcmd.get_flag("bump-all") {
-    Some(v) => v
-    None => false
-  }
-  let bump_all = config.bump_all_packages || cli_bump_all
+  let bump_all = config.bump_all_packages || get_flag_or_false(subcmd, "bump-all")
 
   // Check if monorepo mode
-  let packages_mode = match subcmd.get_flag("packages") {
-    Some(v) => v
-    None => false
-  }
+  let packages_mode = get_flag_or_false(subcmd, "packages")
 
   // In monorepo mode, update each package separately with try-catch-noraise pattern
   if packages_mode || not(config.packages.is_empty()) {
-    // Hint: --bump only controls bump type, not scope
-    if forced_bump is Some(_) && not(bump_all) && not(json_output) {
-      println(
-        "Note: --bump applies only to packages with changes. Use --bump-all to include all packages.",
-      )
-    }
+    print_bump_hint(true, forced_bump, bump_all, json_output)
     try
       @workflow.run_update_packages(
         config,
@@ -390,10 +412,7 @@ async fn cmd_update(
         bump_all~,
       )
     catch {
-      e => {
-        handle_workflow_error(e, json_output)
-        exit_error()
-      }
+      e => fail_workflow(e, json_output)
     } noraise {
       _ => ()
     }
@@ -409,14 +428,12 @@ async fn cmd_update(
       max_commits=config.max_analyze_commits,
     )
   catch {
-    e => {
-      handle_workflow_error(
+    e =>
+      fail_workflow(
         e,
         json_output,
         hint_override="Use Conventional Commits (feat:, fix:) or --bump to force a version bump",
       )
-      exit_error()
-    }
   } noraise {
     r => r
   }
@@ -451,8 +468,8 @@ async fn cmd_update(
         @workflow.should_release(new_version, pkg_name, verbose)
       catch {
         e => {
-          output_warning("Registry check failed: " + e.to_string(), json_output)
-          true // Continue release on error
+          output_error("Registry check failed: " + e.to_string(), json_output)
+          exit_error()
         }
       } noraise {
         r => r
@@ -483,10 +500,7 @@ async fn cmd_update(
 
   // Run update
   try @workflow.run_update(ctx) catch {
-    e => {
-      handle_workflow_error(e, json_output)
-      exit_error()
-    }
+    e => fail_workflow(e, json_output)
   } noraise {
     _ =>
       if json_output {
@@ -511,17 +525,7 @@ async fn cmd_update(
               if config.npm_publish {
                 files.push("\"package.json\"")
               }
-              "[" +
-              files
-              .iter()
-              .fold(init="", fn(acc, s) {
-                if acc.is_empty() {
-                  s
-                } else {
-                  acc + "," + s
-                }
-              }) +
-              "]"
+              "[" + join_strings(files, ",") + "]"
             },
           ),
         ])
@@ -542,19 +546,13 @@ async fn prepare_release_config(
   let repo = @git.Repository::current()
 
   try @workflow.validate_publish_config(config, verbose~) catch {
-    e => {
-      handle_workflow_error(e, json_output)
-      exit_error()
-    }
+    e => fail_workflow(e, json_output)
   } noraise {
     _ => ()
   }
 
   try @workflow.check_working_directory(config, repo, verbose~) catch {
-    e => {
-      handle_workflow_error(e, json_output)
-      exit_error()
-    }
+    e => fail_workflow(e, json_output)
   } noraise {
     _ => ()
   }
@@ -569,11 +567,7 @@ fn get_bump_flags(
   config : @config.Config,
 ) -> (@semver.BumpType?, Bool) {
   let forced_bump = get_bump_type(subcmd)
-  let cli_bump_all = match subcmd.get_flag("bump-all") {
-    Some(v) => v
-    None => false
-  }
-  let bump_all = config.bump_all_packages || cli_bump_all
+  let bump_all = config.bump_all_packages || get_flag_or_false(subcmd, "bump-all")
   (forced_bump, bump_all)
 }
 
@@ -594,12 +588,7 @@ async fn cmd_release_pr(
   let (forced_bump, bump_all) = get_bump_flags(subcmd, config)
   let is_monorepo = not(config.packages.is_empty())
 
-  // Hint: --bump only controls bump type, not scope
-  if is_monorepo && forced_bump is Some(_) && not(bump_all) {
-    println(
-      "Note: --bump applies only to packages with changes. Use --bump-all to include all packages.",
-    )
-  }
+  print_bump_hint(is_monorepo, forced_bump, bump_all, json_output)
 
   // Get current version and new version
   let (current_version, new_version, commits) = if is_monorepo {
@@ -620,10 +609,7 @@ async fn cmd_release_pr(
         )
         return
       }
-      e => {
-        handle_workflow_error(e, json_output)
-        exit_error()
-      }
+      e => fail_workflow(e, json_output)
     } noraise {
       r => r
     }
@@ -644,14 +630,12 @@ async fn cmd_release_pr(
         )
         return
       }
-      e => {
-        handle_workflow_error(
+      e =>
+        fail_workflow(
           e,
           json_output,
           hint_override="Use Conventional Commits or --bump to force a version bump",
         )
-        exit_error()
-      }
     } noraise {
       r => r
     }
@@ -673,20 +657,14 @@ async fn cmd_release_pr(
 
   // Get GitHub client
   let github = try @workflow.get_github_client() catch {
-    e => {
-      handle_workflow_error(e, json_output)
-      exit_error()
-    }
+    e => fail_workflow(e, json_output)
   } noraise {
     r => r
   }
 
   // Run workflow
   try @workflow.run_release_pr(ctx, github) catch {
-    e => {
-      handle_workflow_error(e, json_output)
-      exit_error()
-    }
+    e => fail_workflow(e, json_output)
   } noraise {
     _ => ()
   }
@@ -738,21 +716,13 @@ async fn cmd_release(
     exit_error()
   }
 
-  // Hint: --bump only controls bump type, not scope
-  if is_monorepo && forced_bump is Some(_) && not(bump_all) {
-    println(
-      "Note: --bump applies only to packages with changes. Use --bump-all to include all packages.",
-    )
-  }
+  print_bump_hint(is_monorepo, forced_bump, bump_all, json_output)
 
   // The release command uses the version already set in moon.mod.json
   // (by release-pr). No version bumping is needed — the file version IS
   // the target release version.
   let new_version = try @workflow.get_current_version(config) catch {
-    e => {
-      handle_workflow_error(e, json_output)
-      exit_error()
-    }
+    e => fail_workflow(e, json_output)
   } noraise {
     r => r
   }
@@ -766,14 +736,12 @@ async fn cmd_release(
       bootstrap_sha=config.bootstrap_sha,
     )
   catch {
-    e => {
-      handle_workflow_error(
+    e =>
+      fail_workflow(
         e,
         json_output,
         hint_override="Create new commits or use --bump to force a version bump",
       )
-      exit_error()
-    }
   } noraise {
     r => r
   }
@@ -810,20 +778,14 @@ async fn cmd_release(
 
   // Get GitHub client
   let github = try @workflow.get_github_client() catch {
-    e => {
-      handle_workflow_error(e, json_output)
-      exit_error()
-    }
+    e => fail_workflow(e, json_output)
   } noraise {
     r => r
   }
 
   // Run workflow
   try @workflow.run_release(ctx, github) catch {
-    e => {
-      handle_workflow_error(e, json_output)
-      exit_error()
-    }
+    e => fail_workflow(e, json_output)
   } noraise {
     _ => ()
   }
@@ -836,10 +798,7 @@ async fn cmd_init(
   dry_run : Bool,
   _verbose : Bool,
 ) -> Unit {
-  let force = match subcmd.get_flag("force") {
-    Some(v) => v
-    None => false
-  }
+  let force = get_flag_or_false(subcmd, "force")
 
   println("Initializing release configuration...")
 
@@ -945,12 +904,7 @@ async fn cmd_set_version(
   global_dry_run : Bool,
   verbose : Bool,
 ) -> Unit {
-  // Check subcommand flags as well
-  let subcmd_dry_run = match subcmd.get_flag("dry-run") {
-    Some(v) => v
-    None => false
-  }
-  let dry_run = global_dry_run || subcmd_dry_run
+  let dry_run = get_dry_run_flag(subcmd, global_dry_run)
 
   // Get version argument (positional argument)
   let version_str : String = if subcmd.positional_args.length() > 0 {
@@ -1129,17 +1083,7 @@ async fn cmd_check(
       ])
       commits_json_arr.push(commit_json)
     }
-    let commits_json = "[" +
-      commits_json_arr
-      .iter()
-      .fold(init="", fn(acc, s) {
-        if acc.is_empty() {
-          s
-        } else {
-          acc + "," + s
-        }
-      }) +
-      "]"
+    let commits_json = "[" + join_strings(commits_json_arr, ",") + "]"
 
     let json_str = @util.build_json_object([
       ("latest_tag", latest_tag_json),

@@ -42,11 +42,15 @@ pub fn merge_package_apis(apis : Array[PackageApi]) -> PackageApi {
     }
   }
 
-  // Detect and warn about remaining duplicates
-  warn_duplicates(merged.types.iter().map(fn(t) { t.name }).collect(), "type")
-  warn_duplicates(merged.errors.iter().map(fn(e) { e.name }).collect(), "error")
-  warn_duplicates(merged.traits.iter().map(fn(t) { t.name }).collect(), "trait")
-  warn_duplicates(merged.values.iter().map(fn(v) { v.name }).collect(), "value")
+  // Detect duplicates and collect warnings
+  let warnings : Array[String] = []
+  warnings.append(collect_duplicates(merged.types.iter().map(fn(t) { t.name }).collect(), "type"))
+  warnings.append(collect_duplicates(merged.errors.iter().map(fn(e) { e.name }).collect(), "error"))
+  warnings.append(collect_duplicates(merged.traits.iter().map(fn(t) { t.name }).collect(), "trait"))
+  warnings.append(collect_duplicates(merged.values.iter().map(fn(v) { v.name }).collect(), "value"))
+  for w in warnings {
+    println(w)
+  }
 
   merged
 }
@@ -68,18 +72,20 @@ fn prefix_methods(
 }
 
 ///|
-/// Warn about duplicate names in merged API entries
-fn warn_duplicates(names : Array[String], category : String) -> Unit {
-  let seen : @hashmap.HashMap[String, Bool] = @hashmap.new()
+/// Collect duplicate names in merged API entries
+fn collect_duplicates(names : Array[String], category : String) -> Array[String] {
+  let seen : @hashset.HashSet[String] = @hashset.new()
+  let warnings : Array[String] = []
   for name in names {
-    if seen.get(name) is Some(true) {
-      println(
+    if seen.contains(name) {
+      warnings.push(
         "Warning: duplicate \{category} API name '\{name}' found across packages",
       )
     } else {
-      seen.set(name, true)
+      seen.add(name)
     }
   }
+  warnings
 }
 
 ///|

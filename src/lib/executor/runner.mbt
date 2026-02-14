@@ -111,6 +111,17 @@ pub fn ExecutorError::to_string(self : ExecutorError) -> String {
 }
 
 ///|
+/// Cap timeout and convert to milliseconds (prevents Int overflow)
+fn safe_timeout_ms(timeout_seconds : UInt) -> Int {
+  let capped = if timeout_seconds > max_timeout_seconds {
+    max_timeout_seconds
+  } else {
+    timeout_seconds
+  }
+  capped.reinterpret_as_int() * 1000
+}
+
+///|
 /// Execute command and collect stdout
 pub async fn run_command(
   cmd : Array[String],
@@ -122,7 +133,6 @@ pub async fn run_command(
   let (program, args) = split_program_args(cmd)
   let cmd_str = join_command_args(cmd)
 
-  // Execute command with try-catch-noraise pattern
   let (exit_code, stdout_data, stderr_data) = try
     @process.collect_output(program, args[:])
   catch {
@@ -134,7 +144,6 @@ pub async fn run_command(
     r => r
   }
 
-  // Decode stdout with try-catch-noraise pattern
   let stdout_str = try stdout_data.text() catch {
     e =>
       raise ExecutorError(
@@ -143,8 +152,6 @@ pub async fn run_command(
   } noraise {
     r => r
   }
-
-  // Decode stderr with try-catch-noraise pattern
   let stderr_str = try stderr_data.text() catch {
     e =>
       raise ExecutorError(
@@ -153,7 +160,6 @@ pub async fn run_command(
   } noraise {
     r => r
   }
-
   CommandResult::{ exit_code, stdout: stdout_str, stderr: stderr_str }
 }
 
@@ -224,7 +230,6 @@ pub async fn run_command_in_dir(
   let (program, args) = split_program_args(cmd)
   let cmd_str = join_command_args(cmd)
 
-  // Execute command with cwd using try-catch-noraise pattern
   let (exit_code, stdout_data, stderr_data) = try
     @process.collect_output(program, args[:], cwd~)
   catch {
@@ -236,7 +241,6 @@ pub async fn run_command_in_dir(
     r => r
   }
 
-  // Decode stdout with try-catch-noraise pattern
   let stdout_str = try stdout_data.text() catch {
     e =>
       raise ExecutorError(
@@ -245,8 +249,6 @@ pub async fn run_command_in_dir(
   } noraise {
     r => r
   }
-
-  // Decode stderr with try-catch-noraise pattern
   let stderr_str = try stderr_data.text() catch {
     e =>
       raise ExecutorError(
@@ -255,7 +257,6 @@ pub async fn run_command_in_dir(
   } noraise {
     r => r
   }
-
   CommandResult::{ exit_code, stdout: stdout_str, stderr: stderr_str }
 }
 
@@ -267,21 +268,9 @@ pub async fn run_command_in_dir_with_timeout(
   cwd : String,
   timeout_seconds : UInt,
 ) -> CommandResult? raise ExecutorError {
-  if cmd.is_empty() {
-    raise ExecutorError("Cannot execute empty command")
-  }
-
   let cmd_str = join_command_args(cmd)
+  let timeout_ms = safe_timeout_ms(timeout_seconds)
 
-  // Cap timeout to prevent Int overflow when converting to milliseconds
-  let safe_timeout_seconds = if timeout_seconds > max_timeout_seconds {
-    max_timeout_seconds
-  } else {
-    timeout_seconds
-  }
-  let timeout_ms = safe_timeout_seconds.reinterpret_as_int() * 1000
-
-  // Execute with timeout using try-catch-noraise pattern
   try
     @async.with_timeout_opt(timeout_ms, async fn() {
       run_command_in_dir(cmd, cwd)
@@ -300,34 +289,13 @@ pub async fn run_command_in_dir_with_timeout(
 ///|
 /// Run command with timeout (in seconds)
 /// Returns None if timed out, Some(result) otherwise
-///
-/// On timeout:
-/// - Returns None immediately
-/// - The child process receives a termination signal (SIGTERM on Unix)
-/// - The process is cancelled via @async.with_timeout_opt which handles cleanup
-///
-/// Note: If the process ignores the termination signal, it may continue running
-/// as an orphan process. For critical cleanup needs, consider using
-/// @process.graceful_cancel or @process.hard_cancel directly.
 pub async fn run_command_with_timeout(
   cmd : Array[String],
   timeout_seconds : UInt,
 ) -> CommandResult? raise ExecutorError {
-  if cmd.is_empty() {
-    raise ExecutorError("Cannot execute empty command")
-  }
-
   let cmd_str = join_command_args(cmd)
+  let timeout_ms = safe_timeout_ms(timeout_seconds)
 
-  // Cap timeout to prevent Int overflow when converting to milliseconds
-  let safe_timeout_seconds = if timeout_seconds > max_timeout_seconds {
-    max_timeout_seconds
-  } else {
-    timeout_seconds
-  }
-  let timeout_ms = safe_timeout_seconds.reinterpret_as_int() * 1000
-
-  // Execute with timeout using try-catch-noraise pattern
   try
     @async.with_timeout_opt(timeout_ms, async fn() { run_command(cmd) })
   catch {

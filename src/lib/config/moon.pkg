@@ -1,5 +1,6 @@
 import {
   "moonbitlang/core/json",
+  "moonbitlang/core/hashset",
   "dijdzv/moon-release/lib/util",
 }
 

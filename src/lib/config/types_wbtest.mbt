@@ -31,10 +31,29 @@ test "parse config with pr_title" {
 test "parse config with git_tag_enable" {
   let content =
     #|{
-    #|  "git_tag_enable": false
+    #|  "git_tag_enable": false,
+    #|  "git_release_enable": false
     #|}
   let config = Config::parse(content) catch { _ => fail("Unexpected error") }
   assert_eq(config.git_tag_enable, false)
+  assert_eq(config.git_release_enable, false)
+}
+
+///|
+test "parse config rejects git_release_enable without git_tag_enable" {
+  let content =
+    #|{
+    #|  "git_tag_enable": false,
+    #|  "git_release_enable": true
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("expected error")
+  } catch {
+    ConfigError(msg) =>
+      assert_true(msg.contains("git_release_enable"))
+    _ => fail("wrong error type")
+  }
 }
 
 ///|

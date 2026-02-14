@@ -1,8 +1,8 @@
 ///|
 test "client new" {
   let client = GitHubClient::new("owner", "repo")
-  assert_eq(client.owner, "owner")
-  assert_eq(client.repo, "repo")
+  assert_eq(client.slug.owner(), "owner")
+  assert_eq(client.slug.repo(), "repo")
 }
 
 ///|

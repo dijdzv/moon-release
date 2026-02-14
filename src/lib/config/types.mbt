@@ -183,15 +183,12 @@ pub fn Config::parse(
     "moon_publish_timeout", "npm_publish_timeout", "bump_all_packages",
     "bootstrap_sha",
   ]
+  let known_set : @hashset.HashSet[String] = @hashset.new()
+  for k in known_keys {
+    known_set.add(k)
+  }
   for key, _ in obj {
-    let mut found = false
-    for i = 0; i < known_keys.length(); i = i + 1 {
-      if known_keys[i] == key {
-        found = true
-        break
-      }
-    }
-    if not(found) {
+    if not(known_set.contains(key)) {
       warnings.push("unknown config key '\{key}' in release.json")
     }
   }
@@ -204,7 +201,7 @@ pub fn Config::parse(
     None => d.packages
   }
 
-  Config::{
+  let config = Config::{
     pr_title: parse_string(obj, "pr_title", d.pr_title),
     pr_draft: parse_bool(obj, "pr_draft", d.pr_draft),
     pr_labels: parse_string_array(obj, "pr_labels", d.pr_labels),
@@ -289,6 +286,15 @@ pub fn Config::parse(
       d.bootstrap_sha,
     ),
   }
+
+  // Validate: git_release_enable requires git_tag_enable
+  if config.git_release_enable && not(config.git_tag_enable) {
+    raise ConfigError(
+      "'git_release_enable' requires 'git_tag_enable' to be true (cannot create a GitHub release without a tag)",
+    )
+  }
+
+  config
 }
 
 ///|
@@ -494,21 +500,39 @@ fn validate_pattern(
 }
 
 ///|
-/// Parse string field
-fn parse_string(
+/// Parse string field with configurable error prefix
+fn parse_string_with_prefix(
   obj : Map[String, Json],
   key : String,
   default : String,
+  prefix : String,
 ) -> String raise ConfigError {
   match obj.get(key) {
     Some(String(s)) => s
-    Some(_) => raise ConfigError("'" + key + "' must be a string")
+    Some(_) => raise ConfigError(prefix + "'" + key + "' must be a string")
     None => default
   }
 }
 
 ///|
-/// Parse required string field (for package)
+fn parse_string(
+  obj : Map[String, Json],
+  key : String,
+  default : String,
+) -> String raise ConfigError {
+  parse_string_with_prefix(obj, key, default, "")
+}
+
+///|
+fn parse_pkg_string(
+  obj : Map[String, Json],
+  key : String,
+  default : String,
+) -> String raise ConfigError {
+  parse_string_with_prefix(obj, key, default, "package ")
+}
+
+///|
 fn parse_pkg_required_string(
   obj : Map[String, Json],
   key : String,
@@ -521,62 +545,62 @@ fn parse_pkg_required_string(
 }
 
 ///|
-/// Parse string field (for package)
-fn parse_pkg_string(
+/// Parse optional string field with configurable error prefix
+fn parse_optional_string_with_prefix(
   obj : Map[String, Json],
   key : String,
-  default : String,
-) -> String raise ConfigError {
+  default : String?,
+  prefix : String,
+) -> String? raise ConfigError {
   match obj.get(key) {
-    Some(String(s)) => s
-    Some(_) => raise ConfigError("package '" + key + "' must be a string")
+    Some(String(s)) => Some(s)
+    Some(Null) => None
+    Some(_) => raise ConfigError(prefix + "'" + key + "' must be a string")
     None => default
   }
 }
 
 ///|
-/// Parse optional string field
 fn parse_optional_string(
   obj : Map[String, Json],
   key : String,
   default : String?,
 ) -> String? raise ConfigError {
-  match obj.get(key) {
-    Some(String(s)) => Some(s)
-    Some(Null) => None
-    Some(_) => raise ConfigError("'" + key + "' must be a string")
-    None => default
-  }
+  parse_optional_string_with_prefix(obj, key, default, "")
 }
 
 ///|
-/// Parse optional string field (for package)
 fn parse_pkg_optional_string(
   obj : Map[String, Json],
   key : String,
   default : String?,
 ) -> String? raise ConfigError {
+  parse_optional_string_with_prefix(obj, key, default, "package ")
+}
+
+///|
+/// Parse boolean field with configurable error prefix
+fn parse_bool_with_prefix(
+  obj : Map[String, Json],
+  key : String,
+  default : Bool,
+  prefix : String,
+) -> Bool raise ConfigError {
   match obj.get(key) {
-    Some(String(s)) => Some(s)
-    Some(Null) => None
-    Some(_) => raise ConfigError("package '" + key + "' must be a string")
+    Some(True) => true
+    Some(False) => false
+    Some(_) => raise ConfigError(prefix + "'" + key + "' must be a boolean")
     None => default
   }
 }
 
 ///|
-/// Parse boolean field
 fn parse_bool(
   obj : Map[String, Json],
   key : String,
   default : Bool,
 ) -> Bool raise ConfigError {
-  match obj.get(key) {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("'" + key + "' must be a boolean")
-    None => default
-  }
+  parse_bool_with_prefix(obj, key, default, "")
 }
 
 ///|
@@ -623,18 +647,12 @@ fn parse_uint(
 }
 
 ///|
-/// Parse boolean field (for package)
 fn parse_pkg_bool(
   obj : Map[String, Json],
   key : String,
   default : Bool,
 ) -> Bool raise ConfigError {
-  match obj.get(key) {
-    Some(True) => true
-    Some(False) => false
-    Some(_) => raise ConfigError("package '" + key + "' must be a boolean")
-    None => default
-  }
+  parse_bool_with_prefix(obj, key, default, "package ")
 }
 
 ///|
@@ -699,8 +717,7 @@ pub fn Config::git_release_mode(self : Config) -> GitReleaseMode {
         latest=self.git_release_latest,
       )
     (true, false) => TagOnly
-    // git_release_enable without git_tag_enable doesn't make sense,
-    // but we treat it as NoGitRelease
+    // (false, true) is rejected by Config::parse validation
     (false, _) => NoGitRelease
   }
 }

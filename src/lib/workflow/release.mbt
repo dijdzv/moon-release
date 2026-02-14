@@ -1,24 +1,64 @@
 ///|
-/// Get latest tag from repository
+/// Get latest tag from repository.
+/// Returns None if no tag exists or the command fails.
+/// Declares raise WorkflowError for async error propagation.
 pub async fn get_latest_tag(
   repo : @git.Repository,
 ) -> String? raise WorkflowError {
   let cmd = repo.get_latest_tag_command()
   let result = try @executor.run_command(cmd) catch {
-    e =>
-      raise ExternalCommandError("Failed to run git describe: " + e.to_string())
+    _ => return None
   } noraise {
     r => r
   }
   if result.is_success() {
     let tag = result.stdout_trimmed()
-    if tag.is_empty() {
-      None
-    } else {
-      Some(tag)
-    }
+    if tag.is_empty() { None } else { Some(tag) }
   } else {
     None
+  }
+}
+
+///|
+/// Resolve the starting reference for commit range analysis.
+/// Tries: latest tag → most recent release commit → bootstrap_sha.
+/// Returns Some(ref) if found, None if no previous release exists.
+async fn resolve_commit_range_start(
+  repo : @git.Repository,
+  pr_title : String,
+  bootstrap_sha : String?,
+) -> String? raise WorkflowError {
+  // 1. Try latest tag
+  let tag = get_latest_tag(repo)
+  match tag {
+    Some(t) => return Some(t)
+    None => ()
+  }
+
+  // 2. Search for most recent release commit
+  let pattern = pr_title.replace(old="{{ version }}", new="")
+  let search_cmd = repo.find_release_commit_command(pattern)
+  let search_result = try @executor.run_command(search_cmd) catch {
+    _ => @executor.CommandResult::failed("release commit search failed")
+  } noraise {
+    r => r
+  }
+  if search_result.is_success() {
+    let hash = search_result.stdout_trimmed()
+    if not(hash.is_empty()) {
+      return Some(hash)
+    }
+  }
+
+  // 3. Use bootstrap_sha if configured
+  match bootstrap_sha {
+    Some(sha) => {
+      println(
+        "No previous release found. Using bootstrap_sha as starting point.",
+      )
+      Some(sha)
+    }
+    None => None
   }
 }
 
@@ -30,18 +70,11 @@ pub async fn get_commits_since_last_tag(
   max_commits? : UInt? = None,
   bootstrap_sha~ : String? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
-  // Get latest tag
-  let latest_tag = try get_latest_tag(repo) catch {
-    _ => None
-  } noraise {
-    r => r
-  }
+  let range_start = resolve_commit_range_start(repo, pr_title, bootstrap_sha)
 
-  // Resolve the commit range start point:
-  // 1. Latest tag  2. Most recent release commit  3. All commits (initial release)
-  let cmd = match latest_tag {
-    Some(tag) => {
-      try repo.get_commits_since_tag_command(tag) catch {
+  let cmd = match range_start {
+    Some(start) =>
+      try repo.get_commits_since_tag_command(start) catch {
         e =>
           raise ExternalCommandError(
             "Failed to build git log command: " + e.to_string(),
@@ -49,56 +82,11 @@ pub async fn get_commits_since_last_tag(
       } noraise {
         r => r
       }
-    }
     None => {
-      let pattern = pr_title.replace(old="{{ version }}", new="")
-      let search_cmd = repo.find_release_commit_command(pattern)
-      let search_result = try @executor.run_command(search_cmd) catch {
-        e =>
-          raise ExternalCommandError(
-            "Failed to search for release commit: " + e.to_string(),
-          )
-      } noraise {
-        r => r
-      }
-      let release_hash = if search_result.is_success() {
-        search_result.stdout_trimmed()
-      } else {
-        ""
-      }
-      if not(release_hash.is_empty()) {
-        try repo.get_commits_since_tag_command(release_hash) catch {
-          e =>
-            raise ExternalCommandError(
-              "Failed to build git log command: " + e.to_string(),
-            )
-        } noraise {
-          r => r
-        }
-      } else {
-        match bootstrap_sha {
-          Some(sha) => {
-            println(
-              "No previous release found. Using bootstrap_sha as starting point.",
-            )
-            try repo.get_commits_since_tag_command(sha) catch {
-              e =>
-                raise ExternalCommandError(
-                  "Failed to build git log command: " + e.to_string(),
-                )
-            } noraise {
-              r => r
-            }
-          }
-          None => {
-            // No previous release exists — analyze entire history (initial release)
-            println(
-              "No previous release found. Analyzing all commits for initial release.",
-            )
-            repo.get_all_commits_command()
-          }
-        }
-      }
+      println(
+        "No previous release found. Analyzing all commits for initial release.",
+      )
+      repo.get_all_commits_command()
     }
   }
   match max_commits {
@@ -316,9 +304,9 @@ pub async fn analyze_version_bump(
 
 ///|
 /// Get mooncakes credentials file path
-/// Tries HOME (Unix), then USERPROFILE (Windows), then falls back to CWD-relative path.
+/// Tries HOME (Unix), then USERPROFILE (Windows).
 /// Uses libc getenv for cross-platform compatibility (no dependency on printenv).
-fn get_mooncakes_credentials_path() -> String {
+fn get_mooncakes_credentials_path() -> String raise WorkflowError {
   // Try HOME first (Unix / macOS / Linux)
   match @executor.get_env_var("HOME") {
     Some(home) => return home + "/.moon/credentials.json"
@@ -331,8 +319,7 @@ fn get_mooncakes_credentials_path() -> String {
     None => ()
   }
 
-  // Fallback: CWD-relative path
-  ".moon/credentials.json"
+  raise WorkflowError("Cannot determine home directory: neither HOME nor USERPROFILE is set")
 }
 
 ///|
@@ -1324,11 +1311,7 @@ pub async fn run_release_pr(
         labels=ctx.config.pr_labels,
       )
 
-      // Extract gh command arguments
-      let gh_args : Array[String] = []
-      for i = 1; i < pr_cmd.length(); i = i + 1 {
-        gh_args.push(pr_cmd[i])
-      }
+      let gh_args = strip_command_prefix(pr_cmd)
 
       // Create PR with try-catch-noraise pattern
       let pr_result = try @executor.run_gh(gh_args) catch {
@@ -1449,11 +1432,7 @@ async fn find_existing_release_pr(
 ) -> (UInt, String)? raise Error {
   let list_cmd = github.list_pull_requests_command(state="open")
 
-  // Extract gh command arguments
-  let gh_args : Array[String] = []
-  for i = 1; i < list_cmd.length(); i = i + 1 {
-    gh_args.push(list_cmd[i])
-  }
+  let gh_args = strip_command_prefix(list_cmd)
 
   // Run gh command with try-catch-noraise pattern
   let result = try @executor.run_gh(gh_args) catch {
@@ -1733,27 +1712,15 @@ pub async fn run_release(
         latest~,
       )
 
-      let gh_args : Array[String] = []
-      for i = 1; i < release_cmd.length(); i = i + 1 {
-        gh_args.push(release_cmd[i])
-      }
+      let gh_args = strip_command_prefix(release_cmd)
 
-      let mut release_caught_error = false
       let release_result = try @executor.run_gh(gh_args) catch {
-        e => {
-          println("Warning: Failed to create GitHub release: " + e.to_string())
-          println(
-            "Tag '" +
-            tag_name +
-            "' was already pushed. Create the release manually.",
-          )
-          release_caught_error = true
-          @executor.CommandResult::failed("release creation failed")
-        }
+        e =>
+          @executor.CommandResult::failed(e.to_string())
       } noraise {
         r => r
       }
-      if not(release_result.is_success()) && not(release_caught_error) {
+      if not(release_result.is_success()) {
         println(
           "Warning: Failed to create GitHub release: " + release_result.stderr,
         )
@@ -1762,7 +1729,7 @@ pub async fn run_release(
           tag_name +
           "' was already pushed. Create the release manually.",
         )
-      } else if release_result.is_success() {
+      } else {
         println("Created GitHub release: " + tag_name)
       }
     }
@@ -2323,68 +2290,21 @@ async fn get_package_commits(
   pr_title~ : String,
   bootstrap_sha~ : String? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
-  // Get latest tag with try-catch-noraise (failure is expected if no tags exist yet)
-  let tag_result = try
-    @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
-  catch {
-    e => @executor.CommandResult::failed("no tags found: " + e.to_string())
-  } noraise {
-    r => r
-  }
+  let range_start = resolve_commit_range_start(repo, pr_title, bootstrap_sha)
 
-  let tag = if tag_result.is_success() {
-    tag_result.stdout_trimmed()
-  } else {
-    ""
-  }
-
-  // Resolve the commit range start point:
-  // 1. Latest tag  2. Most recent release commit  3. bootstrap_sha  4. All commits (initial release)
-  // Note: Commands are built as git subcommand args (without "git -C path" prefix)
-  // because they are passed to run_git() which adds the prefix automatically.
-  let log_cmd : Array[String] = if not(tag.is_empty()) {
-    // Tag found — get commits since tag with path filter
-    ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", tag + "..HEAD", "--", path]
-  } else {
-    let pattern = pr_title.replace(old="{{ version }}", new="")
-    let search_result = try
-      @executor.run_git(repo, [
-        "log", "--fixed-strings", "--grep=" + pattern, "--format=%H", "-1",
-      ])
-    catch {
-      _ => @executor.CommandResult::failed("release commit search failed")
-    } noraise {
-      r => r
-    }
-    let release_hash = if search_result.is_success() {
-      search_result.stdout_trimmed()
-    } else {
-      ""
-    }
-    if not(release_hash.is_empty()) {
-      // release_hash comes from git log output, so it's a valid SHA
-      ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", release_hash + "..HEAD", "--", path]
-    } else {
-      match bootstrap_sha {
-        Some(sha) => {
-          println(
-            "No previous release found. Using bootstrap_sha as starting point.",
-          )
-          // bootstrap_sha is validated by git when executing the command
-          ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", sha + "..HEAD", "--", path]
-        }
-        None => {
-          // No previous release exists — analyze entire history (initial release)
-          println(
-            "No previous release found. Analyzing all commits for initial release.",
-          )
-          ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", "--", path]
-        }
-      }
+  // Build git log subcommand args with path filter.
+  // Passed to run_git() which adds the "git -C path" prefix automatically.
+  let log_cmd : Array[String] = match range_start {
+    Some(start) =>
+      ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", start + "..HEAD", "--", path]
+    None => {
+      println(
+        "No previous release found. Analyzing all commits for initial release.",
+      )
+      ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", "--", path]
     }
   }
 
-  // Get log with try-catch-noraise pattern
   let log_result = try @executor.run_git(repo, log_cmd) catch {
     e => raise GitError("Failed to get commits: " + e.to_string())
   } noraise {
@@ -2666,52 +2586,16 @@ pub async fn run_semver_check(
     println("Running semver check...")
   }
 
-  // Resolve comparison ref: tag → release commit → skip
-  let tag_result = try
-    @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
-  catch {
-    _ => @executor.CommandResult::failed("no tags found")
-  } noraise {
-    r => r
-  }
-
-  let mut comparison_ref = if tag_result.is_success() &&
-    not(tag_result.stdout_trimmed().is_empty()) {
-    tag_result.stdout_trimmed()
-  } else {
-    // No tag — search for most recent release commit
-    let pattern = pr_title.replace(old="{{ version }}", new="")
-    let search_result = try
-      @executor.run_git(repo, [
-        "log", "--fixed-strings", "--grep=" + pattern, "--format=%H", "-1",
-      ])
-    catch {
-      _ => @executor.CommandResult::failed("release commit search failed")
-    } noraise {
-      r => r
-    }
-    if search_result.is_success() {
-      search_result.stdout_trimmed()
-    } else {
-      ""
-    }
-  }
-
-  if comparison_ref.is_empty() {
-    match bootstrap_sha {
-      Some(sha) => {
-        println(
-          "No previous release found. Using bootstrap_sha for semver check.",
-        )
-        comparison_ref = sha
-      }
-      None => {
-        // No previous release exists — nothing to compare against
-        println(
-          "No previous release found. Skipping semver check for initial release.",
-        )
-        return @semver_check.CheckResult::new(@semver_check.ApiDiff::empty())
-      }
+  // Resolve comparison ref: tag → release commit → bootstrap_sha → skip
+  let comparison_ref = match resolve_commit_range_start(
+    repo, pr_title, bootstrap_sha,
+  ) {
+    Some(start) => start
+    None => {
+      println(
+        "No previous release found. Skipping semver check for initial release.",
+      )
+      return @semver_check.CheckResult::new(@semver_check.ApiDiff::empty())
     }
   }
 
