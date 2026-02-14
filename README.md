@@ -479,7 +479,9 @@ cp _build/native/release/build/moon-release.exe ~/.local/bin/moon-release
 
 #### Initial Setup (first time only)
 
-moon-release determines the next version by analyzing commits **since the last release**. For a new project, you need to establish a starting point by creating a Git tag on the commit you want to treat as the baseline.
+moon-release determines the next version by analyzing commits **since the last release**. When no tag or release commit exists yet, it analyzes all commits in the repository to compute the initial version — no manual setup is required.
+
+It is **strongly recommended** to create a Git tag as a baseline. This ensures only new commits are analyzed, producing more accurate and predictable version bumps:
 
 ```bash
 # Tag the commit that represents your latest release
@@ -494,7 +496,7 @@ git tag v0.1.0 <commit-hash>
 git push origin --tags
 ```
 
-> Without an initial tag, `moon-release check` and `moon-release update` will fail because there is no baseline to compare commits against.
+> **Recommended:** Always create an initial tag. Without one, moon-release analyzes the **entire** commit history, which may produce unexpectedly large version bumps on repositories with a long history.
 
 #### Regular Usage
 

@@ -36,10 +36,11 @@ pub async fn get_commits_since_last_tag(
     r => r
   }
 
-  // Get commit log
-  let log_result = match latest_tag {
+  // Resolve the commit range start point:
+  // 1. Latest tag  2. Most recent release commit  3. All commits (initial release)
+  let cmd = match latest_tag {
     Some(tag) => {
-      let cmd = try repo.get_commits_since_tag_command(tag) catch {
+      try repo.get_commits_since_tag_command(tag) catch {
         e =>
           raise ExternalCommandError(
             "Failed to build git log command: " + e.to_string(),
@@ -47,22 +48,8 @@ pub async fn get_commits_since_last_tag(
       } noraise {
         r => r
       }
-      match max_commits {
-        Some(n) => {
-          cmd.push("-n")
-          cmd.push(n.to_string())
-        }
-        None => ()
-      }
-      try @executor.run_command(cmd) catch {
-        e =>
-          raise ExternalCommandError("Failed to run git log: " + e.to_string())
-      } noraise {
-        r => r
-      }
     }
     None => {
-      // No tag found — search for the most recent release commit
       let pattern = pr_title.replace(old="{{ version }}", new="")
       let search_cmd = repo.find_release_commit_command(pattern)
       let search_result = try @executor.run_command(search_cmd) catch {
@@ -78,35 +65,36 @@ pub async fn get_commits_since_last_tag(
       } else {
         ""
       }
-      if release_hash.is_empty() {
-        raise GitError(
-          "No previous release found (no git tag or release commit matching '" +
-          pattern +
-          "').\nHint: Use 'moon-release set-version <version>' to set the initial version, or create a git tag (e.g. 'git tag v0.1.0')",
-        )
-      }
-      let cmd = try repo.get_commits_since_tag_command(release_hash) catch {
-        e =>
-          raise ExternalCommandError(
-            "Failed to build git log command: " + e.to_string(),
-          )
-      } noraise {
-        r => r
-      }
-      match max_commits {
-        Some(n) => {
-          cmd.push("-n")
-          cmd.push(n.to_string())
+      if not(release_hash.is_empty()) {
+        try repo.get_commits_since_tag_command(release_hash) catch {
+          e =>
+            raise ExternalCommandError(
+              "Failed to build git log command: " + e.to_string(),
+            )
+        } noraise {
+          r => r
         }
-        None => ()
-      }
-      try @executor.run_command(cmd) catch {
-        e =>
-          raise ExternalCommandError("Failed to run git log: " + e.to_string())
-      } noraise {
-        r => r
+      } else {
+        // No previous release exists — analyze entire history (initial release)
+        println(
+          "No previous release found. Analyzing all commits for initial release.",
+        )
+        repo.get_all_commits_command()
       }
     }
+  }
+  match max_commits {
+    Some(n) => {
+      cmd.push("-n")
+      cmd.push(n.to_string())
+    }
+    None => ()
+  }
+  let log_result = try @executor.run_command(cmd) catch {
+    e =>
+      raise ExternalCommandError("Failed to run git log: " + e.to_string())
+  } noraise {
+    r => r
   }
 
   // Verify git log succeeded
@@ -2331,8 +2319,12 @@ async fn get_package_commits(
     ""
   }
 
-  // No tag found — search for the most recent release commit
-  if tag.is_empty() {
+  // Resolve the commit range start point:
+  // 1. Latest tag  2. Most recent release commit  3. All commits (initial release)
+  let log_cmd : Array[String] = if not(tag.is_empty()) {
+    // Tag found — get commits since tag with path filter
+    ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", tag + "..HEAD", "--", path]
+  } else {
     let pattern = pr_title.replace(old="{{ version }}", new="")
     let search_result = try
       @executor.run_git(repo, [
@@ -2348,41 +2340,29 @@ async fn get_package_commits(
     } else {
       ""
     }
-    if release_hash.is_empty() {
-      raise GitError(
-        "No previous release found (no git tag or release commit matching '" +
-        pattern +
-        "').\nHint: Use 'moon-release set-version <version>' to set the initial version, or create a git tag (e.g. 'git tag v0.1.0')",
+    if not(release_hash.is_empty()) {
+      let cmd = try repo.get_commits_since_tag_command(release_hash) catch {
+        e =>
+          raise ExternalCommandError(
+            "Failed to build git log command: " + e.to_string(),
+          )
+      } noraise {
+        r => r
+      }
+      cmd.push("--")
+      cmd.push(path)
+      cmd
+    } else {
+      // No previous release exists — analyze entire history (initial release)
+      println(
+        "No previous release found. Analyzing all commits for initial release.",
       )
+      let cmd = repo.get_all_commits_command()
+      cmd.push("--")
+      cmd.push(path)
+      cmd
     }
-    // Use get_commits_since_tag_command for ref validation, then append path filter
-    let cmd = try repo.get_commits_since_tag_command(release_hash) catch {
-      e =>
-        raise ExternalCommandError(
-          "Failed to build git log command: " + e.to_string(),
-        )
-    } noraise {
-      r => r
-    }
-    cmd.push("--")
-    cmd.push(path)
-    let log_result = try @executor.run_command(cmd) catch {
-      e => raise GitError("Failed to get commits: " + e.to_string())
-    } noraise {
-      r => r
-    }
-    let git_commits = @git.parse_commit_log(log_result.stdout)
-    return @git.parse_conventional_commits(git_commits)
   }
-
-  // Tag found — get commits since tag with path filter
-  let log_cmd = [
-    "log",
-    "--pretty=format:%H%x1E%s%x1E%an%x1E%aI",
-    tag + "..HEAD",
-    "--",
-    path,
-  ]
 
   // Get log with try-catch-noraise pattern
   let log_result = try @executor.run_git(repo, log_cmd) catch {

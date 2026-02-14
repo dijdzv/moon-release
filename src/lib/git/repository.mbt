@@ -169,6 +169,12 @@ pub fn Repository::get_commits_since_tag_command(
 }
 
 ///|
+/// Get command to retrieve all commits (no tag/ref range filter)
+pub fn Repository::get_all_commits_command(self : Repository) -> Array[String] {
+  ["git", "-C", self.path, "log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI"]
+}
+
+///|
 /// Get command to find the most recent release commit matching a pattern
 pub fn Repository::find_release_commit_command(
   self : Repository,

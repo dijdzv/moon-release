@@ -284,6 +284,28 @@ test "find_release_commit_command - uses fixed-strings for safe matching" {
   assert_eq(cmd[5], "--grep=release (v1.0)")
 }
 
+// get_all_commits_command tests
+
+///|
+test "get_all_commits_command - returns correct command" {
+  let repo = Repository::open_unchecked("/repo")
+  let cmd = repo.get_all_commits_command()
+  assert_eq(cmd[0], "git")
+  assert_eq(cmd[1], "-C")
+  assert_eq(cmd[2], "/repo")
+  assert_eq(cmd[3], "log")
+  assert_eq(cmd[4], "--pretty=format:%H%x1E%s%x1E%an%x1E%aI")
+  assert_eq(cmd.length(), 5)
+}
+
+///|
+test "get_all_commits_command - current directory repo" {
+  let repo = Repository::current()
+  let cmd = repo.get_all_commits_command()
+  assert_eq(cmd[1], "-C")
+  assert_eq(cmd[2], ".")
+}
+
 // create_tag_command security separator
 
 ///|
