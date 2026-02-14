@@ -2606,18 +2606,21 @@ pub async fn run_semver_check(
   }
   let current_branch = branch_result.stdout_trimmed()
 
-  // 3. Run moon doc on current code
+  // 3. Run moon doc on current code (10 min timeout)
   if verbose {
     println("  Generating docs for current code...")
   }
-  // Run moon doc with try-catch-noraise pattern
-  let doc_result = try @executor.run_command(["moon", "doc"]) catch {
+  let doc_result = try @executor.run_command_with_timeout(["moon", "doc"], 600U) catch {
     e => raise ExternalCommandError("Failed to run moon doc: " + e.to_string())
   } noraise {
     r => r
   }
-  if not(doc_result.is_success()) {
-    raise ExternalCommandError("Failed to generate docs: " + doc_result.stderr)
+  match doc_result {
+    None => raise ExternalCommandError("moon doc timed out (10 min)")
+    Some(r) =>
+      if not(r.is_success()) {
+        raise ExternalCommandError("Failed to generate docs: " + r.stderr)
+      }
   }
 
   // 4. Load current package_data.json with try-catch-noraise pattern
@@ -2669,11 +2672,11 @@ async fn get_old_apis_with_safe_checkout(
 
   // From this point, we must return to the original branch
 
-  // Run moon doc on tagged code with try-catch-noraise pattern
+  // Run moon doc on tagged code (10 min timeout)
   if verbose {
     println("  Generating docs for previous version...")
   }
-  let old_doc_result = try @executor.run_command(["moon", "doc"]) catch {
+  let old_doc_result = try @executor.run_command_with_timeout(["moon", "doc"], 600U) catch {
     e => {
       let _ = try? restore_branch(repo, original_branch, verbose)
       raise ExternalCommandError(
@@ -2683,31 +2686,40 @@ async fn get_old_apis_with_safe_checkout(
   } noraise {
     r => r
   }
+  match old_doc_result {
+    None => {
+      let _ = try? restore_branch(repo, original_branch, verbose)
+      raise ExternalCommandError("moon doc timed out on tag (10 min)")
+    }
+    _ => ()
+  }
 
-  // Load package_data.json with try-catch-noraise pattern
-  let old_apis = if old_doc_result.is_success() {
-    try load_package_apis("_build/doc") catch {
-      e => {
-        if verbose {
-          println(
-            "[WARN] Failed to load API from previous version: " + e.to_string(),
-          )
-          println("[WARN] Continuing with empty API baseline...")
+  // Load package_data.json
+  let old_apis = match old_doc_result {
+    Some(r) if r.is_success() =>
+      try load_package_apis("_build/doc") catch {
+        e => {
+          if verbose {
+            println(
+              "[WARN] Failed to load API from previous version: " + e.to_string(),
+            )
+            println("[WARN] Continuing with empty API baseline...")
+          }
+          @semver_check.PackageApi::empty()
         }
-        @semver_check.PackageApi::empty()
+      } noraise {
+        r => r
       }
-    } noraise {
-      r => r
+    Some(r) => {
+      if verbose {
+        println(
+          "[WARN] Failed to generate docs for previous version: " + r.stderr,
+        )
+        println("[WARN] Continuing with empty API baseline...")
+      }
+      @semver_check.PackageApi::empty()
     }
-  } else {
-    if verbose {
-      println(
-        "[WARN] Failed to generate docs for previous version: " +
-        old_doc_result.stderr,
-      )
-      println("[WARN] Continuing with empty API baseline...")
-    }
-    @semver_check.PackageApi::empty()
+    None => @semver_check.PackageApi::empty() // unreachable: timeout handled above
   }
 
   // Return to original branch
