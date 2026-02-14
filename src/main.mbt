@@ -2,7 +2,7 @@
 /// Automated release tool
 
 ///|
-/// Version extracted from embedded moon.mod.json (generated at build time)
+/// Version extracted from moon.mod.json (embedded via :embed directive in moon.pkg)
 let version : String = extract_version(embedded_moon_mod_json)
 
 ///|

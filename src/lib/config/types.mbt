@@ -724,11 +724,9 @@ pub fn Config::git_release_mode(self : Config) -> GitReleaseMode {
 
 ///|
 /// Get package-level publish target
-/// TODO: provenance and timeout are hardcoded defaults; they should reflect
-/// Config.npm_publish_provenance / Config.npm_publish_timeout when callers
-/// start using the NpmConfig values inside the returned PublishTarget.
-/// Currently callers only match on the variant (MooncakesOnly, NpmOnly, etc.)
-/// and use Config-level settings directly for actual publish operations.
+/// Note: provenance and timeout use placeholder defaults because callers only
+/// match on the variant (MooncakesOnly, NpmOnly, etc.) and read these values
+/// from Config-level settings directly for actual publish operations.
 pub fn PackageConfig::publish_target(self : PackageConfig) -> PublishTarget {
   let npm_config = NpmConfig::{
     build_command: self.npm_build_command,

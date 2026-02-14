@@ -1,7 +1,7 @@
 ///|
-/// Merge multiple package_data.json files
+/// Merge multiple package_data.json files into a single API
 /// When multiple packages are merged, prefixes each entry's name with the package path
-/// to avoid duplicate names causing HashMap overwrites in diff_api
+/// to disambiguate names across packages. Warns if duplicates remain after prefixing.
 pub fn merge_package_apis(apis : Array[PackageApi]) -> PackageApi {
   let merged = PackageApi::{
     name: "",
@@ -90,7 +90,6 @@ fn collect_duplicates(names : Array[String], category : String) -> Array[String]
 
 ///|
 /// Get suggested bump type from API diff
-/// Delegates to CheckResult::new to consolidate bump suggestion logic
 pub fn get_suggested_bump_from_diff(diff : ApiDiff) -> String? {
   let result = CheckResult::new(diff)
   match result.suggested_bump {

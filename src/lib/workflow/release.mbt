@@ -686,10 +686,6 @@ async fn get_package_current_version(
 }
 
 ///|
-/// Get monorepo representative version
-/// Returns (max_current_version, max_new_version, all_commits) across packages
-/// The representative version is the highest new_version among target packages.
-/// When bump_all is false, only changed packages are targeted.
 /// Determine the effective bump type for bump_all mode (2-pass).
 /// Pass 1 scans all packages to find the max bump type, which is then applied uniformly.
 /// Returns forced_bump directly if provided, or None if bump_all is false.
@@ -812,7 +808,7 @@ pub async fn get_monorepo_representative_version(
 
 ///|
 /// Update package.json version field
-/// Delegates to @moon_mod.replace_json_field for format-preserving replacement.
+/// Uses @moon_mod.replace_json_field for format-preserving replacement.
 /// Returns the updated content, or None if file doesn't exist.
 async fn update_package_json_version(
   new_version : @semver.Version,
@@ -2099,7 +2095,7 @@ pub struct PackageReleaseInfo {
 
 ///|
 /// Collect package release info for monorepo PR body
-/// Delegates to resolve_version_plan for the shared 3-phase pipeline
+/// Uses resolve_version_plan for the shared 3-phase pipeline, then maps to PackageReleaseInfo
 pub async fn collect_package_release_info(
   config : @config.Config,
   repo : @git.Repository,
@@ -2127,8 +2123,8 @@ pub async fn collect_package_release_info(
 
 ///|
 /// Monorepo: update multiple packages
-/// Delegates to resolve_version_plan for the shared 3-phase pipeline,
-/// then applies file updates based on the resolved plan.
+/// Uses resolve_version_plan for the shared 3-phase pipeline,
+/// then applies file updates (moon.mod.json, package.json) based on the resolved plan.
 pub async fn run_update_packages(
   config : @config.Config,
   repo : @git.Repository,
@@ -2316,9 +2312,7 @@ async fn get_package_commits(
 }
 
 ///|
-/// Monorepo: publish multiple packages
-// Suppress: WorkflowError declared for API consistency. Errors are handled internally
-// with warnings printed to stdout, allowing partial success in monorepo scenarios.
+/// Monorepo: publish multiple packages (partial success allowed)
 #warnings("-unused_error_type")
 pub async fn run_publish_packages(
   config : @config.Config,
@@ -2401,9 +2395,7 @@ pub async fn run_publish_packages(
 }
 
 ///|
-/// Monorepo: npm publish for packages with npm_publish enabled
-// Suppress: WorkflowError declared for API consistency. Errors are handled internally
-// with warnings printed to stdout, allowing partial success in monorepo scenarios.
+/// Monorepo: npm publish for packages with npm_publish enabled (partial success allowed)
 #warnings("-unused_error_type")
 pub async fn run_npm_publish_packages(
   config : @config.Config,
@@ -2496,9 +2488,7 @@ pub async fn run_npm_publish_packages(
 }
 
 ///|
-/// Get version from registry
-// Suppress: WorkflowError declared for API consistency with other workflow functions.
-// Errors are caught internally and returned as None (package not found).
+/// Get version from registry (returns None on failure)
 #warnings("-unused_error_type")
 pub async fn get_registry_version(
   package_name : String,

@@ -15,8 +15,8 @@ moon build --target native --release # Build executable (release, optimized)
 moon check --target native           # Type-check only (fast)
 
 # Test
-moon test --target native            # Unit tests (480+ tests)
-./tests/integration/run_tests.sh     # E2E tests (52+ tests, builds binary first)
+moon test --target native            # Unit tests (485+ tests)
+./tests/integration/run_tests.sh     # E2E tests (58+ tests, builds binary first)
 
 # Run
 moon run src -- <args>               # Run CLI directly
@@ -81,5 +81,5 @@ Each follows: Phase 1 (collect per-package info) → Phase 2 (consolidate by `ve
 
 ## Test Expectations
 
-- **Unit tests** (`moon test --target native`): 480+ tests, 0 failures. 2 warnings (`unused_error_type`) are expected.
-- **Integration tests** (`./tests/integration/run_tests.sh`): 52+ tests, builds binary automatically before running. 2 tests require `gh auth` and are skipped otherwise.
+- **Unit tests** (`moon test --target native`): 485+ tests, 0 failures. 3 warnings (`unused_error_type`) are expected.
+- **Integration tests** (`./tests/integration/run_tests.sh`): 58+ tests, builds binary automatically before running. 2 tests require `gh auth` and are skipped otherwise.
