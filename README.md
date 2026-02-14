@@ -442,10 +442,10 @@ Pin to a specific version:
 
 ```bash
 # Pin to minor version (recommended: auto-updates patch releases)
-curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.2
+curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.3
 
 # Pin to exact version
-curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.2.8
+curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.3.0
 ```
 
 Installs to `~/.local/bin` by default. Override with `INSTALL_DIR`:

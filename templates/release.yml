@@ -74,7 +74,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Pin to minor version to avoid breaking changes (check https://github.com/dijdzv/moon-release/releases for updates)
-          curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.2
+          curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.3
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Configure Git
@@ -191,7 +191,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Pin to minor version to avoid breaking changes (check https://github.com/dijdzv/moon-release/releases for updates)
-          curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.2
+          curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.3
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Configure Git
