@@ -226,6 +226,7 @@ pub fn should_release(
 pub fn run_semver_check(
   _repo : @git.Repository,
   _verbose : Bool,
+  pr_title~ : String = "chore: release {{ version }}",
 ) -> @semver_check.CheckResult raise WorkflowError {
   raise WorkflowError("Workflow requires native target")
 }

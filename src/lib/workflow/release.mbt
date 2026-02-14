@@ -1782,7 +1782,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     }
 
     // Run semver check with try-catch-noraise pattern
-    let check_result = try run_semver_check(ctx.repo, ctx.verbose) catch {
+    let check_result = try run_semver_check(ctx.repo, ctx.verbose, pr_title=ctx.config.pr_title) catch {
       e => {
         println("Warning: Semver check failed: " + e.to_string())
         println("Continuing with publish...")
@@ -2639,33 +2639,53 @@ pub async fn should_release(
 pub async fn run_semver_check(
   repo : @git.Repository,
   verbose : Bool,
+  pr_title~ : String = "chore: release {{ version }}",
 ) -> @semver_check.CheckResult raise WorkflowError {
   if verbose {
     println("Running semver check...")
   }
 
-  // 1. Get latest tag
-  // Get tag with try-catch-noraise pattern
+  // Resolve comparison ref: tag → release commit → skip
   let tag_result = try
     @executor.run_git(repo, ["describe", "--tags", "--abbrev=0"])
   catch {
-    _ =>
-      raise GitError(
-        "No tags found. Cannot perform semver check without a previous version.",
-      )
+    _ => @executor.CommandResult::failed("no tags found")
   } noraise {
     r => r
   }
 
-  if not(tag_result.is_success()) {
-    raise GitError(
-      "No tags found. Cannot perform semver check without a previous version.",
-    )
+  let comparison_ref = if tag_result.is_success() &&
+    not(tag_result.stdout_trimmed().is_empty()) {
+    tag_result.stdout_trimmed()
+  } else {
+    // No tag — search for most recent release commit
+    let pattern = pr_title.replace(old="{{ version }}", new="")
+    let search_result = try
+      @executor.run_git(repo, [
+        "log", "--fixed-strings", "--grep=" + pattern, "--format=%H", "-1",
+      ])
+    catch {
+      _ => @executor.CommandResult::failed("release commit search failed")
+    } noraise {
+      r => r
+    }
+    if search_result.is_success() {
+      search_result.stdout_trimmed()
+    } else {
+      ""
+    }
   }
 
-  let latest_tag = tag_result.stdout_trimmed()
+  if comparison_ref.is_empty() {
+    // No previous release exists — nothing to compare against
+    println(
+      "No previous release found. Skipping semver check for initial release.",
+    )
+    return @semver_check.CheckResult::new(@semver_check.ApiDiff::empty())
+  }
+
   if verbose {
-    println("  Comparing against tag: " + latest_tag)
+    println("  Comparing against: " + comparison_ref)
   }
 
   // 2. Save current branch name with try-catch-noraise pattern
@@ -2702,9 +2722,9 @@ pub async fn run_semver_check(
     r => r
   }
 
-  // 5. Checkout tag and get old API (ensure safe branch restoration)
+  // 5. Checkout comparison ref and get old API (ensure safe branch restoration)
   let old_apis = get_old_apis_with_safe_checkout(
-    repo, latest_tag, current_branch, verbose,
+    repo, comparison_ref, current_branch, verbose,
   )
 
   // 6. Compare APIs
