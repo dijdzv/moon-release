@@ -227,7 +227,9 @@ pub fn run_semver_check(
   _repo : @git.Repository,
   _verbose : Bool,
   pr_title~ : String = "chore: release {{ version }}",
+  bootstrap_sha~ : String? = None,
 ) -> @semver_check.CheckResult raise WorkflowError {
+  ignore(bootstrap_sha)
   raise WorkflowError("Workflow requires native target")
 }
 
@@ -243,9 +245,11 @@ pub fn get_commits_since_last_tag(
   _repo : @git.Repository,
   pr_title~ : String = "",
   max_commits? : UInt? = None,
+  bootstrap_sha~ : String? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
   ignore(pr_title)
   ignore(max_commits)
+  ignore(bootstrap_sha)
   raise WorkflowError("Workflow requires native target")
 }
 

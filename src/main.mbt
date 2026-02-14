@@ -763,6 +763,7 @@ async fn cmd_release(
       repo,
       pr_title=config.pr_title,
       max_commits=config.max_analyze_commits,
+      bootstrap_sha=config.bootstrap_sha,
     )
   catch {
     e => {
@@ -914,6 +915,7 @@ fn generate_default_config_json() -> String {
     #|  "custom_major_increment_regex": null,
     #|  "custom_minor_increment_regex": null,
     #|  "npm_build_command": null,
+    #|  "bootstrap_sha": null,
     #|  "packages": []
     #|}
   json
@@ -1070,6 +1072,7 @@ async fn cmd_check(
       repo,
       pr_title=config.pr_title,
       max_commits=config.max_analyze_commits,
+      bootstrap_sha=config.bootstrap_sha,
     )
   catch {
     e => {

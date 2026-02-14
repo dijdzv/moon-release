@@ -65,6 +65,7 @@ pub struct Config {
   moon_publish_timeout : UInt // In seconds
   npm_publish_timeout : UInt // In seconds
   bump_all_packages : Bool // Bump all packages uniformly (fixed versioning for monorepo)
+  bootstrap_sha : String? // Starting commit SHA for initial release (skip earlier history)
 } derive(Show, Eq)
 
 ///|
@@ -125,6 +126,7 @@ pub fn Config::default() -> Config {
     moon_publish_timeout: 300, // Default 5 minutes
     npm_publish_timeout: 300, // Default 5 minutes
     bump_all_packages: false,
+    bootstrap_sha: None,
   }
 }
 
@@ -179,6 +181,7 @@ pub fn Config::parse(
     "pr_branch_prefix", "base_branch", "packages", "registry_check", "allow_dirty",
     "custom_major_increment_regex", "custom_minor_increment_regex", "max_analyze_commits",
     "moon_publish_timeout", "npm_publish_timeout", "bump_all_packages",
+    "bootstrap_sha",
   ]
   for key, _ in obj {
     let mut found = false
@@ -280,6 +283,11 @@ pub fn Config::parse(
       d.npm_publish_timeout,
     ),
     bump_all_packages: parse_bool(obj, "bump_all_packages", d.bump_all_packages),
+    bootstrap_sha: parse_optional_string(
+      obj,
+      "bootstrap_sha",
+      d.bootstrap_sha,
+    ),
   }
 }
 

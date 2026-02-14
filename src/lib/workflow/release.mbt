@@ -28,6 +28,7 @@ pub async fn get_commits_since_last_tag(
   repo : @git.Repository,
   pr_title~ : String,
   max_commits? : UInt? = None,
+  bootstrap_sha~ : String? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
   // Get latest tag
   let latest_tag = try get_latest_tag(repo) catch {
@@ -75,11 +76,28 @@ pub async fn get_commits_since_last_tag(
           r => r
         }
       } else {
-        // No previous release exists — analyze entire history (initial release)
-        println(
-          "No previous release found. Analyzing all commits for initial release.",
-        )
-        repo.get_all_commits_command()
+        match bootstrap_sha {
+          Some(sha) => {
+            println(
+              "No previous release found. Using bootstrap_sha as starting point.",
+            )
+            try repo.get_commits_since_tag_command(sha) catch {
+              e =>
+                raise ExternalCommandError(
+                  "Failed to build git log command: " + e.to_string(),
+                )
+            } noraise {
+              r => r
+            }
+          }
+          None => {
+            // No previous release exists — analyze entire history (initial release)
+            println(
+              "No previous release found. Analyzing all commits for initial release.",
+            )
+            repo.get_all_commits_command()
+          }
+        }
       }
     }
   }
@@ -248,7 +266,7 @@ pub async fn analyze_version_bump(
   let current_version = get_current_version(config)
 
   let commits = get_commits_since_last_tag(
-    repo, pr_title=config.pr_title, max_commits~,
+    repo, pr_title=config.pr_title, max_commits~, bootstrap_sha=config.bootstrap_sha,
   )
 
   // Validate commits
@@ -704,7 +722,7 @@ async fn compute_effective_bump(
     if not(validate_path(pkg.path)) {
       continue
     }
-    let commits = try get_package_commits(repo, pkg.path, pr_title=config.pr_title) catch {
+    let commits = try get_package_commits(repo, pkg.path, pr_title=config.pr_title, bootstrap_sha=config.bootstrap_sha) catch {
       _ => continue
     } noraise {
       c => c
@@ -1782,7 +1800,7 @@ pub async fn run_publish(ctx : ReleaseContext) -> Unit raise WorkflowError {
     }
 
     // Run semver check with try-catch-noraise pattern
-    let check_result = try run_semver_check(ctx.repo, ctx.verbose, pr_title=ctx.config.pr_title) catch {
+    let check_result = try run_semver_check(ctx.repo, ctx.verbose, pr_title=ctx.config.pr_title, bootstrap_sha=ctx.config.bootstrap_sha) catch {
       e => {
         println("Warning: Semver check failed: " + e.to_string())
         println("Continuing with publish...")
@@ -2002,7 +2020,7 @@ async fn resolve_version_plan(
       }
     }
 
-    let commits = try get_package_commits(repo, pkg.path, pr_title=config.pr_title) catch {
+    let commits = try get_package_commits(repo, pkg.path, pr_title=config.pr_title, bootstrap_sha=config.bootstrap_sha) catch {
       e => {
         if verbose {
           println(
@@ -2303,6 +2321,7 @@ async fn get_package_commits(
   repo : @git.Repository,
   path : String,
   pr_title~ : String,
+  bootstrap_sha~ : String? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
   // Get latest tag with try-catch-noraise (failure is expected if no tags exist yet)
   let tag_result = try
@@ -2353,14 +2372,34 @@ async fn get_package_commits(
       cmd.push(path)
       cmd
     } else {
-      // No previous release exists — analyze entire history (initial release)
-      println(
-        "No previous release found. Analyzing all commits for initial release.",
-      )
-      let cmd = repo.get_all_commits_command()
-      cmd.push("--")
-      cmd.push(path)
-      cmd
+      match bootstrap_sha {
+        Some(sha) => {
+          println(
+            "No previous release found. Using bootstrap_sha as starting point.",
+          )
+          let cmd = try repo.get_commits_since_tag_command(sha) catch {
+            e =>
+              raise ExternalCommandError(
+                "Failed to build git log command: " + e.to_string(),
+              )
+          } noraise {
+            r => r
+          }
+          cmd.push("--")
+          cmd.push(path)
+          cmd
+        }
+        None => {
+          // No previous release exists — analyze entire history (initial release)
+          println(
+            "No previous release found. Analyzing all commits for initial release.",
+          )
+          let cmd = repo.get_all_commits_command()
+          cmd.push("--")
+          cmd.push(path)
+          cmd
+        }
+      }
     }
   }
 
@@ -2640,6 +2679,7 @@ pub async fn run_semver_check(
   repo : @git.Repository,
   verbose : Bool,
   pr_title~ : String = "chore: release {{ version }}",
+  bootstrap_sha~ : String? = None,
 ) -> @semver_check.CheckResult raise WorkflowError {
   if verbose {
     println("Running semver check...")
@@ -2654,7 +2694,7 @@ pub async fn run_semver_check(
     r => r
   }
 
-  let comparison_ref = if tag_result.is_success() &&
+  let mut comparison_ref = if tag_result.is_success() &&
     not(tag_result.stdout_trimmed().is_empty()) {
     tag_result.stdout_trimmed()
   } else {
@@ -2677,11 +2717,21 @@ pub async fn run_semver_check(
   }
 
   if comparison_ref.is_empty() {
-    // No previous release exists — nothing to compare against
-    println(
-      "No previous release found. Skipping semver check for initial release.",
-    )
-    return @semver_check.CheckResult::new(@semver_check.ApiDiff::empty())
+    match bootstrap_sha {
+      Some(sha) => {
+        println(
+          "No previous release found. Using bootstrap_sha for semver check.",
+        )
+        comparison_ref = sha
+      }
+      None => {
+        // No previous release exists — nothing to compare against
+        println(
+          "No previous release found. Skipping semver check for initial release.",
+        )
+        return @semver_check.CheckResult::new(@semver_check.ApiDiff::empty())
+      }
+    }
   }
 
   if verbose {

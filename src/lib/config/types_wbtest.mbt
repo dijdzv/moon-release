@@ -642,6 +642,7 @@ test "init JSON produces config matching defaults" {
     #|  "semver_check": false,
     #|  "registry_check": false,
     #|  "allow_dirty": false,
+    #|  "bootstrap_sha": null,
     #|  "packages": []
     #|}
   let parsed = Config::parse(init_json) catch { _ => fail("Parse failed") }
@@ -879,4 +880,30 @@ test "parse config with base_branch" {
     #|}
   let config = Config::parse(content) catch { _ => fail("Unexpected error") }
   assert_eq(config.base_branch, "develop")
+}
+
+///|
+test "default config - bootstrap_sha is None" {
+  let config = Config::default()
+  assert_eq(config.bootstrap_sha, None)
+}
+
+///|
+test "parse config with bootstrap_sha" {
+  let content =
+    #|{
+    #|  "bootstrap_sha": "abc123def456"
+    #|}
+  let config = Config::parse(content) catch { _ => fail("Unexpected error") }
+  assert_eq(config.bootstrap_sha, Some("abc123def456"))
+}
+
+///|
+test "parse config with bootstrap_sha null" {
+  let content =
+    #|{
+    #|  "bootstrap_sha": null
+    #|}
+  let config = Config::parse(content) catch { _ => fail("Unexpected error") }
+  assert_eq(config.bootstrap_sha, None)
 }

@@ -253,6 +253,7 @@ Customize behavior with `release.json`.
   "custom_minor_increment_regex": null,
   "max_analyze_commits": null,
   "bump_all_packages": false,
+  "bootstrap_sha": null,
   "packages": []
 }
 ```
@@ -289,6 +290,7 @@ Customize behavior with `release.json`.
 | `custom_minor_increment_regex` | `null` | Custom substring pattern for minor bump (matched against commit description) |
 | `max_analyze_commits` | `null` | Maximum number of commits to analyze |
 | `bump_all_packages` | `false` | Bump all packages uniformly in monorepo mode (fixed versioning) |
+| `bootstrap_sha` | `null` | Starting commit SHA for commit analysis (skips earlier history). Useful when migrating from another release tool. Once the first release is created, this setting is automatically ignored. |
 
 ### Template Variables
 
@@ -497,6 +499,16 @@ git push origin --tags
 ```
 
 > **Recommended:** Always create an initial tag. Without one, moon-release analyzes the **entire** commit history, which may produce unexpectedly large version bumps on repositories with a long history.
+
+Alternatively, if you are migrating from another release tool and cannot create a tag, you can set `bootstrap_sha` in `release.json` to specify the starting commit for analysis:
+
+```json
+{
+  "bootstrap_sha": "<commit-hash>"
+}
+```
+
+Once the first release is created, `bootstrap_sha` is automatically ignored (the release commit takes precedence), so you can leave it in the config without side effects.
 
 #### Regular Usage
 
