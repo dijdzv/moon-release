@@ -212,7 +212,7 @@ If the JS build fails, no tag or release is created (atomic operation).
 
 See [templates/release.yml](./templates/release.yml) for a complete example.
 
-> **Recommended:** Pin the moon-release version in your workflow to avoid unexpected breaking changes. The template uses minor version pinning (`bash -s -- 0.2`) which auto-updates patch releases. Check [Releases](https://github.com/dijdzv/moon-release/releases) for the latest version.
+> **Recommended:** Pin the moon-release version in your workflow to avoid unexpected breaking changes. The template uses minor version pinning (`bash -s -- 0.3`) which auto-updates patch releases. Check [Releases](https://github.com/dijdzv/moon-release/releases) for the latest version.
 >
 > To always use the latest version instead, remove the version argument:
 > ```bash
