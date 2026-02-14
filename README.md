@@ -212,6 +212,13 @@ If the JS build fails, no tag or release is created (atomic operation).
 
 See [templates/release.yml](./templates/release.yml) for a complete example.
 
+> **Recommended:** Pin the moon-release version in your workflow to avoid unexpected breaking changes. The template uses minor version pinning (`bash -s -- 0.2`) which auto-updates patch releases. Check [Releases](https://github.com/dijdzv/moon-release/releases) for the latest version.
+>
+> To always use the latest version instead, remove the version argument:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
+> ```
+
 ## Configuration
 
 Customize behavior with `release.json`.
@@ -429,6 +436,16 @@ moon install dijdzv/moon-release
 curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
 ```
 
+Pin to a specific version:
+
+```bash
+# Pin to minor version (recommended: auto-updates patch releases)
+curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.2
+
+# Pin to exact version
+curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- 0.2.8
+```
+
 Installs to `~/.local/bin` by default. Override with `INSTALL_DIR`:
 
 ```bash
@@ -460,10 +477,30 @@ cp _build/native/release/build/moon-release.exe ~/.local/bin/moon-release
 
 ### Quick Start
 
-```bash
-# Initialize configuration file
-moon-release init
+#### Initial Setup (first time only)
 
+moon-release determines the next version by analyzing commits **since the last release**. For a new project, you need to establish a starting point by creating a Git tag on the commit you want to treat as the baseline.
+
+```bash
+# Tag the commit that represents your latest release
+git tag v0.1.0
+git push origin --tags
+```
+
+If the release was made in a past commit, tag that specific commit:
+
+```bash
+git tag v0.1.0 <commit-hash>
+git push origin --tags
+```
+
+> Without an initial tag, `moon-release check` and `moon-release update` will fail because there is no baseline to compare commits against.
+
+#### Regular Usage
+
+After the initial setup, the typical workflow is:
+
+```bash
 # Check current state
 moon-release check
 

@@ -1,5 +1,11 @@
 # moon-release installer for Windows
-# Usage: irm https://raw.githubusercontent.com/dijdzv/moon-release/main/install.ps1 | iex
+#
+# Usage:
+#   irm https://raw.githubusercontent.com/dijdzv/moon-release/main/install.ps1 | iex
+#
+# With version pinning:
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dijdzv/moon-release/main/install.ps1))) 0.2
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dijdzv/moon-release/main/install.ps1))) 0.2.8
 
 $ErrorActionPreference = "Stop"
 
@@ -8,11 +14,57 @@ $BinaryName = "moon-release.exe"
 $InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } else { "$env:USERPROFILE\.local\bin" }
 
 function Get-LatestVersion {
-    $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
+    $headers = @{}
+    if ($env:GITHUB_TOKEN) {
+        $headers["Authorization"] = "token $env:GITHUB_TOKEN"
+    }
+    $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers
     return $response.tag_name -replace '^v', ''
 }
 
+function Resolve-Version {
+    param([string]$Requested)
+
+    # Strip leading 'v' if present
+    $Requested = $Requested -replace '^v', ''
+
+    # No argument: latest release
+    if (-not $Requested) {
+        return Get-LatestVersion
+    }
+
+    # Exact version (X.Y.Z)
+    if ($Requested -match '^\d+\.\d+\.\d+$') {
+        return $Requested
+    }
+
+    # Minor range (X.Y) -> find latest X.Y.*
+    if ($Requested -match '^\d+\.\d+$') {
+        $headers = @{}
+        if ($env:GITHUB_TOKEN) {
+            $headers["Authorization"] = "token $env:GITHUB_TOKEN"
+        }
+        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases?per_page=100" -Headers $headers
+        $matched = $releases | ForEach-Object { $_.tag_name -replace '^v', '' } |
+            Where-Object { $_ -match "^$([regex]::Escape($Requested))\.\d+$" } |
+            Sort-Object { [version]$_ } |
+            Select-Object -Last 1
+
+        if (-not $matched) {
+            Write-Host "Error: No release found matching ${Requested}.*" -ForegroundColor Red
+            exit 1
+        }
+        return $matched
+    }
+
+    Write-Host "Error: Invalid version format: '$Requested'" -ForegroundColor Red
+    Write-Host "Expected: 'X.Y.Z' (exact), 'X.Y' (latest patch), or omit for latest" -ForegroundColor Red
+    exit 1
+}
+
 function Install-MoonRelease {
+    param([string]$VersionArg)
+
     Write-Host "Installing moon-release..." -ForegroundColor Cyan
     Write-Host ""
 
@@ -25,13 +77,13 @@ function Install-MoonRelease {
     }
     Write-Host "Detected platform: windows-x86_64"
 
-    # Get latest version
-    $version = Get-LatestVersion
+    # Resolve version
+    $version = Resolve-Version -Requested $VersionArg
     if (-not $version) {
-        Write-Host "Error: Could not determine latest version" -ForegroundColor Red
+        Write-Host "Error: Could not determine version" -ForegroundColor Red
         exit 1
     }
-    Write-Host "Latest version: v$version"
+    Write-Host "Version: v$version"
 
     # Construct download URL
     $artifactName = "moon-release-windows-x86_64.exe"
@@ -86,4 +138,4 @@ function Install-MoonRelease {
     Write-Host "Run 'moon-release --help' to get started."
 }
 
-Install-MoonRelease
+Install-MoonRelease $args[0]

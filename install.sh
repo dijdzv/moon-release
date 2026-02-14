@@ -1,6 +1,13 @@
 #!/bin/bash
 # moon-release installer for Linux and macOS
-# Usage: curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/dijdzv/moon-release/main/install.sh | bash -s -- [VERSION]
+#
+# Examples:
+#   bash -s -- 0.2       # Latest 0.2.x (recommended for CI)
+#   bash -s -- 0.2.8     # Exact version
+#   (no argument)         # Latest release
 
 set -e
 
@@ -51,19 +58,63 @@ detect_platform() {
     esac
 }
 
-# Get latest release version
-get_latest_version() {
+# Resolve version from argument
+# - No argument: fetch latest release
+# - X.Y.Z: use as-is (no API call)
+# - X.Y: find latest X.Y.* patch release
+resolve_version() {
     if ! command -v jq &>/dev/null; then
         echo "Error: jq is required but not installed" >&2
         echo "Install it with: apt-get install jq / brew install jq" >&2
         exit 1
     fi
+
     local auth_header=()
     if [ -n "$GITHUB_TOKEN" ]; then
         auth_header=(-H "Authorization: token $GITHUB_TOKEN")
     fi
-    curl -fsSL "${auth_header[@]}" "https://api.github.com/repos/$REPO/releases/latest" | \
-        jq -r '.tag_name' | sed 's/^v//'
+
+    local requested="${1:-}"
+
+    # Strip leading 'v' if present
+    requested="${requested#v}"
+
+    # No argument: latest release
+    if [ -z "$requested" ]; then
+        curl -fsSL "${auth_header[@]}" \
+            "https://api.github.com/repos/$REPO/releases/latest" | \
+            jq -r '.tag_name' | sed 's/^v//'
+        return
+    fi
+
+    # Exact version (X.Y.Z)
+    if [[ "$requested" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$requested"
+        return
+    fi
+
+    # Minor range (X.Y) -> find latest X.Y.*
+    if [[ "$requested" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        local matched
+        matched="$(curl -fsSL "${auth_header[@]}" \
+            "https://api.github.com/repos/$REPO/releases?per_page=100" | \
+            jq -r '.[].tag_name' | \
+            sed 's/^v//' | \
+            grep "^${requested}\." | \
+            sort -V | \
+            tail -1)"
+
+        if [ -z "$matched" ]; then
+            echo "Error: No release found matching ${requested}.*" >&2
+            exit 1
+        fi
+        echo "$matched"
+        return
+    fi
+
+    echo "Error: Invalid version format: '$requested'" >&2
+    echo "Expected: 'X.Y.Z' (exact), 'X.Y' (latest patch), or omit for latest" >&2
+    exit 1
 }
 
 # Main installation
@@ -76,14 +127,14 @@ main() {
     platform="$(detect_platform)"
     echo "Detected platform: $platform"
 
-    # Get latest version
+    # Resolve version
     local version
-    version="$(get_latest_version)"
+    version="$(resolve_version "$1")"
     if [ -z "$version" ]; then
-        echo "Error: Could not determine latest version" >&2
+        echo "Error: Could not determine version" >&2
         exit 1
     fi
-    echo "Latest version: v$version"
+    echo "Version: v$version"
 
     # Construct download URL
     local artifact_name="moon-release-$platform"
