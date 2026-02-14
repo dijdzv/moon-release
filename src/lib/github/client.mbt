@@ -63,7 +63,6 @@ pub fn GitHubClient::create_release_command(
   latest? : Bool = true,
 ) -> Array[String] {
   let cmd : Array[String] = [
-    "gh",
     "release",
     "create",
     tag_name,
@@ -95,7 +94,6 @@ pub fn GitHubClient::get_release_command(
   tag : String,
 ) -> Array[String] {
   [
-    "gh",
     "release",
     "view",
     tag,
@@ -112,7 +110,6 @@ pub fn GitHubClient::get_latest_release_command(
   self : GitHubClient,
 ) -> Array[String] {
   [
-    "gh",
     "release",
     "list",
     "--repo",
@@ -136,7 +133,6 @@ pub fn GitHubClient::create_pull_request_command(
   labels? : Array[String] = [],
 ) -> Array[String] {
   let cmd : Array[String] = [
-    "gh",
     "pr",
     "create",
     "--repo",
@@ -167,7 +163,6 @@ pub fn GitHubClient::get_pull_request_command(
   number : UInt,
 ) -> Array[String] {
   [
-    "gh",
     "pr",
     "view",
     number.to_string(),
@@ -186,7 +181,6 @@ pub fn GitHubClient::list_pull_requests_command(
   limit? : UInt = 30U,
 ) -> Array[String] {
   [
-    "gh",
     "pr",
     "list",
     "--repo",

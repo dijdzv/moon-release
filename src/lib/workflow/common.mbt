@@ -24,16 +24,6 @@ fn package_path_prefix(path : String) -> String {
 }
 
 ///|
-/// Strip the first element from a command array (e.g., remove "gh" prefix)
-pub fn strip_command_prefix(cmd : Array[String]) -> Array[String] {
-  let args : Array[String] = []
-  for i = 1; i < cmd.length(); i = i + 1 {
-    args.push(cmd[i])
-  }
-  args
-}
-
-///|
 /// Return priority of BumpType (Major > Minor > Patch)
 pub fn bump_priority(bump : @semver.BumpType) -> Int {
   match bump {

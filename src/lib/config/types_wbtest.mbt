@@ -941,3 +941,33 @@ test "parse config with bootstrap_sha invalid type" {
     _ => fail("Wrong error type")
   }
 }
+
+///|
+test "parse config with bootstrap_sha too short" {
+  let content =
+    #|{
+    #|  "bootstrap_sha": "abc"
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("Invalid bootstrap_sha"))
+    _ => fail("Wrong error type")
+  }
+}
+
+///|
+test "parse config with bootstrap_sha non-hex" {
+  let content =
+    #|{
+    #|  "bootstrap_sha": "xyz1234invalid"
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("Invalid bootstrap_sha"))
+    _ => fail("Wrong error type")
+  }
+}

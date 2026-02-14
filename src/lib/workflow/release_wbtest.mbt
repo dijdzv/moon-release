@@ -135,7 +135,7 @@ test "parse_package_json_version - invalid JSON" {
     let _ = parse_package_json_version("not json")
     fail("Expected error")
   } catch {
-    WorkflowError(msg) =>
+    General(msg) =>
       assert_true(msg.contains("Failed to parse package.json"))
     _ => fail("Wrong error type")
   }
@@ -147,7 +147,7 @@ test "parse_package_json_version - non-object JSON" {
     let _ = parse_package_json_version("[1,2,3]")
     fail("Expected error")
   } catch {
-    WorkflowError(msg) => assert_true(msg.contains("not a valid JSON object"))
+    General(msg) => assert_true(msg.contains("not a valid JSON object"))
     _ => fail("Wrong error type")
   }
 }
@@ -649,7 +649,7 @@ test "collect_files_to_stage - single package MooncakesOnly" {
   let config = @config.Config::default() // moon_publish=true, npm_publish=false
   let ctx = make_ctx(config)
   let files = collect_files_to_stage(ctx)
-  assert_eq(files, ["add", "moon.mod.json"])
+  assert_eq(files, ["moon.mod.json"])
 }
 
 ///|
@@ -664,7 +664,7 @@ test "collect_files_to_stage - single package NpmOnly" {
   }
   let ctx = make_ctx(config)
   let files = collect_files_to_stage(ctx)
-  assert_eq(files, ["add", "package.json"])
+  assert_eq(files, ["package.json"])
 }
 
 ///|
@@ -679,7 +679,7 @@ test "collect_files_to_stage - single package Both" {
   }
   let ctx = make_ctx(config)
   let files = collect_files_to_stage(ctx)
-  assert_eq(files, ["add", "moon.mod.json", "package.json"])
+  assert_eq(files, ["moon.mod.json", "package.json"])
 }
 
 ///|
@@ -694,7 +694,7 @@ test "collect_files_to_stage - single package NoPublish" {
   }
   let ctx = make_ctx(config)
   let files = collect_files_to_stage(ctx)
-  assert_eq(files, ["add"])
+  assert_eq(files, [])
 }
 
 ///|
@@ -713,7 +713,7 @@ test "collect_files_to_stage - monorepo mixed publish targets" {
   let ctx = make_ctx(config)
   let files = collect_files_to_stage(ctx)
   assert_eq(files, [
-    "add", "packages/core/moon.mod.json", "packages/cli/package.json", "packages/all/moon.mod.json",
+    "packages/core/moon.mod.json", "packages/cli/package.json", "packages/all/moon.mod.json",
     "packages/all/package.json",
   ])
 }
@@ -732,7 +732,7 @@ test "collect_files_to_stage - monorepo NoPublish packages skipped" {
   }
   let ctx = make_ctx(config)
   let files = collect_files_to_stage(ctx)
-  assert_eq(files, ["add", "packages/core/moon.mod.json"])
+  assert_eq(files, ["packages/core/moon.mod.json"])
 }
 
 ///|
@@ -748,7 +748,7 @@ test "collect_files_to_stage - monorepo root path uses no prefix" {
   }
   let ctx = make_ctx(config)
   let files = collect_files_to_stage(ctx)
-  assert_eq(files, ["add", "moon.mod.json"])
+  assert_eq(files, ["moon.mod.json"])
 }
 
 // replace_json_field + trailing newline preservation tests (for update_package_json_version logic)
@@ -826,8 +826,8 @@ test "WorkflowError::to_string - ExternalCommandError includes category" {
 }
 
 ///|
-test "WorkflowError::to_string - generic WorkflowError has no prefix" {
-  let e : WorkflowError = WorkflowError("something went wrong")
+test "WorkflowError::to_string - generic General has no prefix" {
+  let e : WorkflowError = General("something went wrong")
   assert_eq(e.to_string(), "something went wrong")
 }
 
@@ -846,7 +846,7 @@ test "WorkflowError::hint - each variant returns appropriate hint" {
   assert_true(
     (ExternalCommandError("x") : WorkflowError).hint().contains("installed"),
   )
-  assert_eq((WorkflowError("x") : WorkflowError).hint(), "")
+  assert_eq((General("x") : WorkflowError).hint(), "")
 }
 
 ///|
@@ -866,8 +866,8 @@ test "WorkflowError::add_context - preserves ConfigValidationError variant" {
 }
 
 ///|
-test "WorkflowError::add_context - generic WorkflowError stays generic" {
-  let e : WorkflowError = WorkflowError("msg")
+test "WorkflowError::add_context - generic General stays generic" {
+  let e : WorkflowError = General("msg")
   let with_ctx = e.add_context(" (extra)")
   assert_eq(with_ctx.to_string(), "msg (extra)")
   assert_eq(with_ctx.hint(), "")

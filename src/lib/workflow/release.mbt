@@ -6,7 +6,7 @@ pub async fn get_latest_tag(
   repo : @git.Repository,
 ) -> String? raise WorkflowError {
   let cmd = repo.get_latest_tag_command()
-  let result = try @executor.run_command(cmd) catch {
+  let result = try @executor.run_git(repo, cmd) catch {
     _ => return None
   } noraise {
     r => r
@@ -28,7 +28,7 @@ pub async fn get_latest_tag(
 async fn resolve_commit_range_start(
   repo : @git.Repository,
   pr_title : String,
-  bootstrap_sha : String?,
+  bootstrap_sha : @util.CommitHash?,
 ) -> String? raise WorkflowError {
   // 1. Try latest tag
   let mut candidate : String? = None
@@ -42,7 +42,7 @@ async fn resolve_commit_range_start(
   if candidate is None {
     let pattern = pr_title.replace(old="{{ version }}", new="")
     let search_cmd = repo.find_release_commit_command(pattern)
-    let search_result = try @executor.run_command(search_cmd) catch {
+    let search_result = try @executor.run_git(repo, search_cmd) catch {
       _ => @executor.CommandResult::failed("release commit search failed")
     } noraise {
       r => r
@@ -57,14 +57,15 @@ async fn resolve_commit_range_start(
 
   // 3. Apply bootstrap_sha as lower bound
   match bootstrap_sha {
-    Some(sha) =>
+    Some(sha) => {
+      let sha_str = sha.value()
       match candidate {
         Some(start) => {
           // Check if candidate is an ancestor of (i.e. older than) bootstrap_sha
           let check_cmd = [
-            "git", "-C", repo.path, "merge-base", "--is-ancestor", start, sha,
+            "merge-base", "--is-ancestor", start, sha_str,
           ]
-          let check_result = try @executor.run_command(check_cmd) catch {
+          let check_result = try @executor.run_git(repo, check_cmd) catch {
             _ => @executor.CommandResult::failed("merge-base check failed")
           } noraise {
             r => r
@@ -74,7 +75,7 @@ async fn resolve_commit_range_start(
             println(
               "Found reference '\{start}' is before bootstrap_sha. Using bootstrap_sha as starting point.",
             )
-            Some(sha)
+            Some(sha_str)
           } else {
             // Candidate is newer than bootstrap_sha → use candidate
             candidate
@@ -84,9 +85,10 @@ async fn resolve_commit_range_start(
           println(
             "No previous release found. Using bootstrap_sha as starting point.",
           )
-          Some(sha)
+          Some(sha_str)
         }
       }
+    }
     None => candidate
   }
 }
@@ -97,7 +99,7 @@ pub async fn get_commits_since_last_tag(
   repo : @git.Repository,
   pr_title~ : String,
   max_commits? : UInt? = None,
-  bootstrap_sha~ : String? = None,
+  bootstrap_sha~ : @util.CommitHash? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
   let range_start = resolve_commit_range_start(repo, pr_title, bootstrap_sha)
 
@@ -125,7 +127,7 @@ pub async fn get_commits_since_last_tag(
     }
     None => ()
   }
-  let log_result = try @executor.run_command(cmd) catch {
+  let log_result = try @executor.run_git(repo, cmd) catch {
     e =>
       raise ExternalCommandError("Failed to run git log: " + e.to_string())
   } noraise {
@@ -193,7 +195,7 @@ pub async fn check_working_directory(
 /// Get GitHub client (owner/repo from gh CLI)
 pub async fn get_github_client() -> @github.GitHubClient raise WorkflowError {
   let result = try
-    @executor.run_command(["gh", "repo", "view", "--json", "owner,name"])
+    @executor.run_gh(["repo", "view", "--json", "owner,name"])
   catch {
     e =>
       raise ExternalCommandError(
@@ -348,7 +350,7 @@ fn get_mooncakes_credentials_path() -> String raise WorkflowError {
     None => ()
   }
 
-  raise WorkflowError("Cannot determine home directory: neither HOME nor USERPROFILE is set")
+  raise General("Cannot determine home directory: neither HOME nor USERPROFILE is set")
 }
 
 ///|
@@ -520,7 +522,7 @@ pub async fn validate_publish_config(
 async fn get_package_name() -> String raise WorkflowError {
   let content = try @fs.read_file("moon.mod.json").text() catch {
     e =>
-      raise WorkflowError(
+      raise General(
         "Failed to read moon.mod.json: " + e.to_string(),
       )
   } noraise {
@@ -529,7 +531,7 @@ async fn get_package_name() -> String raise WorkflowError {
 
   let json = try @json.parse(content) catch {
     e =>
-      raise WorkflowError(
+      raise General(
         "Failed to parse moon.mod.json: " + e.to_string(),
       )
   } noraise {
@@ -540,9 +542,9 @@ async fn get_package_name() -> String raise WorkflowError {
     Object(o) =>
       match o.get("name") {
         Some(String(s)) => s
-        _ => raise WorkflowError("Missing 'name' field in moon.mod.json")
+        _ => raise General("Missing 'name' field in moon.mod.json")
       }
-    _ => raise WorkflowError("Invalid moon.mod.json: expected JSON object")
+    _ => raise General("Invalid moon.mod.json: expected JSON object")
   }
 
   // Strip owner prefix from MoonBit module name (e.g., "dijdzv/moon-release" -> "moon-release")
@@ -560,7 +562,7 @@ fn parse_package_json_version(
   content : String,
 ) -> @semver.Version? raise WorkflowError {
   let json = try @json.parse(content) catch {
-    e => raise WorkflowError("Failed to parse package.json: " + e.to_string())
+    e => raise General("Failed to parse package.json: " + e.to_string())
   } noraise {
     j => j
   }
@@ -571,7 +573,7 @@ fn parse_package_json_version(
         Some(String(version_str)) => @semver.Version::parse(version_str)
         _ => None
       }
-    _ => raise WorkflowError("package.json is not a valid JSON object")
+    _ => raise General("package.json is not a valid JSON object")
   }
 }
 
@@ -602,14 +604,14 @@ pub async fn get_current_version(
     MooncakesOnly | Both(_) => {
       let content = try @fs.read_file("moon.mod.json").text() catch {
         e =>
-          raise WorkflowError("Failed to read moon.mod.json: " + e.to_string())
+          raise General("Failed to read moon.mod.json: " + e.to_string())
       } noraise {
         c => c
       }
 
       let moon_mod = try @moon_mod.parse(content) catch {
         e =>
-          raise WorkflowError("Failed to parse moon.mod.json: " + e.to_string())
+          raise General("Failed to parse moon.mod.json: " + e.to_string())
       } noraise {
         m => m
       }
@@ -617,7 +619,7 @@ pub async fn get_current_version(
       match @semver.Version::parse(moon_mod.version) {
         Some(v) => moon_version = Some(v)
         None =>
-          raise WorkflowError(
+          raise General(
             "Invalid version in moon.mod.json: " + moon_mod.version,
           )
       }
@@ -630,7 +632,7 @@ pub async fn get_current_version(
     NpmOnly(_) | Both(_) =>
       match get_package_json_version() {
         Some(v) => npm_version = Some(v)
-        None => raise WorkflowError("Failed to read version from package.json")
+        None => raise General("Failed to read version from package.json")
       }
     _ => ()
   }
@@ -854,7 +856,7 @@ async fn update_package_json_version(
   match parse_package_json_version(content) {
     Some(_) => ()
     None =>
-      raise WorkflowError(
+      raise General(
         "package.json does not contain a valid 'version' field",
       )
   }
@@ -864,7 +866,7 @@ async fn update_package_json_version(
     @moon_mod.replace_json_field(content, "version", new_version.to_string())
   catch {
     e =>
-      raise WorkflowError(
+      raise General(
         "Failed to update version in package.json: " + e.to_string(),
       )
   } noraise {
@@ -919,7 +921,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
     MooncakesOnly | Both(_) => {
       let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
         e =>
-          raise WorkflowError(
+          raise General(
             "Failed to read moon.mod.json: " +
             e.to_string() +
             ". Make sure the file exists and is readable.",
@@ -932,7 +934,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
         @moon_mod.update_version(moon_mod_content, ctx.new_version)
       catch {
         e =>
-          raise WorkflowError(
+          raise General(
             "Failed to update version in moon.mod.json: " + e.to_string(),
           )
       } noraise {
@@ -941,7 +943,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
 
       try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
         e =>
-          raise WorkflowError(
+          raise General(
             "Failed to write moon.mod.json: " +
             e.to_string() +
             ". Check file permissions.",
@@ -964,7 +966,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
             @fs.write_file("package.json", updated_pkg_json, create=0o644)
           catch {
             e =>
-              raise WorkflowError(
+              raise General(
                 "Failed to write package.json: " + e.to_string(),
               )
           } noraise {
@@ -1151,7 +1153,8 @@ pub async fn run_release_pr(
 
   // Stage changes - add relevant files based on publish configuration
   let files_to_stage = collect_files_to_stage(ctx)
-  let stage_result = try @executor.run_git(ctx.repo, files_to_stage) catch {
+  let stage_cmd = ctx.repo.stage_files_command(files_to_stage)
+  let stage_result = try @executor.run_git(ctx.repo, stage_cmd) catch {
     e => {
       let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
       raise GitError(
@@ -1215,8 +1218,8 @@ pub async fn run_release_pr(
   let commit_msg = ctx.config.apply_pr_title_template(
     ctx.new_version.to_string(),
   )
-  let commit_result = try
-    @executor.run_git(ctx.repo, ["commit", "-m", commit_msg])
+  let commit_cmd = ctx.repo.create_commit_command(commit_msg)
+  let commit_result = try @executor.run_git(ctx.repo, commit_cmd)
   catch {
     e => {
       let _ = try? restore_branch(ctx.repo, base_branch, ctx.verbose)
@@ -1336,10 +1339,8 @@ pub async fn run_release_pr(
         labels=ctx.config.pr_labels,
       )
 
-      let gh_args = strip_command_prefix(pr_cmd)
-
       // Create PR with try-catch-noraise pattern
-      let pr_result = try @executor.run_gh(gh_args) catch {
+      let pr_result = try @executor.run_gh(pr_cmd) catch {
         e =>
           raise GitError(
             "Failed to create pull request: " +
@@ -1376,7 +1377,7 @@ pub async fn run_release_pr(
 ///|
 /// Collect files to stage based on publish configuration
 fn collect_files_to_stage(ctx : ReleaseContext) -> Array[String] {
-  let files : Array[String] = ["add"]
+  let files : Array[String] = []
   let is_monorepo = not(ctx.config.packages.is_empty())
   if is_monorepo {
     for pkg in ctx.config.packages {
@@ -1457,10 +1458,8 @@ async fn find_existing_release_pr(
 ) -> (UInt, String)? raise Error {
   let list_cmd = github.list_pull_requests_command(state="open")
 
-  let gh_args = strip_command_prefix(list_cmd)
-
   // Run gh command with try-catch-noraise pattern
-  let result = try @executor.run_gh(gh_args) catch {
+  let result = try @executor.run_gh(list_cmd) catch {
     _ => return None
   } noraise {
     r => r
@@ -1689,8 +1688,8 @@ pub async fn run_release(
   match release_mode {
     GitHubRelease(..) | TagOnly => {
       let tag_msg = release_title
-      let tag_result = try
-        @executor.run_git(ctx.repo, ["tag", "-a", "-m", tag_msg, "--", tag_name])
+      let tag_cmd = ctx.repo.create_tag_command(tag_name, tag_msg)
+      let tag_result = try @executor.run_git(ctx.repo, tag_cmd)
       catch {
         e => raise GitError("Failed to create tag: " + e.to_string())
       } noraise {
@@ -1729,17 +1728,17 @@ pub async fn run_release(
           )
         None => generate_release_notes(ctx.commits)
       }
+      let is_prerelease = ctx.new_version.prerelease is Some(_)
       let release_cmd = github.create_release_command(
         tag_name,
         release_title,
         release_notes,
         draft~,
+        prerelease=is_prerelease,
         latest~,
       )
 
-      let gh_args = strip_command_prefix(release_cmd)
-
-      let release_result = try @executor.run_gh(gh_args) catch {
+      let release_result = try @executor.run_gh(release_cmd) catch {
         e =>
           @executor.CommandResult::failed(e.to_string())
       } noraise {
@@ -2313,7 +2312,7 @@ async fn get_package_commits(
   repo : @git.Repository,
   path : String,
   pr_title~ : String,
-  bootstrap_sha~ : String? = None,
+  bootstrap_sha~ : @util.CommitHash? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
   let range_start = resolve_commit_range_start(repo, pr_title, bootstrap_sha)
 
@@ -2599,7 +2598,7 @@ pub async fn run_semver_check(
   repo : @git.Repository,
   verbose : Bool,
   pr_title~ : String = "chore: release {{ version }}",
-  bootstrap_sha~ : String? = None,
+  bootstrap_sha~ : @util.CommitHash? = None,
 ) -> @semver_check.CheckResult raise WorkflowError {
   if verbose {
     println("Running semver check...")
@@ -2654,7 +2653,7 @@ pub async fn run_semver_check(
 
   // 4. Load current package_data.json with try-catch-noraise pattern
   let current_apis = try load_package_apis("_build/doc") catch {
-    e => raise WorkflowError("Failed to load current API: " + e.to_string())
+    e => raise General("Failed to load current API: " + e.to_string())
   } noraise {
     r => r
   }

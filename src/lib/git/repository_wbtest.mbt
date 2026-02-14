@@ -90,10 +90,8 @@ test "repository current" {
 test "get tags command" {
   let repo = Repository::open_unchecked("/repo")
   let cmd = repo.get_tags_command()
-  assert_eq(cmd[0], "git")
-  assert_eq(cmd[1], "-C")
-  assert_eq(cmd[2], "/repo")
-  assert_eq(cmd[3], "tag")
+  assert_eq(cmd[0], "tag")
+  assert_eq(cmd[1], "--sort=-v:refname")
 }
 
 ///|
@@ -258,21 +256,18 @@ test "get_commits_since_tag_command - rejects double dots" {
 test "find_release_commit_command - default pattern" {
   let repo = Repository::open_unchecked("/repo")
   let cmd = repo.find_release_commit_command("chore: release v")
-  assert_eq(cmd[0], "git")
-  assert_eq(cmd[1], "-C")
-  assert_eq(cmd[2], "/repo")
-  assert_eq(cmd[3], "log")
-  assert_eq(cmd[4], "--fixed-strings")
-  assert_eq(cmd[5], "--grep=chore: release v")
-  assert_eq(cmd[6], "--format=%H")
-  assert_eq(cmd[7], "-1")
+  assert_eq(cmd[0], "log")
+  assert_eq(cmd[1], "--fixed-strings")
+  assert_eq(cmd[2], "--grep=chore: release v")
+  assert_eq(cmd[3], "--format=%H")
+  assert_eq(cmd[4], "-1")
 }
 
 ///|
 test "find_release_commit_command - custom pattern" {
   let repo = Repository::open_unchecked("/repo")
   let cmd = repo.find_release_commit_command("release: ")
-  assert_eq(cmd[5], "--grep=release: ")
+  assert_eq(cmd[2], "--grep=release: ")
 }
 
 ///|
@@ -281,7 +276,7 @@ test "find_release_commit_command - uses fixed-strings for safe matching" {
   // Pattern with regex-special characters should be safe due to --fixed-strings
   let cmd = repo.find_release_commit_command("release (v1.0)")
   assert_true(cmd.iter().any(fn(s) { s == "--fixed-strings" }))
-  assert_eq(cmd[5], "--grep=release (v1.0)")
+  assert_eq(cmd[2], "--grep=release (v1.0)")
 }
 
 // get_all_commits_command tests
@@ -290,20 +285,16 @@ test "find_release_commit_command - uses fixed-strings for safe matching" {
 test "get_all_commits_command - returns correct command" {
   let repo = Repository::open_unchecked("/repo")
   let cmd = repo.get_all_commits_command()
-  assert_eq(cmd[0], "git")
-  assert_eq(cmd[1], "-C")
-  assert_eq(cmd[2], "/repo")
-  assert_eq(cmd[3], "log")
-  assert_eq(cmd[4], "--pretty=format:%H%x1E%s%x1E%an%x1E%aI")
-  assert_eq(cmd.length(), 5)
+  assert_eq(cmd[0], "log")
+  assert_eq(cmd[1], "--pretty=format:%H%x1E%s%x1E%an%x1E%aI")
+  assert_eq(cmd.length(), 2)
 }
 
 ///|
 test "get_all_commits_command - current directory repo" {
   let repo = Repository::current()
   let cmd = repo.get_all_commits_command()
-  assert_eq(cmd[1], "-C")
-  assert_eq(cmd[2], ".")
+  assert_eq(cmd[0], "log")
 }
 
 // create_tag_command security separator

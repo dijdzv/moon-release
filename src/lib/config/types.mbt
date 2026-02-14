@@ -65,7 +65,7 @@ pub struct Config {
   moon_publish_timeout : UInt // In seconds
   npm_publish_timeout : UInt // In seconds
   bump_all_packages : Bool // Bump all packages uniformly (fixed versioning for monorepo)
-  bootstrap_sha : String? // Starting commit SHA for initial release (skip earlier history)
+  bootstrap_sha : @util.CommitHash? // Starting commit SHA for initial release (skip earlier history)
 } derive(Show, Eq)
 
 ///|
@@ -280,11 +280,21 @@ pub fn Config::parse(
       d.npm_publish_timeout,
     ),
     bump_all_packages: parse_bool(obj, "bump_all_packages", d.bump_all_packages),
-    bootstrap_sha: parse_optional_string(
-      obj,
-      "bootstrap_sha",
-      d.bootstrap_sha,
-    ),
+    bootstrap_sha: {
+      let raw_sha = parse_optional_string(obj, "bootstrap_sha", None)
+      match raw_sha {
+        Some(s) =>
+          try {
+            Some(@util.CommitHash::new(s))
+          } catch {
+            @util.ValidationError(msg) =>
+              raise ConfigError("Invalid bootstrap_sha: " + msg)
+          } noraise {
+            v => v
+          }
+        None => d.bootstrap_sha
+      }
+    },
   }
 
   // Validate: git_release_enable requires git_tag_enable

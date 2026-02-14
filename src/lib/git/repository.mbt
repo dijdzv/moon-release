@@ -117,13 +117,15 @@ pub fn Repository::current() -> Repository {
 ///|
 /// Get command to list tags
 pub fn Repository::get_tags_command(self : Repository) -> Array[String] {
-  ["git", "-C", self.path, "tag", "--sort=-v:refname"]
+  let _ = self
+  ["tag", "--sort=-v:refname"]
 }
 
 ///|
 /// Get command to retrieve latest tag
 pub fn Repository::get_latest_tag_command(self : Repository) -> Array[String] {
-  ["git", "-C", self.path, "describe", "--tags", "--abbrev=0"]
+  let _ = self
+  ["describe", "--tags", "--abbrev=0"]
 }
 
 ///|
@@ -133,6 +135,7 @@ pub fn Repository::get_commits_command(
   from : String,
   to : String,
 ) -> Array[String] raise GitError {
+  let _ = self
   if not(validate_ref_param(from)) {
     raise GitError("Invalid git ref: '" + from + "'")
   }
@@ -140,9 +143,6 @@ pub fn Repository::get_commits_command(
     raise GitError("Invalid git ref: '" + to + "'")
   }
   [
-    "git",
-    "-C",
-    self.path,
     "log",
     "--pretty=format:%H%x1E%s%x1E%an%x1E%aI",
     from + ".." + to,
@@ -155,13 +155,11 @@ pub fn Repository::get_commits_since_tag_command(
   self : Repository,
   tag : String,
 ) -> Array[String] raise GitError {
+  let _ = self
   if not(validate_ref_param(tag)) {
     raise GitError("Invalid git ref: '" + tag + "'")
   }
   [
-    "git",
-    "-C",
-    self.path,
     "log",
     "--pretty=format:%H%x1E%s%x1E%an%x1E%aI",
     tag + "..HEAD",
@@ -171,7 +169,8 @@ pub fn Repository::get_commits_since_tag_command(
 ///|
 /// Get command to retrieve all commits (no tag/ref range filter)
 pub fn Repository::get_all_commits_command(self : Repository) -> Array[String] {
-  ["git", "-C", self.path, "log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI"]
+  let _ = self
+  ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI"]
 }
 
 ///|
@@ -180,10 +179,8 @@ pub fn Repository::find_release_commit_command(
   self : Repository,
   pattern : String,
 ) -> Array[String] {
+  let _ = self
   [
-    "git",
-    "-C",
-    self.path,
     "log",
     "--fixed-strings",
     "--grep=" + pattern,
@@ -199,7 +196,8 @@ pub fn Repository::create_tag_command(
   tag_name : String,
   message : String,
 ) -> Array[String] {
-  ["git", "-C", self.path, "tag", "-a", "-m", message, "--", tag_name]
+  let _ = self
+  ["tag", "-a", "-m", message, "--", tag_name]
 }
 
 ///|
@@ -208,7 +206,8 @@ pub fn Repository::create_commit_command(
   self : Repository,
   message : String,
 ) -> Array[String] {
-  ["git", "-C", self.path, "commit", "-m", message]
+  let _ = self
+  ["commit", "-m", message]
 }
 
 ///|
@@ -217,7 +216,8 @@ pub fn Repository::stage_files_command(
   self : Repository,
   files : Array[String],
 ) -> Array[String] {
-  let cmd : Array[String] = ["git", "-C", self.path, "add"]
+  let _ = self
+  let cmd : Array[String] = ["add"]
   for file in files {
     cmd.push(file)
   }
@@ -230,10 +230,11 @@ pub fn Repository::push_command(
   self : Repository,
   include_tags : Bool,
 ) -> Array[String] {
+  let _ = self
   if include_tags {
-    ["git", "-C", self.path, "push", "--follow-tags"]
+    ["push", "--follow-tags"]
   } else {
-    ["git", "-C", self.path, "push"]
+    ["push"]
   }
 }
 

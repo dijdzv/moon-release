@@ -24,7 +24,7 @@ pub(all) suberror WorkflowError {
   InputValidationError(String)
   ExternalCommandError(String)
   NoReleasableCommits(String)
-  WorkflowError(String)
+  General(String)
 }
 
 ///|
@@ -40,7 +40,7 @@ pub fn WorkflowError::hint(self : WorkflowError) -> String {
       "Make sure required tools (git, gh, moon, npm) are installed"
     NoReleasableCommits(_) =>
       "Use Conventional Commits or --bump to force a version bump"
-    WorkflowError(_) => ""
+    General(_) => ""
   }
 }
 
@@ -82,7 +82,7 @@ pub fn ReleaseContext::new(
 ///|
 /// update command (stub)
 pub fn run_update(_ctx : ReleaseContext) -> Unit raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -91,7 +91,7 @@ pub fn run_release_pr(
   _ctx : ReleaseContext,
   _github : @github.GitHubClient,
 ) -> Unit raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -100,13 +100,13 @@ pub fn run_release(
   _ctx : ReleaseContext,
   _github : @github.GitHubClient,
 ) -> Unit raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
 /// publish command (stub)
 pub fn run_publish(_ctx : ReleaseContext) -> Unit raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -121,7 +121,7 @@ pub fn run_update_packages(
 ) -> Unit raise WorkflowError {
   ignore(forced_bump)
   ignore(bump_all)
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -131,7 +131,7 @@ pub fn run_npm_publish_packages(
   _dry_run : Bool,
   _verbose : Bool,
 ) -> Unit raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -141,7 +141,7 @@ pub fn run_publish_packages(
   _dry_run : Bool,
   _verbose : Bool,
 ) -> Unit raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -160,13 +160,13 @@ pub fn validate_publish_config(
   verbose? : Bool = false,
 ) -> Unit raise WorkflowError {
   ignore(verbose)
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
 /// Read version from package.json (stub)
 pub fn get_package_json_version() -> @semver.Version? raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -174,19 +174,19 @@ pub fn get_package_json_version() -> @semver.Version? raise WorkflowError {
 pub fn get_current_version(
   _config : @config.Config,
 ) -> @semver.Version raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
 /// Pre-build JS target (stub)
 pub fn pre_build_js(_ctx : ReleaseContext) -> Unit raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
 /// npm publish (stub)
 pub fn run_npm_publish(_ctx : ReleaseContext) -> Unit raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -200,7 +200,7 @@ pub fn collect_package_release_info(
 ) -> Array[PackageReleaseInfo] raise WorkflowError {
   ignore(forced_bump)
   ignore(bump_all)
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -208,7 +208,7 @@ pub fn collect_package_release_info(
 pub fn get_registry_version(
   _package_name : String,
 ) -> @semver.Version? raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -218,7 +218,7 @@ pub fn should_release(
   _package_name : String,
   _verbose : Bool,
 ) -> Bool raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -227,16 +227,16 @@ pub fn run_semver_check(
   _repo : @git.Repository,
   _verbose : Bool,
   pr_title~ : String = "chore: release {{ version }}",
-  bootstrap_sha~ : String? = None,
+  bootstrap_sha~ : @util.CommitHash? = None,
 ) -> @semver_check.CheckResult raise WorkflowError {
   ignore(bootstrap_sha)
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
 /// Get latest tag (stub)
 pub fn get_latest_tag(_repo : @git.Repository) -> String? raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -245,12 +245,12 @@ pub fn get_commits_since_last_tag(
   _repo : @git.Repository,
   pr_title~ : String = "",
   max_commits? : UInt? = None,
-  bootstrap_sha~ : String? = None,
+  bootstrap_sha~ : @util.CommitHash? = None,
 ) -> Array[(@conventional.ConventionalCommit, String)] raise WorkflowError {
   ignore(pr_title)
   ignore(max_commits)
   ignore(bootstrap_sha)
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -261,13 +261,13 @@ pub fn check_working_directory(
   verbose? : Bool = false,
 ) -> Unit raise WorkflowError {
   ignore(verbose)
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
 /// Get GitHub client (stub)
 pub fn get_github_client() -> @github.GitHubClient raise WorkflowError {
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }
 
 ///|
@@ -284,5 +284,5 @@ pub fn analyze_version_bump(
   ignore(max_commits)
   ignore(allow_empty_commits)
   ignore(default_bump)
-  raise WorkflowError("Workflow requires native target")
+  raise General("Workflow requires native target")
 }

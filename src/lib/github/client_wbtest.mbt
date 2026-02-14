@@ -17,7 +17,7 @@ test "create release command" {
   let cmd = client.create_release_command(
     "v1.0.0", "Release 1.0.0", "Notes here",
   )
-  assert_true(cmd.iter().any(fn(s) { s == "gh" }))
+  assert_false(cmd.iter().any(fn(s) { s == "gh" }))
   assert_true(cmd.iter().any(fn(s) { s == "release" }))
   assert_true(cmd.iter().any(fn(s) { s == "create" }))
   assert_true(cmd.iter().any(fn(s) { s == "v1.0.0" }))

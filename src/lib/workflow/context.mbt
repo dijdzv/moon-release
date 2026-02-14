@@ -28,7 +28,7 @@ pub(all) suberror WorkflowError {
   /// No releasable commits found (not an error, just nothing to do)
   NoReleasableCommits(String)
   /// Generic workflow error (fallback for uncategorized errors)
-  WorkflowError(String)
+  General(String)
 }
 
 ///|
@@ -41,7 +41,7 @@ pub fn WorkflowError::to_string(self : WorkflowError) -> String {
     InputValidationError(msg) => "[input] " + msg
     ExternalCommandError(msg) => "[command] " + msg
     NoReleasableCommits(msg) => msg
-    WorkflowError(msg) => msg
+    General(msg) => msg
   }
 }
 
@@ -58,7 +58,7 @@ pub fn WorkflowError::add_context(
     InputValidationError(msg) => InputValidationError(msg + suffix)
     ExternalCommandError(msg) => ExternalCommandError(msg + suffix)
     NoReleasableCommits(msg) => NoReleasableCommits(msg + suffix)
-    WorkflowError(msg) => WorkflowError(msg + suffix)
+    General(msg) => General(msg + suffix)
   }
 }
 
@@ -75,7 +75,7 @@ pub fn WorkflowError::hint(self : WorkflowError) -> String {
       "Make sure required tools (git, gh, moon, npm) are installed"
     NoReleasableCommits(_) =>
       "Use Conventional Commits or --bump to force a version bump"
-    WorkflowError(_) => ""
+    General(_) => ""
   }
 }
 
