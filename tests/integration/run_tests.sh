@@ -1140,6 +1140,160 @@ test_error_not_git_repo() {
   rm -rf "$tmp_dir"
 }
 
+# ===== bootstrap_sha tests =====
+
+test_bootstrap_sha_basic() {
+  log_info "Testing: bootstrap_sha limits commit analysis"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  # Add commits before bootstrap point
+  git commit -q --allow-empty -m "feat: old feature 1"
+  git commit -q --allow-empty -m "feat!: old breaking change"
+
+  # Record the bootstrap SHA
+  BOOTSTRAP_SHA=$(git rev-parse HEAD)
+
+  # Add commits after bootstrap point
+  git commit -q --allow-empty -m "fix: new bugfix"
+
+  # Create config with bootstrap_sha
+  cat > release.json << EOF
+{
+  "bootstrap_sha": "$BOOTSTRAP_SHA"
+}
+EOF
+  git add release.json
+  git commit -q -m "chore: add config"
+
+  # Check should only see commits after bootstrap_sha (fix + chore = 2 commits)
+  # Without bootstrap_sha, it would see all 5 commits including feat! → major bump
+  output=$($BINARY check 2>&1)
+
+  if echo "$output" | grep -q "Using bootstrap_sha as starting point"; then
+    log_pass "bootstrap_sha message displayed"
+  else
+    log_fail "bootstrap_sha message should be displayed: $output"
+  fi
+
+  if echo "$output" | grep -q "Suggested bump: patch"; then
+    log_pass "bootstrap_sha limits analysis (patch, not major)"
+  else
+    log_fail "bootstrap_sha should limit to patch bump: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_bootstrap_sha_tag_priority() {
+  log_info "Testing: tag takes priority over bootstrap_sha"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  # Add early commit as bootstrap point
+  git commit -q --allow-empty -m "feat: early feature"
+  BOOTSTRAP_SHA=$(git rev-parse HEAD)
+
+  # Add more commits and tag
+  git commit -q --allow-empty -m "feat: pre-tag feature"
+  git tag v0.1.0
+
+  # Add commit after tag
+  git commit -q --allow-empty -m "fix: post-tag fix"
+
+  # Create config with bootstrap_sha (pointing before tag)
+  cat > release.json << EOF
+{
+  "bootstrap_sha": "$BOOTSTRAP_SHA"
+}
+EOF
+  git add release.json
+  git commit -q -m "chore: add config"
+
+  output=$($BINARY check 2>&1)
+
+  # Tag should take priority — bootstrap_sha message should NOT appear
+  if echo "$output" | grep -q "bootstrap_sha"; then
+    log_fail "tag should take priority over bootstrap_sha: $output"
+  else
+    log_pass "tag takes priority over bootstrap_sha"
+  fi
+
+  if echo "$output" | grep -q "Latest tag: v0.1.0"; then
+    log_pass "tag is used as reference"
+  else
+    log_fail "tag should be used as reference: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_bootstrap_sha_release_commit_priority() {
+  log_info "Testing: release commit takes priority over bootstrap_sha"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  # bootstrap point
+  git commit -q --allow-empty -m "feat: early feature"
+  BOOTSTRAP_SHA=$(git rev-parse HEAD)
+
+  # Add a release commit (matches default pr_title pattern "chore: release v*")
+  git commit -q --allow-empty -m "chore: release v0.1.0"
+
+  # Add commit after release commit
+  git commit -q --allow-empty -m "fix: post-release fix"
+
+  # Create config with bootstrap_sha
+  cat > release.json << EOF
+{
+  "bootstrap_sha": "$BOOTSTRAP_SHA"
+}
+EOF
+  git add release.json
+  git commit -q -m "chore: add config"
+
+  output=$($BINARY check 2>&1)
+
+  # Release commit should take priority — bootstrap_sha message should NOT appear
+  if echo "$output" | grep -q "bootstrap_sha"; then
+    log_fail "release commit should take priority over bootstrap_sha: $output"
+  else
+    log_pass "release commit takes priority over bootstrap_sha"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_bootstrap_sha_invalid() {
+  log_info "Testing: invalid bootstrap_sha handles gracefully"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  # Create config with non-existent SHA
+  cat > release.json << 'EOF'
+{
+  "bootstrap_sha": "deadbeef00000000deadbeef00000000deadbeef"
+}
+EOF
+  git add release.json
+  git commit -q -m "chore: add config"
+
+  # Should fail gracefully
+  output=$($BINARY check 2>&1 || true)
+
+  if echo "$output" | grep -qi "error\|fatal\|failed"; then
+    log_pass "invalid bootstrap_sha fails gracefully"
+  else
+    log_fail "invalid bootstrap_sha should produce error: $output"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
 # ===== Main =====
 
 main() {
@@ -1196,6 +1350,10 @@ main() {
   test_config_missing_uses_defaults
   test_check_verbose
   test_error_not_git_repo
+  test_bootstrap_sha_basic
+  test_bootstrap_sha_tag_priority
+  test_bootstrap_sha_release_commit_priority
+  test_bootstrap_sha_invalid
 
   echo ""
   echo "================================"

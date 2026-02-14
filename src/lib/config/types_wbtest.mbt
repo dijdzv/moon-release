@@ -907,3 +907,18 @@ test "parse config with bootstrap_sha null" {
   let config = Config::parse(content) catch { _ => fail("Unexpected error") }
   assert_eq(config.bootstrap_sha, None)
 }
+
+///|
+test "parse config with bootstrap_sha invalid type" {
+  let content =
+    #|{
+    #|  "bootstrap_sha": 12345
+    #|}
+  try {
+    let _ = Config::parse(content)
+    fail("Expected error")
+  } catch {
+    ConfigError(msg) => assert_true(msg.contains("string"))
+    _ => fail("Wrong error type")
+  }
+}

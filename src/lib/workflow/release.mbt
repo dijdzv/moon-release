@@ -2339,7 +2339,9 @@ async fn get_package_commits(
   }
 
   // Resolve the commit range start point:
-  // 1. Latest tag  2. Most recent release commit  3. All commits (initial release)
+  // 1. Latest tag  2. Most recent release commit  3. bootstrap_sha  4. All commits (initial release)
+  // Note: Commands are built as git subcommand args (without "git -C path" prefix)
+  // because they are passed to run_git() which adds the prefix automatically.
   let log_cmd : Array[String] = if not(tag.is_empty()) {
     // Tag found — get commits since tag with path filter
     ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", tag + "..HEAD", "--", path]
@@ -2360,44 +2362,23 @@ async fn get_package_commits(
       ""
     }
     if not(release_hash.is_empty()) {
-      let cmd = try repo.get_commits_since_tag_command(release_hash) catch {
-        e =>
-          raise ExternalCommandError(
-            "Failed to build git log command: " + e.to_string(),
-          )
-      } noraise {
-        r => r
-      }
-      cmd.push("--")
-      cmd.push(path)
-      cmd
+      // release_hash comes from git log output, so it's a valid SHA
+      ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", release_hash + "..HEAD", "--", path]
     } else {
       match bootstrap_sha {
         Some(sha) => {
           println(
             "No previous release found. Using bootstrap_sha as starting point.",
           )
-          let cmd = try repo.get_commits_since_tag_command(sha) catch {
-            e =>
-              raise ExternalCommandError(
-                "Failed to build git log command: " + e.to_string(),
-              )
-          } noraise {
-            r => r
-          }
-          cmd.push("--")
-          cmd.push(path)
-          cmd
+          // bootstrap_sha is validated by git when executing the command
+          ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", sha + "..HEAD", "--", path]
         }
         None => {
           // No previous release exists — analyze entire history (initial release)
           println(
             "No previous release found. Analyzing all commits for initial release.",
           )
-          let cmd = repo.get_all_commits_command()
-          cmd.push("--")
-          cmd.push(path)
-          cmd
+          ["log", "--pretty=format:%H%x1E%s%x1E%an%x1E%aI", "--", path]
         }
       }
     }
