@@ -1231,7 +1231,7 @@ EOF
 }
 
 test_bootstrap_sha_release_commit_priority() {
-  log_info "Testing: release commit takes priority over bootstrap_sha"
+  log_info "Testing: release commit after bootstrap_sha is used"
 
   TEST_DIR=$(create_test_repo)
   cd "$TEST_DIR"
@@ -1240,7 +1240,7 @@ test_bootstrap_sha_release_commit_priority() {
   git commit -q --allow-empty -m "feat: early feature"
   BOOTSTRAP_SHA=$(git rev-parse HEAD)
 
-  # Add a release commit (matches default pr_title pattern "chore: release v*")
+  # Add a release commit AFTER bootstrap_sha
   git commit -q --allow-empty -m "chore: release v0.1.0"
 
   # Add commit after release commit
@@ -1257,11 +1257,55 @@ EOF
 
   output=$($BINARY check 2>&1)
 
-  # Release commit should take priority — bootstrap_sha message should NOT appear
+  # Release commit is after bootstrap_sha, so it should be used (no bootstrap_sha message)
   if echo "$output" | grep -q "bootstrap_sha"; then
-    log_fail "release commit should take priority over bootstrap_sha: $output"
+    log_fail "release commit after bootstrap_sha should be used: $output"
   else
-    log_pass "release commit takes priority over bootstrap_sha"
+    log_pass "release commit after bootstrap_sha is used"
+  fi
+
+  rm -rf "$TEST_DIR"
+}
+
+test_bootstrap_sha_overrides_old_release_commit() {
+  log_info "Testing: bootstrap_sha overrides release commit before it"
+
+  TEST_DIR=$(create_test_repo)
+  cd "$TEST_DIR"
+
+  # Add a release commit BEFORE bootstrap_sha
+  git commit -q --allow-empty -m "chore: release v0.1.0"
+
+  # bootstrap point (after the release commit)
+  git commit -q --allow-empty -m "feat: bootstrap feature"
+  BOOTSTRAP_SHA=$(git rev-parse HEAD)
+
+  # Add commit after bootstrap
+  git commit -q --allow-empty -m "fix: post-bootstrap fix"
+
+  # Create config with bootstrap_sha
+  cat > release.json << EOF
+{
+  "bootstrap_sha": "$BOOTSTRAP_SHA"
+}
+EOF
+  git add release.json
+  git commit -q -m "chore: add config"
+
+  output=$($BINARY check 2>&1)
+
+  # Release commit is before bootstrap_sha, so bootstrap_sha should be used
+  if echo "$output" | grep -q "before bootstrap_sha"; then
+    log_pass "bootstrap_sha overrides old release commit"
+  else
+    log_fail "bootstrap_sha should override release commit before it: $output"
+  fi
+
+  # Should only see commits after bootstrap_sha (patch bump from fix:)
+  if echo "$output" | grep -q "patch"; then
+    log_pass "only commits after bootstrap_sha are analyzed"
+  else
+    log_fail "should analyze only commits after bootstrap_sha: $output"
   fi
 
   rm -rf "$TEST_DIR"
@@ -1353,6 +1397,7 @@ main() {
   test_bootstrap_sha_basic
   test_bootstrap_sha_tag_priority
   test_bootstrap_sha_release_commit_priority
+  test_bootstrap_sha_overrides_old_release_commit
   test_bootstrap_sha_invalid
 
   echo ""

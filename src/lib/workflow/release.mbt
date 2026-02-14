@@ -22,6 +22,8 @@ pub async fn get_latest_tag(
 ///|
 /// Resolve the starting reference for commit range analysis.
 /// Tries: latest tag → most recent release commit → bootstrap_sha.
+/// When bootstrap_sha is set, it acts as a lower bound — any candidate
+/// (tag or release commit) that is an ancestor of bootstrap_sha is discarded.
 /// Returns Some(ref) if found, None if no previous release exists.
 async fn resolve_commit_range_start(
   repo : @git.Repository,
@@ -29,36 +31,63 @@ async fn resolve_commit_range_start(
   bootstrap_sha : String?,
 ) -> String? raise WorkflowError {
   // 1. Try latest tag
+  let mut candidate : String? = None
   let tag = get_latest_tag(repo)
   match tag {
-    Some(t) => return Some(t)
+    Some(t) => candidate = Some(t)
     None => ()
   }
 
-  // 2. Search for most recent release commit
-  let pattern = pr_title.replace(old="{{ version }}", new="")
-  let search_cmd = repo.find_release_commit_command(pattern)
-  let search_result = try @executor.run_command(search_cmd) catch {
-    _ => @executor.CommandResult::failed("release commit search failed")
-  } noraise {
-    r => r
-  }
-  if search_result.is_success() {
-    let hash = search_result.stdout_trimmed()
-    if not(hash.is_empty()) {
-      return Some(hash)
+  // 2. Search for most recent release commit (only if no tag found)
+  if candidate is None {
+    let pattern = pr_title.replace(old="{{ version }}", new="")
+    let search_cmd = repo.find_release_commit_command(pattern)
+    let search_result = try @executor.run_command(search_cmd) catch {
+      _ => @executor.CommandResult::failed("release commit search failed")
+    } noraise {
+      r => r
+    }
+    if search_result.is_success() {
+      let hash = search_result.stdout_trimmed()
+      if not(hash.is_empty()) {
+        candidate = Some(hash)
+      }
     }
   }
 
-  // 3. Use bootstrap_sha if configured
+  // 3. Apply bootstrap_sha as lower bound
   match bootstrap_sha {
-    Some(sha) => {
-      println(
-        "No previous release found. Using bootstrap_sha as starting point.",
-      )
-      Some(sha)
-    }
-    None => None
+    Some(sha) =>
+      match candidate {
+        Some(start) => {
+          // Check if candidate is an ancestor of (i.e. older than) bootstrap_sha
+          let check_cmd = [
+            "git", "-C", repo.path, "merge-base", "--is-ancestor", start, sha,
+          ]
+          let check_result = try @executor.run_command(check_cmd) catch {
+            _ => @executor.CommandResult::failed("merge-base check failed")
+          } noraise {
+            r => r
+          }
+          if check_result.is_success() {
+            // Candidate is older than bootstrap_sha → use bootstrap_sha
+            println(
+              "Found reference '\{start}' is before bootstrap_sha. Using bootstrap_sha as starting point.",
+            )
+            Some(sha)
+          } else {
+            // Candidate is newer than bootstrap_sha → use candidate
+            candidate
+          }
+        }
+        None => {
+          println(
+            "No previous release found. Using bootstrap_sha as starting point.",
+          )
+          Some(sha)
+        }
+      }
+    None => candidate
   }
 }
 
