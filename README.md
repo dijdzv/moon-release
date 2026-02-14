@@ -16,6 +16,7 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
 
 - [GitHub Actions (CI)](#github-actions)
   - [Required Setup](#required-setup)
+  - [Initial Setup](#initial-setup)
   - [Publishing to mooncakes.io](#publishing-to-mooncakesio-optional)
   - [Publishing to npm](#publishing-to-npm-optional)
   - [Configuration Summary](#configuration-summary)
@@ -28,7 +29,6 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
 - [Monorepo Support](#monorepo-support)
 - [CLI Usage](#cli-usage)
   - [Installation](#installation)
-  - [Quick Start](#quick-start)
   - [Commands](#commands)
 - [Planned Features](#planned-features)
 - [Differences from release-plz](#differences-from-release-plz)
@@ -72,6 +72,34 @@ The template includes three jobs:
 - Supports `dry-run` and `build-only` modes via manual workflow dispatch
 
 With this setup, merging a release PR will automatically create a Git tag, a GitHub Release with release notes, and upload cross-platform binaries. No additional secrets are needed for the base workflow.
+
+> **Important:** The workflow template assumes release PRs are **squash merged**. The `build` and `release` jobs detect merged release PRs by matching the commit message against the PR title pattern (e.g. `chore: release v...`). With squash merge, the PR title becomes the commit message automatically. If you use a different merge strategy or edit the PR title before merging, these jobs will not trigger. In that case, create a Git tag (`git tag v<version>` + push) to ensure moon-release can track releases, and use `workflow_dispatch` with `build-only` to trigger the build and release jobs manually.
+
+### Initial Setup
+
+moon-release determines the next version by analyzing commits **since the last release**. When no tag or release commit exists yet, it analyzes all commits in the repository — which may produce unexpectedly large version bumps.
+
+Create a Git tag as a baseline before the first run:
+
+```bash
+# Tag the commit that represents your latest release
+git tag v0.1.0
+git push origin --tags
+
+# If the release was made in a past commit
+git tag v0.1.0 <commit-hash>
+git push origin --tags
+```
+
+Alternatively, if migrating from another release tool, set `bootstrap_sha` in `release.json`:
+
+```json
+{
+  "bootstrap_sha": "<commit-hash>"
+}
+```
+
+`bootstrap_sha` acts as a lower bound — tags or release commits after it take precedence automatically, so you can leave it in the config after the first release without side effects.
 
 ### Publishing to mooncakes.io (Optional)
 
@@ -290,7 +318,7 @@ Customize behavior with `release.json`.
 | `custom_minor_increment_regex` | `null` | Custom substring pattern for minor bump (matched against commit description) |
 | `max_analyze_commits` | `null` | Maximum number of commits to analyze |
 | `bump_all_packages` | `false` | Bump all packages uniformly in monorepo mode (fixed versioning) |
-| `bootstrap_sha` | `null` | Starting commit SHA for commit analysis (skips earlier history). Useful when migrating from another release tool. Once the first release is created, this setting is automatically ignored. |
+| `bootstrap_sha` | `null` | Starting commit SHA for commit analysis. Acts as a lower bound — tags and release commits after it take precedence. See [Initial Setup](#initial-setup). |
 
 ### Template Variables
 
@@ -477,61 +505,9 @@ moon build --target native --release
 cp _build/native/release/build/moon-release.exe ~/.local/bin/moon-release
 ```
 
-### Quick Start
-
-#### Initial Setup (first time only)
-
-moon-release determines the next version by analyzing commits **since the last release**. When no tag or release commit exists yet, it analyzes all commits in the repository to compute the initial version — no manual setup is required.
-
-It is **strongly recommended** to create a Git tag as a baseline. This ensures only new commits are analyzed, producing more accurate and predictable version bumps:
-
-```bash
-# Tag the commit that represents your latest release
-git tag v0.1.0
-git push origin --tags
-```
-
-If the release was made in a past commit, tag that specific commit:
-
-```bash
-git tag v0.1.0 <commit-hash>
-git push origin --tags
-```
-
-> **Recommended:** Always create an initial tag. Without one, moon-release analyzes the **entire** commit history, which may produce unexpectedly large version bumps on repositories with a long history.
-
-Alternatively, if you are migrating from another release tool and cannot create a tag, you can set `bootstrap_sha` in `release.json` to specify the starting commit for analysis:
-
-```json
-{
-  "bootstrap_sha": "<commit-hash>"
-}
-```
-
-Once the first release is created, `bootstrap_sha` is automatically ignored (the release commit takes precedence), so you can leave it in the config without side effects.
-
-#### Regular Usage
-
-After the initial setup, the typical workflow is:
-
-```bash
-# Check current state
-moon-release check
-
-# Preview version update
-moon-release update --dry-run
-
-# Update version
-moon-release update
-
-# Create release PR
-moon-release release-pr
-
-# Create release (tag + GitHub Release + publish)
-moon-release release
-```
-
 ### Commands
+
+Typical workflow: `check` → `update` → `release-pr` → `release`
 
 #### `moon-release check`
 
