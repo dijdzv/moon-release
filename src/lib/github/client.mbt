@@ -122,6 +122,20 @@ pub fn GitHubClient::get_latest_release_command(
 }
 
 ///|
+/// Command to update generated PR metadata
+pub fn GitHubClient::update_pull_request_command(
+  self : GitHubClient,
+  number : UInt,
+  title : String,
+  body : String,
+) -> Array[String] {
+  // Updating issue metadata avoids the unrelated Projects lookup in `gh pr edit`.
+  ["api", "repos/" + self.repo_string() + "/issues/" + number.to_string(),
+   "--method", "PATCH", "--raw-field", "title=" + title,
+   "--raw-field", "body=" + body]
+}
+
+///|
 /// Command to create a PR
 pub fn GitHubClient::create_pull_request_command(
   self : GitHubClient,
