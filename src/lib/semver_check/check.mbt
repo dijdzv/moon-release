@@ -4,12 +4,12 @@ pub struct CheckResult {
   suggested_bump : @semver.BumpType?
   diff : ApiDiff
   messages : Array[String]
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Check if result indicates success (no breaking changes)
 pub fn CheckResult::is_success(self : CheckResult) -> Bool {
-  not(self.diff.has_breaking())
+  !(self.diff.has_breaking())
 }
 
 ///|
@@ -80,7 +80,7 @@ pub fn CheckResult::format(self : CheckResult) -> String {
   }
   lines.push("Suggested version bump: " + bump_str)
 
-  if not(self.is_success()) {
+  if !(self.is_success()) {
     lines.push("")
     lines.push("WARNING: Breaking changes detected!")
     lines.push(

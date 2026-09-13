@@ -1,10 +1,11 @@
 import {
-  "moonbitlang/async",
   "moonbitlang/async/fs",
   "dijdzv/moon-release/lib/semver",
   "moonbitlang/core/hashmap",
   "moonbitlang/core/json",
 }
+
+import { "moonbitlang/async" } for "wbtest"
 
 options(
   "is-main": false,

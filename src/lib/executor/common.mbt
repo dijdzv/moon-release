@@ -13,7 +13,7 @@ pub fn CommandResult::failed(stderr : String) -> CommandResult {
 ///|
 /// Return trimmed stdout
 pub fn CommandResult::stdout_trimmed(self : CommandResult) -> String {
-  self.stdout.trim().to_string()
+  self.stdout.trim().to_owned()
 }
 
 ///|
@@ -22,7 +22,7 @@ pub fn CommandResult::check(
   self : CommandResult,
   context : String,
 ) -> Unit raise ExecutorError {
-  if not(self.is_success()) {
+  if !(self.is_success()) {
     let msg = if self.stderr.is_empty() {
       "\{context}: exit code \{self.exit_code}"
     } else {
@@ -35,7 +35,7 @@ pub fn CommandResult::check(
 ///|
 /// Join command array into a display string for error messages
 pub fn join_command_args(cmd : Array[String]) -> String {
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   for i, s in cmd {
     if i > 0 {
       sb.write_string(" ")

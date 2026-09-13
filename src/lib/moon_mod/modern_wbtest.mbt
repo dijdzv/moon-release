@@ -21,6 +21,9 @@ test "moon.mod accepts name without version for name lookup" {
 
 ///|
 test "moon.mod duplicate versions are rejected" {
-  let result = try? parse("name = \"x/y\"\nversion = \"1.0.0\"\nversion = \"2.0.0\"")
-  assert_true(result is Err(_))
+  try parse("name = \"x/y\"\nversion = \"1.0.0\"\nversion = \"2.0.0\"") catch {
+    _ => ()
+  } noraise {
+    _ => fail("expected duplicate version error")
+  }
 }

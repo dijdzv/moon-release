@@ -3,7 +3,7 @@
 pub fn short_hash(hash : String) -> String {
   if hash.length() >= 7 {
     let chars = hash.to_array()
-    let sb = StringBuilder::new()
+    let sb = StringBuilder()
     for k = 0; k < 7; k = k + 1 {
       sb.write_char(chars[k])
     }
@@ -66,7 +66,7 @@ pub fn validate_prerelease_identifier(id : String) -> String? {
       c == '-' ||
       c == '.'
 
-    if not(is_valid) {
+    if !(is_valid) {
       return Some(
         "prerelease identifier can only contain alphanumeric characters, hyphens, and dots",
       )
@@ -136,7 +136,7 @@ pub fn generate_release_notes(
     return "No changes."
   }
 
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   sb.write_string("## What's Changed\n\n")
 
   for i = 0; i < commits.length(); i = i + 1 {
@@ -173,9 +173,9 @@ fn generate_package_changelog(
     }
   }
 
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
 
-  if not(features.is_empty()) {
+  if !(features.is_empty()) {
     sb.write_string("### Features\n\n")
     for line in features {
       sb.write_string(line)
@@ -184,7 +184,7 @@ fn generate_package_changelog(
     sb.write_string("\n")
   }
 
-  if not(fixes.is_empty()) {
+  if !(fixes.is_empty()) {
     sb.write_string("### Bug Fixes\n\n")
     for line in fixes {
       sb.write_string(line)
@@ -193,7 +193,7 @@ fn generate_package_changelog(
     sb.write_string("\n")
   }
 
-  if not(others.is_empty()) {
+  if !(others.is_empty()) {
     sb.write_string("### Other Changes\n\n")
     for line in others {
       sb.write_string(line)
@@ -221,7 +221,7 @@ pub fn build_pr_body_unified(packages : Array[PackageReleaseInfo]) -> String {
     return "No packages to release."
   }
 
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   let is_single_package = packages.length() == 1
 
   // Header
@@ -240,14 +240,14 @@ pub fn build_pr_body_unified(packages : Array[PackageReleaseInfo]) -> String {
   )
 
   for pkg in packages {
-    if not(pkg.commits.is_empty()) {
+    if !(pkg.commits.is_empty()) {
       // Only show package name header if multiple packages (like release-plz)
-      if not(is_single_package) {
+      if !(is_single_package) {
         sb.write_string("## `\{pkg.name}`\n\n")
         sb.write_string("<blockquote>\n\n")
       }
       sb.write_string(generate_package_changelog(pkg.commits))
-      if not(is_single_package) {
+      if !(is_single_package) {
         sb.write_string("</blockquote>\n\n")
       }
     }

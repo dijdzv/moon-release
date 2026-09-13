@@ -7,7 +7,7 @@ let breaking_change_prefix_len : Int = 16
 pub fn parse(message : String) -> ConventionalCommit? {
   let lines : Array[String] = message
     .split("\n")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
   if lines.is_empty() {
     return None
@@ -110,7 +110,7 @@ fn substr(s : String, start : Int, end : Int) -> String {
   if start < 0 || end > len || start > end {
     return ""
   }
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i = start; i < end; i = i + 1 {
     result.write_char(chars[i])
   }
@@ -270,7 +270,7 @@ fn build_body(lines : Array[String]) -> String? {
 ///|
 /// Check if line is a footer line
 fn is_footer_line(line : String) -> Bool {
-  let trimmed = line.trim().to_string()
+  let trimmed = line.trim().to_owned()
   if trimmed.is_empty() {
     return false
   }
@@ -328,7 +328,7 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
 
   for i = 0; i < lines.length(); i = i + 1 {
     let line = lines[i]
-    let trimmed = line.trim().to_string()
+    let trimmed = line.trim().to_owned()
     if trimmed.is_empty() {
       continue
     }
@@ -337,7 +337,7 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
     if trimmed.has_prefix("BREAKING CHANGE:") {
       let value = substr(trimmed, breaking_change_prefix_len, trimmed.length())
         .trim()
-        .to_string()
+        .to_owned()
       footers.push(("BREAKING CHANGE", value))
       continue
     }
@@ -345,7 +345,7 @@ fn parse_footers(lines : Array[String]) -> Array[(String, String)] {
     if trimmed.has_prefix("BREAKING-CHANGE:") {
       let value = substr(trimmed, breaking_change_prefix_len, trimmed.length())
         .trim()
-        .to_string()
+        .to_owned()
       footers.push(("BREAKING-CHANGE", value))
       continue
     }

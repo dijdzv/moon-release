@@ -2,7 +2,7 @@
 /// GitHub API client (gh CLI command generation)
 pub struct GitHubClient {
   slug : @util.RepositorySlug
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// GitHub release
@@ -12,7 +12,7 @@ pub struct Release {
   body : String
   draft : Bool
   prerelease : Bool
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Pull Request
@@ -22,7 +22,7 @@ pub struct PullRequest {
   body : String
   head : String
   base : String
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// GitHub API error

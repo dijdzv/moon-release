@@ -2,7 +2,7 @@
 /// Git repository
 pub struct Repository {
   path : String
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Git commit
@@ -11,7 +11,7 @@ pub struct GitCommit {
   message : String
   author : String
   date : String
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Git error
@@ -136,10 +136,10 @@ pub fn Repository::get_commits_command(
   to : String,
 ) -> Array[String] raise GitError {
   let _ = self
-  if not(validate_ref_param(from)) {
+  if !(validate_ref_param(from)) {
     raise GitError("Invalid git ref: '" + from + "'")
   }
-  if not(validate_ref_param(to)) {
+  if !(validate_ref_param(to)) {
     raise GitError("Invalid git ref: '" + to + "'")
   }
   [
@@ -156,7 +156,7 @@ pub fn Repository::get_commits_since_tag_command(
   tag : String,
 ) -> Array[String] raise GitError {
   let _ = self
-  if not(validate_ref_param(tag)) {
+  if !(validate_ref_param(tag)) {
     raise GitError("Invalid git ref: '" + tag + "'")
   }
   [
@@ -246,11 +246,11 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
   let commits : Array[GitCommit] = []
   let lines : Array[String] = output
     .split("\n")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
 
   for i = 0; i < lines.length(); i = i + 1 {
-    let line = lines[i].trim().to_string()
+    let line = lines[i].trim().to_owned()
     if line.is_empty() {
       continue
     }
@@ -258,7 +258,7 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
     // Split by Record Separator (U+001E)
     let parts : Array[String] = line
       .split("\u001e")
-      .map(fn(sv) { sv.to_string() })
+      .map(fn(sv) { sv.to_owned() })
       .collect()
 
     if parts.length() >= 4 {
@@ -270,7 +270,7 @@ pub fn parse_commit_log(output : String) -> Array[GitCommit] {
       for j = 1; j < parts.length() - 2; j = j + 1 {
         message_parts.push(parts[j])
       }
-      let sb = StringBuilder::new()
+      let sb = StringBuilder()
       for j2, part in message_parts {
         if j2 > 0 {
           sb.write_string("\u001e")

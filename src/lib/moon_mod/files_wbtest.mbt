@@ -5,11 +5,11 @@ async test "manifest resolution rejects ambiguity and preserves the chosen forma
   for name in ["moon.mod", "moon.mod.json"] {
     if @fs.exists(prefix + name) { @fs.remove(prefix + name) }
   }
-  assert_true((try? resolve_path(prefix)) is Err(_))
+  try resolve_path(prefix) catch { _ => () } noraise { _ => fail("expected missing manifest error") }
   @fs.write_file(prefix + "moon.mod.json", "{\"name\":\"x/y\",\"version\":\"1.0.0\"}")
   assert_eq(resolve_path(prefix), prefix + "moon.mod.json")
   @fs.write_file(prefix + "moon.mod", "name = \"x/y\"\nversion = \"1.0.0\"\n")
-  assert_true((try? resolve_path(prefix)) is Err(_))
+  try resolve_path(prefix) catch { _ => () } noraise { _ => fail("expected ambiguous manifest error") }
   @fs.remove(prefix + "moon.mod.json")
   let path = resolve_path(prefix)
   assert_eq(path, prefix + "moon.mod")

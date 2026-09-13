@@ -15,7 +15,7 @@ pub fn merge_package_apis(apis : Array[PackageApi]) -> PackageApi {
   let need_prefix = apis.length() > 1
 
   for api in apis {
-    let prefix = if need_prefix && not(api.name.is_empty()) {
+    let prefix = if need_prefix && !(api.name.is_empty()) {
       api.name + "."
     } else {
       ""
@@ -74,7 +74,7 @@ fn prefix_methods(
 ///|
 /// Collect duplicate names in merged API entries
 fn collect_duplicates(names : Array[String], category : String) -> Array[String] {
-  let seen : @hashset.HashSet[String] = @hashset.new()
+  let seen : @hashset.HashSet[String] = @hashset.HashSet([])
   let warnings : Array[String] = []
   for name in names {
     if seen.contains(name) {

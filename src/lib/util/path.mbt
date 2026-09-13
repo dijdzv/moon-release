@@ -9,7 +9,7 @@ pub enum PathValidation {
   AbsolutePath
   /// Path contains a NUL byte
   NullByte
-} derive(Debug, Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Check if path contains a ".." traversal segment
@@ -105,7 +105,7 @@ pub fn validate_path_full(
   }
 
   // Check for absolute paths if not allowed
-  if not(allow_absolute) && is_absolute_path(path) {
+  if !(allow_absolute) && is_absolute_path(path) {
     return AbsolutePath
   }
 

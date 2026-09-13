@@ -12,8 +12,9 @@ let max_verbose_commits : Int = 10
 ///|
 /// Extract version from embedded moon.mod.json content
 fn extract_version(json_str : String) -> String {
-  let obj = match (try? @json.parse(json_str)).to_option() {
-    Some(Object(obj)) => obj
+  let json = @json.parse(json_str) catch { _ => panic() }
+  let obj = match json {
+    Object(obj) => obj
     _ => panic()
   }
   match obj.get("version") {
@@ -81,7 +82,7 @@ fn handle_workflow_error(
 ///|
 /// Output warning message (suppressed in JSON mode)
 fn output_warning(msg : String, json_output : Bool) -> Unit {
-  if not(json_output) {
+  if !json_output {
     println("Warning: " + msg)
   }
 }
@@ -128,7 +129,7 @@ fn print_bump_hint(
   bump_all : Bool,
   json_output : Bool,
 ) -> Unit {
-  if is_monorepo && forced_bump is Some(_) && not(bump_all) && not(json_output) {
+  if is_monorepo && forced_bump is Some(_) && !bump_all && !json_output {
     println(
       "Note: --bump applies only to packages with changes. Use --bump-all to include all packages.",
     )
@@ -138,8 +139,7 @@ fn print_bump_hint(
 ///|
 /// Get output format from subcommand (returns true if JSON)
 fn get_json_output(subcmd : @clap.SimpleValue) -> Bool {
-  // Use try? + unwrap_or pattern for consistent error handling
-  let output_format = (try? subcmd.get_one("output")).unwrap_or("text")
+  let output_format = subcmd.get_one("output") catch { _ => "text" }
   output_format == "json"
 }
 
@@ -152,7 +152,7 @@ fn print_verbose_header(
   verbose : Bool,
   json_output : Bool,
 ) -> Unit {
-  if verbose && not(json_output) {
+  if verbose && !json_output {
     println("Running " + cmd_name + " command...")
     println("  Config: " + config_path)
     println("  Dry run: " + dry_run.to_string())
@@ -333,8 +333,7 @@ async fn main {
   // Global options
   let dry_run = get_flag_or_false(value, "dry-run")
   let verbose = get_flag_or_false(value, "verbose")
-  // Use try? + unwrap_or pattern for consistent error handling
-  let config_path = (try? value.get_one("config")).unwrap_or("release.json")
+  let config_path = value.get_one("config") catch { _ => "release.json" }
 
   // Process subcommand
   match value.subcmd {
@@ -399,7 +398,7 @@ async fn cmd_update(
   let packages_mode = get_flag_or_false(subcmd, "packages")
 
   // In monorepo mode, update each package separately with try-catch-noraise pattern
-  if packages_mode || not(config.packages.is_empty()) {
+  if packages_mode || !config.packages.is_empty() {
     print_bump_hint(true, forced_bump, bump_all, json_output)
     try
       @workflow.run_update_packages(
@@ -445,14 +444,13 @@ async fn cmd_update(
   // Registry check (if enabled) with try-catch-noraise pattern
   if config.registry_check {
     // Get package name: try moon.mod.json first, then package.json
-    let pkg_name = match
-      (try? load_moon_mod(@moon_mod.resolve_path(""))).to_option() {
+    let manifest = Some(load_moon_mod(@moon_mod.resolve_path(""))) catch {
+      _ => None
+    }
+    let pkg_name = match manifest {
       Some(m) => m.name
       None =>
-        match
-          (try? load_package_json_name("package.json"))
-          .to_option()
-          .bind(fn(x) { x }) {
+        match (load_package_json_name("package.json") catch { _ => None }) {
           Some(name) => name
           None => {
             output_warning(
@@ -463,7 +461,7 @@ async fn cmd_update(
           }
         }
     }
-    if not(pkg_name.is_empty()) {
+    if !pkg_name.is_empty() {
       let should_rel = try
         @workflow.should_release(new_version, pkg_name, verbose)
       catch {
@@ -475,7 +473,7 @@ async fn cmd_update(
         r => r
       }
 
-      if not(should_rel) {
+      if !should_rel {
         output_error(
           "Version " +
           new_version.to_string() +
@@ -587,7 +585,7 @@ async fn cmd_release_pr(
 
   let (config, repo) = prepare_release_config(config_path, verbose, json_output)
   let (forced_bump, bump_all) = get_bump_flags(subcmd, config)
-  let is_monorepo = not(config.packages.is_empty())
+  let is_monorepo = !config.packages.is_empty()
 
   print_bump_hint(is_monorepo, forced_bump, bump_all, json_output)
 
@@ -686,10 +684,9 @@ async fn cmd_release(
 
   let (config, repo) = prepare_release_config(config_path, verbose, json_output)
   let (forced_bump, bump_all) = get_bump_flags(subcmd, config)
-  let is_monorepo = not(config.packages.is_empty())
+  let is_monorepo = !config.packages.is_empty()
 
-  // Get prerelease identifier with try? + to_option pattern
-  let prerelease = (try? subcmd.get_one("prerelease")).to_option()
+  let prerelease = Some(subcmd.get_one("prerelease")) catch { _ => None }
 
   // Validate prerelease identifier format
   match prerelease {
@@ -709,7 +706,7 @@ async fn cmd_release(
   }
 
   // Check if prerelease is allowed in config
-  if prerelease is Some(_) && not(config.allow_prerelease) {
+  if prerelease is Some(_) && !config.allow_prerelease {
     output_error_with_hint(
       "Prerelease is not allowed in configuration.", "Set 'allow_prerelease: true' in release.json to enable prereleases",
       json_output,
@@ -804,9 +801,14 @@ async fn cmd_init(
   println("Initializing release configuration...")
 
   // Check if file already exists
-  let file_exists = (try? @fs.read_file("release.json")) is Ok(_)
+  let file_exists = try {
+    ignore(@fs.read_file("release.json"))
+    true
+  } catch {
+    _ => false
+  }
 
-  if file_exists && not(force) {
+  if file_exists && !force {
     println("release.json already exists. Use --force to overwrite.")
     exit_error()
   }
@@ -999,11 +1001,10 @@ async fn cmd_check(
   verbose : Bool,
   config_path : String,
 ) -> Unit {
-  // Use try? + unwrap_or pattern for consistent error handling
-  let output_format = (try? subcmd.get_one("output")).unwrap_or("text")
+  let output_format = subcmd.get_one("output") catch { _ => "text" }
   let json_output = output_format == "json"
 
-  if not(json_output) {
+  if !json_output {
     println("Checking current state...")
     println("")
     println("Analyzing commits since last tag...")
@@ -1016,13 +1017,9 @@ async fn cmd_check(
   let repo = @git.Repository::current()
 
   // Get latest tag
-  let latest_tag = try @workflow.get_latest_tag(repo) catch {
-    _ => None
-  } noraise {
-    r => r
-  }
+  let latest_tag = @workflow.get_latest_tag(repo)
 
-  if not(json_output) {
+  if !json_output {
     match latest_tag {
       Some(tag) => println("Latest tag: " + tag)
       None => println("No tags found")

@@ -1,23 +1,23 @@
 ///|
 /// Validated git branch name (git-check-ref-format compliant)
 /// Constructed only via BranchName::new() which performs validation
-pub(all) struct BranchName(String) derive(Debug, Show, Eq)
+pub(all) struct BranchName(String) derive(Debug, Eq)
 
 ///|
 /// Validated git tag name (git-check-ref-format compliant)
-pub(all) struct TagName(String) derive(Debug, Show, Eq)
+pub(all) struct TagName(String) derive(Debug, Eq)
 
 ///|
 /// Validated commit hash (hex characters, 7-40 chars)
-pub(all) struct CommitHash(String) derive(Debug, Show, Eq)
+pub(all) struct CommitHash(String) derive(Debug, Eq)
 
 ///|
 /// Validated package path (no directory traversal, relative only)
-pub(all) struct PackagePath(String) derive(Debug, Show, Eq)
+pub(all) struct PackagePath(String) derive(Debug, Eq)
 
 ///|
 /// Validated GitHub repository slug ("owner/repo" format)
-pub(all) struct RepositorySlug(String) derive(Debug, Show, Eq)
+pub(all) struct RepositorySlug(String) derive(Debug, Eq)
 
 ///|
 /// Validation error
@@ -91,7 +91,7 @@ pub fn CommitHash::new(s : String) -> CommitHash raise ValidationError {
   // Must be hex characters only
   for i = 0; i < len; i = i + 1 {
     let c = chars[i]
-    if not(
+    if !(
         (c >= '0' && c <= '9') ||
         (c >= 'a' && c <= 'f') ||
         (c >= 'A' && c <= 'F'),
@@ -116,7 +116,7 @@ pub fn CommitHash::short(self : CommitHash) -> String {
     return s
   }
   let chars = s.to_array()
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   for k = 0; k < 7; k = k + 1 {
     sb.write_char(chars[k])
   }
@@ -171,12 +171,12 @@ pub fn RepositorySlug::new(
   owner : String,
   repo : String,
 ) -> RepositorySlug raise ValidationError {
-  if not(validate_repo_component_impl(owner)) {
+  if !(validate_repo_component_impl(owner)) {
     raise ValidationError(
       "Invalid GitHub owner: '\{owner}' (only alphanumeric, hyphen, underscore, and dot allowed)",
     )
   }
-  if not(validate_repo_component_impl(repo)) {
+  if !(validate_repo_component_impl(repo)) {
     raise ValidationError(
       "Invalid GitHub repo: '\{repo}' (only alphanumeric, hyphen, underscore, and dot allowed)",
     )
@@ -196,7 +196,7 @@ pub fn RepositorySlug::owner(self : RepositorySlug) -> String {
   let s = self.0
   let parts : Array[String] = s
     .split("/")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
   parts[0]
 }
@@ -207,7 +207,7 @@ pub fn RepositorySlug::repo(self : RepositorySlug) -> String {
   let s = self.0
   let parts : Array[String] = s
     .split("/")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
   parts[1]
 }
@@ -307,7 +307,7 @@ pub fn validate_repo_component_impl(s : String) -> Bool {
   }
   for i = 0; i < chars.length(); i = i + 1 {
     let c = chars[i]
-    if not(
+    if !(
         (c >= 'a' && c <= 'z') ||
         (c >= 'A' && c <= 'Z') ||
         (c >= '0' && c <= '9') ||

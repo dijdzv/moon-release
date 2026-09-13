@@ -1,5 +1,4 @@
 import {
-  "moonbitlang/async",
   "dijdzv/moon-release/lib/config",
   "dijdzv/moon-release/lib/conventional",
   "dijdzv/moon-release/lib/semver",
@@ -13,6 +12,8 @@ import {
   "moonbitlang/core/hashmap",
   "moonbitlang/core/json",
 }
+
+import { "moonbitlang/async" } for "wbtest"
 
 options(
   targets: {

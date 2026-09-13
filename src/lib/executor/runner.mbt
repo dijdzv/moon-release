@@ -17,7 +17,7 @@ pub fn get_env_var(name : String) -> String? {
   // Note: This assumes ASCII-only variable names (single-byte chars).
   // All callers use ASCII names (e.g., "PATH", "GITHUB_ACTIONS"), so this is safe.
   let name_chars = name.to_array()
-  let byte_arr : Array[Byte] = Array::new(capacity=name_chars.length() + 1)
+  let byte_arr : Array[Byte] = Array(capacity=name_chars.length() + 1)
   for c in name_chars {
     byte_arr.push(c.to_int().to_byte())
   }
@@ -32,7 +32,7 @@ pub fn get_env_var(name : String) -> String? {
   }
 
   // Decode UTF-8 bytes to string
-  let sb = StringBuilder::new()
+  let sb = StringBuilder()
   let mut i = 0
   while i < len {
     let c = buf[i].to_int()
@@ -94,7 +94,7 @@ pub struct CommandResult {
   exit_code : Int
   stdout : String
   stderr : String
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Executor error

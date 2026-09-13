@@ -7,7 +7,7 @@ pub struct CommandResult {
   exit_code : Int
   stdout : String
   stderr : String
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Executor error

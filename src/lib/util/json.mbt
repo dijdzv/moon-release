@@ -6,7 +6,7 @@ pub let uint_max_as_double : Double = 4294967295.0
 /// Escape JSON string
 /// RFC 8259 compliant escaping
 pub fn escape_json_string(s : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for c in s {
     match c {
       '"' => result.write_string("\\\"")
@@ -68,7 +68,7 @@ pub fn json_string(s : String) -> String {
 /// Keys are escaped to prevent injection attacks
 /// Values must be pre-formatted JSON (use json_string() for strings, .to_string() for numbers/booleans)
 pub fn build_json_object(pairs : Array[(String, String)]) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   result.write_string("{")
   for i = 0; i < pairs.length(); i = i + 1 {
     let (key, value) = pairs[i]
@@ -88,7 +88,7 @@ pub fn build_json_object(pairs : Array[(String, String)]) -> String {
 /// Build JSON array
 /// Items must be pre-formatted JSON (use json_string() for strings, .to_string() for numbers/booleans)
 pub fn build_json_array(items : Array[String]) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   result.write_string("[")
   for i = 0; i < items.length(); i = i + 1 {
     if i > 0 {

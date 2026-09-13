@@ -1,6 +1,6 @@
 ///|
 fn is_json_manifest(content : String) -> Bool {
-  content.trim().to_string().has_prefix("{")
+  content.trim().to_owned().has_prefix("{")
 }
 
 ///|

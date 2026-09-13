@@ -10,7 +10,7 @@ pub enum ChangeKind {
   Addition
   /// No change (compatible)
   Compatible
-} derive(Debug, Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// API change
@@ -19,13 +19,13 @@ pub struct ApiChange {
   category : String
   name : String
   description : String
-} derive(Debug, Show)
+} derive(Debug)
 
 ///|
 /// API diff result
 pub struct ApiDiff {
   changes : Array[ApiChange]
-} derive(Debug, Show)
+} derive(Debug)
 
 ///|
 /// Create empty ApiDiff
@@ -73,12 +73,12 @@ fn diff_types(
   changes : Array[ApiChange],
 ) -> Unit {
   // Index by name
-  let old_map : @hashmap.HashMap[String, TypeInfo] = @hashmap.new()
+  let old_map : @hashmap.HashMap[String, TypeInfo] = @hashmap.HashMap([])
   for t in old_types {
     old_map.set(t.name, t)
   }
 
-  let new_map : @hashmap.HashMap[String, TypeInfo] = @hashmap.new()
+  let new_map : @hashmap.HashMap[String, TypeInfo] = @hashmap.HashMap([])
   for t in new_types {
     new_map.set(t.name, t)
   }
@@ -142,12 +142,12 @@ fn diff_errors(
   new_errors : Array[ErrorInfo],
   changes : Array[ApiChange],
 ) -> Unit {
-  let old_map : @hashmap.HashMap[String, ErrorInfo] = @hashmap.new()
+  let old_map : @hashmap.HashMap[String, ErrorInfo] = @hashmap.HashMap([])
   for e in old_errors {
     old_map.set(e.name, e)
   }
 
-  let new_map : @hashmap.HashMap[String, ErrorInfo] = @hashmap.new()
+  let new_map : @hashmap.HashMap[String, ErrorInfo] = @hashmap.HashMap([])
   for e in new_errors {
     new_map.set(e.name, e)
   }
@@ -208,12 +208,12 @@ fn diff_traits(
   new_traits : Array[TraitInfo],
   changes : Array[ApiChange],
 ) -> Unit {
-  let old_map : @hashmap.HashMap[String, TraitInfo] = @hashmap.new()
+  let old_map : @hashmap.HashMap[String, TraitInfo] = @hashmap.HashMap([])
   for t in old_traits {
     old_map.set(t.name, t)
   }
 
-  let new_map : @hashmap.HashMap[String, TraitInfo] = @hashmap.new()
+  let new_map : @hashmap.HashMap[String, TraitInfo] = @hashmap.HashMap([])
   for t in new_traits {
     new_map.set(t.name, t)
   }
@@ -272,12 +272,12 @@ fn diff_values(
   new_values : Array[ValueInfo],
   changes : Array[ApiChange],
 ) -> Unit {
-  let old_map : @hashmap.HashMap[String, ValueInfo] = @hashmap.new()
+  let old_map : @hashmap.HashMap[String, ValueInfo] = @hashmap.HashMap([])
   for v in old_values {
     old_map.set(v.name, v)
   }
 
-  let new_map : @hashmap.HashMap[String, ValueInfo] = @hashmap.new()
+  let new_map : @hashmap.HashMap[String, ValueInfo] = @hashmap.HashMap([])
   for v in new_values {
     new_map.set(v.name, v)
   }
@@ -332,12 +332,12 @@ fn diff_methods(
   changes : Array[ApiChange],
   is_trait? : Bool = false,
 ) -> Unit {
-  let old_map : @hashmap.HashMap[String, MethodInfo] = @hashmap.new()
+  let old_map : @hashmap.HashMap[String, MethodInfo] = @hashmap.HashMap([])
   for m in old_methods {
     old_map.set(m.name, m)
   }
 
-  let new_map : @hashmap.HashMap[String, MethodInfo] = @hashmap.new()
+  let new_map : @hashmap.HashMap[String, MethodInfo] = @hashmap.HashMap([])
   for m in new_methods {
     new_map.set(m.name, m)
   }
