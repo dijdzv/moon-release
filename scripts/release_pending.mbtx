@@ -1,0 +1,34 @@
+import {
+  "moonbitlang/async@0.21.3",
+  "moonbitlang/async@0.21.3/fs",
+  "moonbitlang/async@0.21.3/process",
+  "moonbitlang/core/json",
+  "moonbitlang/core/env",
+}
+
+async fn main {
+  let manifest = @json.parse(@fs.read_file("moon.mod.json").text())
+  let version = match manifest {
+    Object(fields) => match fields.get("version") {
+      Some(String(value)) => value
+      _ => abort("Missing manifest version")
+    }
+    _ => abort("Invalid manifest")
+  }
+  let title = "chore: release v" + version
+  let (code, output, error) = @process.collect_output("git", ["log", "--format=%s", "--fixed-strings", "--grep=" + title])
+  guard code == 0 else { abort(error.text()) }
+  let prepared = output.text().split("\n").any(line => {
+    let line = line.trim().to_owned()
+    line == title || line.has_prefix(title + " (#")
+  })
+  let (code, tags, error) = @process.collect_output("git", ["tag", "--list", "v" + version])
+  guard code == 0 else { abort(error.text()) }
+  let pending = prepared && tags.text().trim().is_empty()
+  let args = @env.args()
+  guard args.length() == 2 else { abort("Expected GitHub output file path") }
+  @fs.write_file(args[1], "pending=" + pending.to_string() + "\n")
+  if pending {
+    println("Release " + version + " was prepared but has no tag. Resume with the build-only workflow input; do not generate another version bump.")
+  }
+}

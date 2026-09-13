@@ -77,6 +77,14 @@ The template includes three jobs:
 - `GITHUB_TOKEN` - Automatically provided by GitHub Actions
 - Supports `dry-run` and `build-only` modes via manual workflow dispatch
 
+For this repository, a merged release commit without its version tag pauses
+automatic release-PR generation. If platform builds fail before tag creation,
+fix the build and dispatch the Release workflow on `main` with `build-only: true`.
+This resumes building and publishing the manifest version without another bump;
+do not edit the release version, title or body. The name `build-only` is historical:
+it also runs publication. Failures after tag creation or partial registry publication
+require separate recovery; this pre-tag guard does not classify them as unpublished.
+
 With this setup, merging a release PR will automatically create a Git tag, a GitHub Release with release notes, and upload cross-platform binaries. No additional secrets are needed for the base workflow.
 
 > **Important:** The workflow template assumes release PRs are **squash merged**. The `build` and `release` jobs detect merged release PRs by matching the commit message against the PR title pattern (e.g. `chore: release v...`). With squash merge, the PR title becomes the commit message automatically. If you use a different merge strategy or edit the PR title before merging, these jobs will not trigger. In that case, create a Git tag (`git tag v<version>` + push) to ensure moon-release can track releases, and use `workflow_dispatch` with `build-only` to trigger the build and release jobs manually.
