@@ -6,7 +6,7 @@ pub struct Version {
   patch : UInt
   prerelease : String?
   build_metadata : String?
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Parse version from string
@@ -24,7 +24,7 @@ pub fn Version::parse(s : String) -> Version? {
   // Parse major.minor.patch
   let parts : Array[String] = version_core
     .split(".")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
   if parts.length() != 3 {
     return None
@@ -45,13 +45,13 @@ pub fn Version::parse(s : String) -> Version? {
 
   // Validate prerelease
   match prerelease {
-    Some(pre) => if not(validate_prerelease(pre)) { return None }
+    Some(pre) => if !(validate_prerelease(pre)) { return None }
     None => ()
   }
 
   // Validate build metadata
   match build_metadata {
-    Some(meta) => if not(validate_build_metadata(meta)) { return None }
+    Some(meta) => if !(validate_build_metadata(meta)) { return None }
     None => ()
   }
 
@@ -93,7 +93,7 @@ fn split_prerelease(s : String) -> (String, String?) {
 ///|
 /// Get substring from character array
 fn substr_chars(chars : Array[Char], start : Int, end : Int) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i = start; i < end; i = i + 1 {
     if i < chars.length() {
       result.write_char(chars[i])
@@ -139,7 +139,7 @@ pub fn Version::with_prerelease(
   self : Version,
   prerelease : String,
 ) -> Version? {
-  if not(validate_prerelease(prerelease)) {
+  if !(validate_prerelease(prerelease)) {
     return None
   }
   Some(Version::{
@@ -204,11 +204,11 @@ pub fn Version::compare(self : Version, other : Version) -> Int {
 fn compare_prerelease(a : String, b : String) -> Int {
   let a_parts : Array[String] = a
     .split(".")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
   let b_parts : Array[String] = b
     .split(".")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
 
   let min_len = if a_parts.length() < b_parts.length() {
@@ -293,11 +293,11 @@ pub fn validate_prerelease(prerelease : String) -> Bool {
 
   let identifiers : Array[String] = prerelease
     .split(".")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
 
   for id in identifiers {
-    if not(validate_prerelease_identifier(id)) {
+    if !(validate_prerelease_identifier(id)) {
       return false
     }
   }
@@ -316,10 +316,10 @@ fn validate_prerelease_identifier(id : String) -> Bool {
   let mut is_numeric = true
 
   for c in chars {
-    if not(is_alphanumeric_or_hyphen(c)) {
+    if !(is_alphanumeric_or_hyphen(c)) {
       return false
     }
-    if not(c >= '0' && c <= '9') {
+    if !(c >= '0' && c <= '9') {
       is_numeric = false
     }
   }
@@ -345,7 +345,7 @@ pub fn validate_build_metadata(metadata : String) -> Bool {
 
   let identifiers : Array[String] = metadata
     .split(".")
-    .map(fn(sv) { sv.to_string() })
+    .map(fn(sv) { sv.to_owned() })
     .collect()
 
   for id in identifiers {
@@ -354,7 +354,7 @@ pub fn validate_build_metadata(metadata : String) -> Bool {
     }
     let chars : Array[Char] = id.to_array()
     for c in chars {
-      if not(is_alphanumeric_or_hyphen(c)) {
+      if !(is_alphanumeric_or_hyphen(c)) {
         return false
       }
     }

@@ -4,7 +4,7 @@ pub struct MoonMod {
   name : String
   version : String
   deps : @hashmap.HashMap[String, String]?
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Parse error
@@ -23,6 +23,9 @@ pub fn ParseError::to_string(self : ParseError) -> String {
 ///|
 /// Parse moon.mod.json with try-catch-noraise pattern
 pub fn parse(content : String) -> MoonMod raise ParseError {
+  if !is_json_manifest(content) {
+    return { name: read_mod_field(content, "name"), version: read_mod_field(content, "version"), deps: None }
+  }
   let json = try @json.parse(content) catch {
     e => raise ParseError("JSON parse error: " + e.to_string())
   } noraise {
@@ -51,7 +54,7 @@ pub fn parse(content : String) -> MoonMod raise ParseError {
   // deps field (optional)
   let deps : @hashmap.HashMap[String, String]? = match obj.get("deps") {
     Some(Object(deps_obj)) => {
-      let deps_map : @hashmap.HashMap[String, String] = @hashmap.new()
+      let deps_map : @hashmap.HashMap[String, String] = @hashmap.HashMap([])
       for k, v in deps_obj {
         match v {
           String(version_str) => deps_map.set(k, version_str)
@@ -76,6 +79,12 @@ pub fn update_version(
 ) -> String raise ParseError {
   // First parse to verify valid JSON
   let _ = parse(content)
+
+  if !is_json_manifest(content) {
+    let (start, end) = modern_field_span(content, "version")
+    let chars = content.to_array()
+    return substr_str(chars, 0, start) + "\"" + new_version.to_string() + "\"" + substr_str(chars, end, chars.length())
+  }
 
   // Replace version field
   let version_str = new_version.to_string()
@@ -210,7 +219,7 @@ fn find_json_key(haystack : String, needle : String) -> Int {
       }
       continue
     }
-    if not(in_string) {
+    if !(in_string) {
       if c == '{' {
         depth = depth + 1
       } else if c == '}' {
@@ -225,7 +234,7 @@ fn find_json_key(haystack : String, needle : String) -> Int {
 ///|
 /// Get substring from character array
 fn substr_str(chars : Array[Char], start : Int, end : Int) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   for i = start; i < end; i = i + 1 {
     if i >= 0 && i < chars.length() {
       result.write_char(chars[i])

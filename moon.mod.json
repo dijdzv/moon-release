@@ -2,8 +2,7 @@
   "name": "dijdzv/moon-release",
   "version": "0.3.2",
   "deps": {
-    "moonbitlang/async": "0.16.6",
-    "TheWaWaR/clap": "0.2.6"
+    "moonbitlang/async": "0.21.3"
   },
   "readme": "README.md",
   "repository": "https://github.com/dijdzv/moon-release",

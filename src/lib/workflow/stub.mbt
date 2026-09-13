@@ -235,8 +235,8 @@ pub fn run_semver_check(
 
 ///|
 /// Get latest tag (stub)
-pub fn get_latest_tag(_repo : @git.Repository) -> String? raise WorkflowError {
-  raise General("Workflow requires native target")
+pub fn get_latest_tag(_repo : @git.Repository) -> String? {
+  None
 }
 
 ///|

@@ -4,7 +4,7 @@ pub(all) enum BumpType {
   Major
   Minor
   Patch
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Bump version
@@ -27,7 +27,7 @@ pub fn bump_with_prerelease(
 ) -> Version? {
   // Validate prerelease if provided
   match prerelease {
-    Some(pre_str) => if not(validate_prerelease(pre_str)) { return None }
+    Some(pre_str) => if !(validate_prerelease(pre_str)) { return None }
     None => ()
   }
   // Note: UInt overflow is theoretically possible (e.g., version 4294967295.0.0 + major bump)

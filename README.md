@@ -11,6 +11,12 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
 - **npm** - Automatic publishing to the npm registry
 - **API Compatibility Check** - semver-checks for breaking change detection
 - **Monorepo Support** - Version synchronization via version_group
+- **Manifest Formats** - Read and update `moon.mod` and legacy `moon.mod.json`, including mixed-format monorepos
+
+Each MoonBit module must contain one manifest. If both formats exist, release
+operations reject the ambiguity. Version updates preserve the selected format,
+comments and unrelated content; dependencies are not rewritten. In `moon.mod`,
+release metadata (`name` and `version`) must use string literals.
 
 ## Table of Contents
 
@@ -451,6 +457,10 @@ Example: If `core` has a breaking change and `utils` has a feat, both will recei
 ## CLI Usage
 
 moon-release can also be used as a standalone CLI tool for local development and debugging.
+
+The CLI is also the entry point used by the release workflows. Argument parsing
+uses MoonBit's standard `argparse` package. Options that take a value, including
+`--bump` and `--prerelease`, require that value; omit the option to use the default behavior.
 
 ### Installation
 

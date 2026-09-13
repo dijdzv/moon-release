@@ -1,6 +1,7 @@
 # MoonBit
 .mooncakes/
 _build/
+.work/
 target
 
 # Generated files (pre-build)

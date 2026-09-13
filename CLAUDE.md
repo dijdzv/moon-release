@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+公開 Issue・PR・文書に他のリポジトリへの参照を追加するのは、ユーザーの許可がある場合に限る。
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Language
@@ -28,7 +30,7 @@ The `justfile` provides shortcuts: `just test`, `just test-integration`, `just t
 
 ## Architecture
 
-MoonBit release automation tool. CLI dispatches commands via `TheWaWaR/clap` parser.
+MoonBit release automation tool. CLI dispatches commands via the standard library's `argparse` parser.
 
 ### Package Dependency Flow
 
@@ -39,7 +41,7 @@ src/               CLI entry point, command handlers, completions, schema
         ├── lib/github/        GitHub API via gh CLI
         ├── lib/semver_check/  API compatibility detection via moon doc
         ├── lib/git/           Git repository operations
-        ├── lib/moon_mod/      moon.mod.json parser
+        ├── lib/moon_mod/      moon.mod / moon.mod.json metadata and updates
         ├── lib/config/        release.json parsing & Config struct
         ├── lib/semver/        SemVer parsing, comparison, bumping
         ├── lib/conventional/  Conventional Commits parser
@@ -74,12 +76,12 @@ Each follows: Phase 1 (collect per-package info) → Phase 2 (consolidate by `ve
 
 - Named/optional params: `fn foo(x~ : Bool = false)` called as `foo(x=true)`
 - Error handling: `try { ... } catch { ... } noraise { ... }` pattern
-- `String.split()` returns `Iter[StringView]` — use `.to_string()` to convert
+- `String.split()` returns `Iter[StringView]` — use `.to_owned()` to convert
 - `\\` in string literals is escape for single `\`
 - Test files use `_wbtest.mbt` suffix (white-box tests)
 - Multi-line string literals use `#|` prefix per line
 
 ## Test Expectations
 
-- **Unit tests** (`moon test --target native`): 485+ tests, 0 failures. 3 warnings (`unused_error_type`) are expected.
+- **Unit tests** (`moon test --target native`): all tests must pass. Fix warnings in project code rather than treating them as expected.
 - **Integration tests** (`./tests/integration/run_tests.sh`): 58+ tests, builds binary automatically before running. 2 tests require `gh auth` and are skipped otherwise.

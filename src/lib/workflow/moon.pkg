@@ -13,12 +13,15 @@ import {
   "moonbitlang/core/json",
 }
 
+import { "moonbitlang/async" } for "wbtest"
+
 options(
   targets: {
     "common.mbt": [ "native" ],
     "context.mbt": [ "native" ],
     "release.mbt": [ "native" ],
     "release_wbtest.mbt": [ "native" ],
+    "manifest_wbtest.mbt": [ "native" ],
     "stub.mbt": [ "wasm", "wasm-gc", "js" ],
   },
 )

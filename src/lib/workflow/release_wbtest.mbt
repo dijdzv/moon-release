@@ -769,7 +769,7 @@ test "replace_json_field preserves trailing newline" {
   // The replace_json_field itself may or may not preserve trailing newline,
   // so apply the same logic as update_package_json_version
   let final_result = if with_newline.has_suffix("\n") &&
-    not(result.has_suffix("\n")) {
+    !(result.has_suffix("\n")) {
     result + "\n"
   } else {
     result

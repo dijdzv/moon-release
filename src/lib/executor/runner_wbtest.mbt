@@ -122,10 +122,9 @@ test "repo_git_command - empty args" {
 }
 
 ///|
-test "get_env_var - HOME is set" {
-  // HOME should always be set on Unix-like systems
-  let home = get_env_var("HOME")
-  assert_true(home is Some(_))
+test "get_env_var - PATH is set" {
+  let path = get_env_var("PATH")
+  assert_true(path is Some(_))
 }
 
 ///|

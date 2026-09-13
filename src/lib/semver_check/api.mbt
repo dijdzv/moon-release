@@ -6,7 +6,7 @@ pub struct PackageApi {
   errors : Array[ErrorInfo]
   traits : Array[TraitInfo]
   values : Array[ValueInfo]
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Create empty PackageApi
@@ -20,7 +20,7 @@ pub struct TypeInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Error type information
@@ -28,7 +28,7 @@ pub struct ErrorInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Trait information
@@ -36,21 +36,21 @@ pub struct TraitInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Method information
 pub struct MethodInfo {
   name : String
   signature : String
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Value (top-level function, etc.) information
 pub struct ValueInfo {
   name : String
   signature : String
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Parse error
@@ -61,14 +61,14 @@ pub suberror ParseError {
 ///|
 /// Remove HTML tags from signature
 fn strip_html_tags(s : String) -> String {
-  let result = StringBuilder::new()
+  let result = StringBuilder()
   let mut in_tag = false
   for c in s {
     if c == '<' {
       in_tag = true
     } else if c == '>' {
       in_tag = false
-    } else if not(in_tag) {
+    } else if !(in_tag) {
       result.write_char(c)
     }
   }

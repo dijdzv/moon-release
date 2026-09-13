@@ -9,7 +9,7 @@ pub enum PublishTarget {
   NpmOnly(NpmConfig) // Only npm
   Both(NpmConfig) // Both mooncakes.io and npm
   NoPublish // No publishing
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// npm-specific configuration
@@ -17,7 +17,7 @@ pub(all) struct NpmConfig {
   build_command : String? // Custom build command (None = default "moon build --target js")
   provenance : Bool // Use --provenance flag for Trusted Publishing
   timeout : UInt // Publish timeout in seconds
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Git release mode — how releases are created
@@ -25,7 +25,7 @@ pub enum GitReleaseMode {
   GitHubRelease(draft~ : Bool, latest~ : Bool) // Full GitHub release
   TagOnly // Create tag only (no GitHub release)
   NoGitRelease // No tag, no release
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 // ============================================================================
 // Config struct
@@ -66,7 +66,7 @@ pub struct Config {
   npm_publish_timeout : UInt // In seconds
   bump_all_packages : Bool // Bump all packages uniformly (fixed versioning for monorepo)
   bootstrap_sha : @util.CommitHash? // Starting commit SHA for initial release (skip earlier history)
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Package configuration (for monorepo)
@@ -77,7 +77,7 @@ pub struct PackageConfig {
   npm_publish : Bool
   npm_build_command : String? // Command to build JS target before npm publish
   version_group : String?
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Configuration error
@@ -183,12 +183,12 @@ pub fn Config::parse(
     "moon_publish_timeout", "npm_publish_timeout", "bump_all_packages",
     "bootstrap_sha",
   ]
-  let known_set : @hashset.HashSet[String] = @hashset.new()
+  let known_set : @hashset.HashSet[String] = @hashset.HashSet([])
   for k in known_keys {
     known_set.add(k)
   }
   for key, _ in obj {
-    if not(known_set.contains(key)) {
+    if !(known_set.contains(key)) {
       warnings.push("unknown config key '\{key}' in release.json")
     }
   }
@@ -298,7 +298,7 @@ pub fn Config::parse(
   }
 
   // Validate: git_release_enable requires git_tag_enable
-  if config.git_release_enable && not(config.git_tag_enable) {
+  if config.git_release_enable && !(config.git_tag_enable) {
     raise ConfigError(
       "'git_release_enable' requires 'git_tag_enable' to be true (cannot create a GitHub release without a tag)",
     )
@@ -757,7 +757,7 @@ pub fn PackageConfig::publish_target(self : PackageConfig) -> PublishTarget {
 /// are not supported — each space-separated token becomes a separate argument.
 pub fn NpmConfig::build_args(self : NpmConfig) -> Array[String] {
   match self.build_command {
-    Some(c) => c.split(" ").map(fn(s) { s.to_string() }).collect()
+    Some(c) => c.split(" ").map(fn(s) { s.to_owned() }).collect()
     None => ["moon", "build", "--target", "js", "--release"]
   }
 }
