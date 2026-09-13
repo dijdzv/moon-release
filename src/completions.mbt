@@ -1,19 +1,19 @@
 /// Shell completion script generation
 ///
 /// IMPORTANT: These completion scripts are hand-maintained and must be manually
-/// synced with the CLI parser definition in main.mbt whenever commands, subcommands,
+/// synced with the CLI parser definition in cli.mbt whenever commands, subcommands,
 /// or flags are added/removed/changed.
 
 ///|
 /// generate-completions command
-pub fn cmd_generate_completions(subcmd : @clap.SimpleValue) -> Unit {
-  let shell : String = if subcmd.positional_args.length() > 0 {
-    subcmd.positional_args[0]
-  } else {
-    println("Error: shell argument is required")
-    println("Usage: moon-release generate-completions <shell>")
-    println("Supported shells: bash, zsh, fish")
-    exit_error()
+pub fn cmd_generate_completions(subcmd : @argparse.Matches) -> Unit {
+  let shell = get_cli_value(subcmd, "shell") catch {
+    _ => {
+      println("Error: shell argument is required")
+      println("Usage: moon-release generate-completions <shell>")
+      println("Supported shells: bash, zsh, fish")
+      exit_error()
+    }
   }
 
   match shell {

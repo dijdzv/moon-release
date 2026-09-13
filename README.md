@@ -458,6 +458,10 @@ Example: If `core` has a breaking change and `utils` has a feat, both will recei
 
 moon-release can also be used as a standalone CLI tool for local development and debugging.
 
+The CLI is also the entry point used by the release workflows. Argument parsing
+uses MoonBit's standard `argparse` package. Options that take a value, including
+`--bump` and `--prerelease`, require that value; omit the option to use the default behavior.
+
 ### Installation
 
 #### From mooncakes.io (recommended)

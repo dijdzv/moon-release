@@ -6,7 +6,7 @@ import {
   "dijdzv/moon-release/lib/moon_mod",
   "dijdzv/moon-release/lib/workflow",
   "dijdzv/moon-release/lib/util",
-  "TheWaWaR/clap",
+  "moonbitlang/core/argparse",
   "moonbitlang/async",
   "moonbitlang/async/fs",
   "moonbitlang/async/io",
@@ -28,6 +28,8 @@ options(
   targets: {
     "completions.mbt": [ "native" ],
     "main.mbt": [ "native" ],
+    "cli.mbt": [ "native" ],
+    "cli_wbtest.mbt": [ "native" ],
     "stub.mbt": [ "wasm", "wasm-gc", "js" ],
     "version_info.mbt": [ "native" ],
   },

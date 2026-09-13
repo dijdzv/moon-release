@@ -30,7 +30,7 @@ The `justfile` provides shortcuts: `just test`, `just test-integration`, `just t
 
 ## Architecture
 
-MoonBit release automation tool. CLI dispatches commands via `TheWaWaR/clap` parser.
+MoonBit release automation tool. CLI dispatches commands via the standard library's `argparse` parser.
 
 ### Package Dependency Flow
 
