@@ -1,4 +1,5 @@
 import {
+  "moonbitlang/async",
   "dijdzv/moon-release/lib/config",
   "dijdzv/moon-release/lib/conventional",
   "dijdzv/moon-release/lib/semver",
@@ -19,6 +20,7 @@ options(
     "context.mbt": [ "native" ],
     "release.mbt": [ "native" ],
     "release_wbtest.mbt": [ "native" ],
+    "manifest_wbtest.mbt": [ "native" ],
     "stub.mbt": [ "wasm", "wasm-gc", "js" ],
   },
 )

@@ -9,7 +9,7 @@ pub enum PathValidation {
   AbsolutePath
   /// Path contains a NUL byte
   NullByte
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Check if path contains a ".." traversal segment

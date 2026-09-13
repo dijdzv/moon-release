@@ -13,7 +13,7 @@ pub enum CommitType {
   Chore
   Revert
   Custom(String)
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Structured representation of Conventional Commits
@@ -24,4 +24,4 @@ pub struct ConventionalCommit {
   body : String?
   breaking : Bool
   footers : Array[(String, String)]
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)

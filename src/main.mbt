@@ -106,7 +106,7 @@ fn get_dry_run_flag(subcmd : @clap.SimpleValue, global_dry_run : Bool) -> Bool {
 fn[T] fail_workflow(
   e : @workflow.WorkflowError,
   json_output : Bool,
-  hint_override~ : String = "",
+  hint_override? : String = "",
 ) -> T {
   handle_workflow_error(e, json_output, hint_override~)
   exit_error()
@@ -117,9 +117,7 @@ fn[T] fail_workflow(
 fn join_strings(arr : Array[String], sep : String) -> String {
   arr
   .iter()
-  .fold(init="", fn(acc, s) {
-    if acc.is_empty() { s } else { acc + sep + s }
-  })
+  .fold(init="", fn(acc, s) { if acc.is_empty() { s } else { acc + sep + s } })
 }
 
 ///|
@@ -394,7 +392,8 @@ async fn cmd_update(
 
   // Parse bump options before monorepo branching
   let forced_bump = get_bump_type(subcmd)
-  let bump_all = config.bump_all_packages || get_flag_or_false(subcmd, "bump-all")
+  let bump_all = config.bump_all_packages ||
+    get_flag_or_false(subcmd, "bump-all")
 
   // Check if monorepo mode
   let packages_mode = get_flag_or_false(subcmd, "packages")
@@ -446,7 +445,8 @@ async fn cmd_update(
   // Registry check (if enabled) with try-catch-noraise pattern
   if config.registry_check {
     // Get package name: try moon.mod.json first, then package.json
-    let pkg_name = match (try? load_moon_mod("moon.mod.json")).to_option() {
+    let pkg_name = match
+      (try? load_moon_mod(@moon_mod.resolve_path(""))).to_option() {
       Some(m) => m.name
       None =>
         match
@@ -520,7 +520,7 @@ async fn cmd_update(
             {
               let files : Array[String] = []
               if config.moon_publish {
-                files.push("\"moon.mod.json\"")
+                files.push(@util.json_string(@moon_mod.resolve_path("")))
               }
               if config.npm_publish {
                 files.push("\"package.json\"")
@@ -567,7 +567,8 @@ fn get_bump_flags(
   config : @config.Config,
 ) -> (@semver.BumpType?, Bool) {
   let forced_bump = get_bump_type(subcmd)
-  let bump_all = config.bump_all_packages || get_flag_or_false(subcmd, "bump-all")
+  let bump_all = config.bump_all_packages ||
+    get_flag_or_false(subcmd, "bump-all")
   (forced_bump, bump_all)
 }
 
@@ -818,7 +819,7 @@ async fn cmd_init(
   // Write default config as JSON with try-catch-noraise pattern
   let config_json = generate_default_config_json()
 
-  try @fs.write_file("release.json", config_json, create=0o644) catch {
+  try @fs.write_file("release.json", config_json, permission=0o644) catch {
     e => {
       println("Error: Failed to write release.json: " + e.to_string())
       exit_error()
@@ -891,7 +892,7 @@ fn cmd_version() -> Unit {
   println("Features:")
   println("  - Conventional Commits parsing")
   println("  - Semantic Versioning")
-  println("  - moon.mod.json version management")
+  println("  - moon.mod / moon.mod.json version management")
   println("  - Git tag creation")
   println("  - GitHub release creation")
   println("  - mooncakes.io publishing")
@@ -930,9 +931,11 @@ async fn cmd_set_version(
   }
 
   // Read current moon.mod.json with try-catch-noraise pattern
-  let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
+  let moon_mod_content = try
+    @fs.read_file(@moon_mod.resolve_path("")).text()
+  catch {
     e => {
-      println("Error: Failed to read moon.mod.json: " + e.to_string())
+      println("Error: Failed to read MoonBit manifest: " + e.to_string())
       exit_error()
     }
   } noraise {
@@ -942,7 +945,7 @@ async fn cmd_set_version(
   // Get current version with try-catch-noraise pattern
   let moon_mod = try @moon_mod.parse(moon_mod_content) catch {
     e => {
-      println("Error: Failed to parse moon.mod.json: " + e.to_string())
+      println("Error: Failed to parse MoonBit manifest: " + e.to_string())
       exit_error()
     }
   } noraise {
@@ -950,7 +953,7 @@ async fn cmd_set_version(
   }
 
   if dry_run {
-    println("[dry-run] Would update moon.mod.json:")
+    println("[dry-run] Would update MoonBit manifest:")
     println("  Current version: " + moon_mod.version)
     println("  New version: " + new_version.to_string())
     return
@@ -969,16 +972,22 @@ async fn cmd_set_version(
   }
 
   // Write file with try-catch-noraise pattern
-  try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
+  try
+    @fs.write_file(
+      @moon_mod.resolve_path(""),
+      updated_content,
+      permission=0o644,
+    )
+  catch {
     e => {
-      println("Error: Failed to write moon.mod.json: " + e.to_string())
+      println("Error: Failed to write MoonBit manifest: " + e.to_string())
       exit_error()
     }
   } noraise {
     _ => ()
   }
 
-  println("Updated moon.mod.json:")
+  println("Updated MoonBit manifest:")
   println("  " + moon_mod.version + " -> " + new_version.to_string())
 }
 

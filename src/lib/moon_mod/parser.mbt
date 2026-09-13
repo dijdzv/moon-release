@@ -4,7 +4,7 @@ pub struct MoonMod {
   name : String
   version : String
   deps : @hashmap.HashMap[String, String]?
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Parse error
@@ -23,6 +23,9 @@ pub fn ParseError::to_string(self : ParseError) -> String {
 ///|
 /// Parse moon.mod.json with try-catch-noraise pattern
 pub fn parse(content : String) -> MoonMod raise ParseError {
+  if !is_json_manifest(content) {
+    return { name: read_mod_field(content, "name"), version: read_mod_field(content, "version"), deps: None }
+  }
   let json = try @json.parse(content) catch {
     e => raise ParseError("JSON parse error: " + e.to_string())
   } noraise {
@@ -76,6 +79,12 @@ pub fn update_version(
 ) -> String raise ParseError {
   // First parse to verify valid JSON
   let _ = parse(content)
+
+  if !is_json_manifest(content) {
+    let (start, end) = modern_field_span(content, "version")
+    let chars = content.to_array()
+    return substr_str(chars, 0, start) + "\"" + new_version.to_string() + "\"" + substr_str(chars, end, chars.length())
+  }
 
   // Replace version field
   let version_str = new_version.to_string()

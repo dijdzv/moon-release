@@ -9,7 +9,7 @@ pub enum PublishTarget {
   NpmOnly(NpmConfig) // Only npm
   Both(NpmConfig) // Both mooncakes.io and npm
   NoPublish // No publishing
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// npm-specific configuration
@@ -17,7 +17,7 @@ pub(all) struct NpmConfig {
   build_command : String? // Custom build command (None = default "moon build --target js")
   provenance : Bool // Use --provenance flag for Trusted Publishing
   timeout : UInt // Publish timeout in seconds
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Git release mode — how releases are created
@@ -25,7 +25,7 @@ pub enum GitReleaseMode {
   GitHubRelease(draft~ : Bool, latest~ : Bool) // Full GitHub release
   TagOnly // Create tag only (no GitHub release)
   NoGitRelease // No tag, no release
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 // ============================================================================
 // Config struct
@@ -66,7 +66,7 @@ pub struct Config {
   npm_publish_timeout : UInt // In seconds
   bump_all_packages : Bool // Bump all packages uniformly (fixed versioning for monorepo)
   bootstrap_sha : @util.CommitHash? // Starting commit SHA for initial release (skip earlier history)
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Package configuration (for monorepo)
@@ -77,7 +77,7 @@ pub struct PackageConfig {
   npm_publish : Bool
   npm_build_command : String? // Command to build JS target before npm publish
   version_group : String?
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Configuration error

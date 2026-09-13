@@ -382,10 +382,10 @@ pub async fn validate_publish_config(
     // Validate mooncakes publishing requirements
     match publish_target {
       MooncakesOnly | Both(_) => {
-        let content = try @fs.read_file("moon.mod.json").text() catch {
-          _ =>
+        let content = try @fs.read_file(resolve_moon_manifest("")).text() catch {
+          e =>
             raise ConfigValidationError(
-              "moon_publish is enabled but moon.mod.json not found",
+              "moon_publish is enabled but the MoonBit manifest could not be read: " + e.to_string(),
             )
         } noraise {
           c => c
@@ -393,7 +393,7 @@ pub async fn validate_publish_config(
         try @moon_mod.parse(content) catch {
           e =>
             raise ConfigValidationError(
-              "moon_publish is enabled but moon.mod.json is invalid: " +
+              "moon_publish is enabled but the MoonBit manifest is invalid: " +
               e.to_string(),
             )
         } noraise {
@@ -464,7 +464,7 @@ pub async fn validate_publish_config(
 
     match pkg.publish_target() {
       MooncakesOnly | Both(_) => {
-        let moon_mod_path = pkg_path + "moon.mod.json"
+        let moon_mod_path = resolve_moon_manifest(pkg_path)
         let content = try @fs.read_file(moon_mod_path).text() catch {
           _ =>
             raise ConfigValidationError(
@@ -516,36 +516,27 @@ pub async fn validate_publish_config(
 }
 
 ///|
-/// Get package name from moon.mod.json
-/// Uses direct JSON parsing instead of @moon_mod.parse to avoid requiring
+/// Get the package name without requiring
 /// the "version" field, which may not exist when moon_publish is disabled.
 async fn get_package_name() -> String raise WorkflowError {
-  let content = try @fs.read_file("moon.mod.json").text() catch {
+  let content = try @fs.read_file(resolve_moon_manifest("")).text() catch {
     e =>
       raise General(
-        "Failed to read moon.mod.json: " + e.to_string(),
+        "Failed to read MoonBit manifest: " + e.to_string(),
       )
   } noraise {
     c => c
   }
 
-  let json = try @json.parse(content) catch {
+  let name = try @moon_mod.read_name(content) catch {
     e =>
       raise General(
-        "Failed to parse moon.mod.json: " + e.to_string(),
+        "Failed to parse MoonBit manifest: " + e.to_string(),
       )
   } noraise {
     j => j
   }
 
-  let name = match json {
-    Object(o) =>
-      match o.get("name") {
-        Some(String(s)) => s
-        _ => raise General("Missing 'name' field in moon.mod.json")
-      }
-    _ => raise General("Invalid moon.mod.json: expected JSON object")
-  }
 
   // Strip owner prefix from MoonBit module name (e.g., "dijdzv/moon-release" -> "moon-release")
   let parts = name.split("/").map(fn(sv) { sv.to_string() }).collect()
@@ -602,16 +593,16 @@ pub async fn get_current_version(
   // Read from moon.mod.json if mooncakes publishing is enabled
   match publish_target {
     MooncakesOnly | Both(_) => {
-      let content = try @fs.read_file("moon.mod.json").text() catch {
+      let content = try @fs.read_file(resolve_moon_manifest("")).text() catch {
         e =>
-          raise General("Failed to read moon.mod.json: " + e.to_string())
+          raise General("Failed to read MoonBit manifest: " + e.to_string())
       } noraise {
         c => c
       }
 
       let moon_mod = try @moon_mod.parse(content) catch {
         e =>
-          raise General("Failed to parse moon.mod.json: " + e.to_string())
+          raise General("Failed to parse MoonBit manifest: " + e.to_string())
       } noraise {
         m => m
       }
@@ -620,7 +611,7 @@ pub async fn get_current_version(
         Some(v) => moon_version = Some(v)
         None =>
           raise General(
-            "Invalid version in moon.mod.json: " + moon_mod.version,
+            "Invalid version in MoonBit manifest: " + moon_mod.version,
           )
       }
     }
@@ -667,7 +658,7 @@ async fn get_package_current_version(
 
   // Read from moon.mod.json if moon_publish is enabled
   if pkg.moon_publish {
-    let moon_mod_path = pkg_path + "moon.mod.json"
+    let moon_mod_path = resolve_moon_manifest(pkg_path)
     let content = try @fs.read_file(moon_mod_path).text() catch {
       _ => ""
     } noraise {
@@ -897,7 +888,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
     match publish_target {
       MooncakesOnly =>
         println(
-          "[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}",
+          "[dry-run] Would update MoonBit manifest to version \{ctx.new_version.to_string()}",
         )
       NpmOnly(_) =>
         println(
@@ -905,7 +896,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
         )
       Both(_) => {
         println(
-          "[dry-run] Would update moon.mod.json to version \{ctx.new_version.to_string()}",
+          "[dry-run] Would update MoonBit manifest to version \{ctx.new_version.to_string()}",
         )
         println(
           "[dry-run] Would update package.json to version \{ctx.new_version.to_string()}",
@@ -919,10 +910,10 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
   // Update moon.mod.json if mooncakes publishing is enabled
   match publish_target {
     MooncakesOnly | Both(_) => {
-      let moon_mod_content = try @fs.read_file("moon.mod.json").text() catch {
+      let moon_mod_content = try @fs.read_file(resolve_moon_manifest("")).text() catch {
         e =>
           raise General(
-            "Failed to read moon.mod.json: " +
+            "Failed to read MoonBit manifest: " +
             e.to_string() +
             ". Make sure the file exists and is readable.",
           )
@@ -935,16 +926,16 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
       catch {
         e =>
           raise General(
-            "Failed to update version in moon.mod.json: " + e.to_string(),
+            "Failed to update version in MoonBit manifest: " + e.to_string(),
           )
       } noraise {
         c => c
       }
 
-      try @fs.write_file("moon.mod.json", updated_content, create=0o644) catch {
+      try @fs.write_file(resolve_moon_manifest(""), updated_content, permission=0o644) catch {
         e =>
           raise General(
-            "Failed to write moon.mod.json: " +
+            "Failed to write MoonBit manifest: " +
             e.to_string() +
             ". Check file permissions.",
           )
@@ -952,7 +943,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
         _ => ()
       }
 
-      println("Updated moon.mod.json to version \{ctx.new_version.to_string()}")
+      println("Updated MoonBit manifest to version \{ctx.new_version.to_string()}")
     }
     _ => ()
   }
@@ -963,7 +954,7 @@ pub async fn run_update(ctx : ReleaseContext) -> Unit raise WorkflowError {
       match update_package_json_version(ctx.new_version) {
         Some(updated_pkg_json) => {
           try
-            @fs.write_file("package.json", updated_pkg_json, create=0o644)
+            @fs.write_file("package.json", updated_pkg_json, permission=0o644)
           catch {
             e =>
               raise General(
@@ -1152,7 +1143,7 @@ pub async fn run_release_pr(
   }
 
   // Stage changes - add relevant files based on publish configuration
-  let files_to_stage = collect_files_to_stage(ctx)
+  let files_to_stage = resolve_files_to_stage(ctx)
   let stage_cmd = ctx.repo.stage_files_command(files_to_stage)
   let stage_result = try @executor.run_git(ctx.repo, stage_cmd) catch {
     e => {
@@ -1376,6 +1367,26 @@ pub async fn run_release_pr(
 
 ///|
 /// Collect files to stage based on publish configuration
+async fn resolve_moon_manifest(prefix : String) -> String raise WorkflowError {
+  try @moon_mod.resolve_path(prefix) catch {
+    e => raise General(e.to_string())
+  }
+}
+
+///|
+async fn resolve_files_to_stage(ctx : ReleaseContext) -> Array[String] raise WorkflowError {
+  let result : Array[String] = []
+  for path in collect_files_to_stage(ctx) {
+    if path.strip_suffix("moon.mod.json") is Some(prefix) {
+      result.push(resolve_moon_manifest(prefix.to_string()))
+    } else {
+      result.push(path)
+    }
+  }
+  result
+}
+
+///|
 fn collect_files_to_stage(ctx : ReleaseContext) -> Array[String] {
   let files : Array[String] = []
   let is_monorepo = not(ctx.config.packages.is_empty())
@@ -2231,7 +2242,7 @@ pub async fn run_update_packages(
     // Update moon.mod.json if mooncakes publishing is enabled
     match pkg.publish_target() {
       MooncakesOnly | Both(_) => {
-        let mmp = pkg_path + "moon.mod.json"
+        let mmp = resolve_moon_manifest(pkg_path)
         let content = try @fs.read_file(mmp).text() catch {
           _ => {
             println("  Warning: Could not read " + mmp)
@@ -2258,7 +2269,7 @@ pub async fn run_update_packages(
             c => c
           }
 
-          try @fs.write_file(mmp, updated_content, create=0o644) catch {
+          try @fs.write_file(mmp, updated_content, permission=0o644) catch {
             _ => {
               println("  Warning: Could not write " + mmp)
               continue
@@ -2279,7 +2290,7 @@ pub async fn run_update_packages(
           update_package_json_version(plan.new_version, path=pkg_json_path) {
           Some(updated_pkg_json) => {
             try
-              @fs.write_file(pkg_json_path, updated_pkg_json, create=0o644)
+              @fs.write_file(pkg_json_path, updated_pkg_json, permission=0o644)
             catch {
               _ => println("  Warning: Could not write " + pkg_json_path)
             } noraise {

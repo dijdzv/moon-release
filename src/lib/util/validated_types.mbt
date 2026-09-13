@@ -1,23 +1,23 @@
 ///|
 /// Validated git branch name (git-check-ref-format compliant)
 /// Constructed only via BranchName::new() which performs validation
-pub(all) struct BranchName(String) derive(Show, Eq)
+pub(all) struct BranchName(String) derive(Debug, Show, Eq)
 
 ///|
 /// Validated git tag name (git-check-ref-format compliant)
-pub(all) struct TagName(String) derive(Show, Eq)
+pub(all) struct TagName(String) derive(Debug, Show, Eq)
 
 ///|
 /// Validated commit hash (hex characters, 7-40 chars)
-pub(all) struct CommitHash(String) derive(Show, Eq)
+pub(all) struct CommitHash(String) derive(Debug, Show, Eq)
 
 ///|
 /// Validated package path (no directory traversal, relative only)
-pub(all) struct PackagePath(String) derive(Show, Eq)
+pub(all) struct PackagePath(String) derive(Debug, Show, Eq)
 
 ///|
 /// Validated GitHub repository slug ("owner/repo" format)
-pub(all) struct RepositorySlug(String) derive(Show, Eq)
+pub(all) struct RepositorySlug(String) derive(Debug, Show, Eq)
 
 ///|
 /// Validation error

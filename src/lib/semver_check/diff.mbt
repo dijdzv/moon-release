@@ -10,7 +10,7 @@ pub enum ChangeKind {
   Addition
   /// No change (compatible)
   Compatible
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// API change
@@ -19,13 +19,13 @@ pub struct ApiChange {
   category : String
   name : String
   description : String
-} derive(Show)
+} derive(Debug, Show)
 
 ///|
 /// API diff result
 pub struct ApiDiff {
   changes : Array[ApiChange]
-} derive(Show)
+} derive(Debug, Show)
 
 ///|
 /// Create empty ApiDiff

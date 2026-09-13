@@ -4,7 +4,7 @@ pub(all) enum BumpType {
   Major
   Minor
   Patch
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Bump version

@@ -6,7 +6,7 @@ pub struct Version {
   patch : UInt
   prerelease : String?
   build_metadata : String?
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Parse version from string

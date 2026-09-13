@@ -11,6 +11,12 @@ Automated release management tool for MoonBit projects. Inspired by [release-plz
 - **npm** - Automatic publishing to the npm registry
 - **API Compatibility Check** - semver-checks for breaking change detection
 - **Monorepo Support** - Version synchronization via version_group
+- **Manifest Formats** - Read and update `moon.mod` and legacy `moon.mod.json`, including mixed-format monorepos
+
+Each MoonBit module must contain one manifest. If both formats exist, release
+operations reject the ambiguity. Version updates preserve the selected format,
+comments and unrelated content; dependencies are not rewritten. In `moon.mod`,
+release metadata (`name` and `version`) must use string literals.
 
 ## Table of Contents
 

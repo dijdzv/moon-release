@@ -6,7 +6,7 @@ pub struct PackageApi {
   errors : Array[ErrorInfo]
   traits : Array[TraitInfo]
   values : Array[ValueInfo]
-} derive(Show)
+} derive(Debug, Show)
 
 ///|
 /// Create empty PackageApi
@@ -20,7 +20,7 @@ pub struct TypeInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Error type information
@@ -28,7 +28,7 @@ pub struct ErrorInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Trait information
@@ -36,21 +36,21 @@ pub struct TraitInfo {
   name : String
   signature : String
   methods : Array[MethodInfo]
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Method information
 pub struct MethodInfo {
   name : String
   signature : String
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Value (top-level function, etc.) information
 pub struct ValueInfo {
   name : String
   signature : String
-} derive(Show, Eq)
+} derive(Debug, Show, Eq)
 
 ///|
 /// Parse error

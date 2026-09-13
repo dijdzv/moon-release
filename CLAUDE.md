@@ -39,7 +39,7 @@ src/               CLI entry point, command handlers, completions, schema
         ├── lib/github/        GitHub API via gh CLI
         ├── lib/semver_check/  API compatibility detection via moon doc
         ├── lib/git/           Git repository operations
-        ├── lib/moon_mod/      moon.mod.json parser
+        ├── lib/moon_mod/      moon.mod / moon.mod.json metadata and updates
         ├── lib/config/        release.json parsing & Config struct
         ├── lib/semver/        SemVer parsing, comparison, bumping
         ├── lib/conventional/  Conventional Commits parser
