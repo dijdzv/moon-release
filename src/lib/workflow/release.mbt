@@ -1301,10 +1301,7 @@ pub async fn run_release_pr(
     Some((pr_num, _)) => {
       // Update existing PR title and body
       let update_result = try
-        @executor.run_gh([
-          "pr", "edit", pr_num.to_string(), "--title", commit_msg, "--body",
-          pr_body,
-        ])
+        @executor.run_gh(github.update_pull_request_command(pr_num, commit_msg, pr_body))
       catch {
         e =>
           raise GitError(
@@ -1313,9 +1310,7 @@ pub async fn run_release_pr(
       } noraise {
         r => r
       }
-      if !(update_result.is_success()) {
-        println("Warning: Failed to update PR body: " + update_result.stderr)
-      }
+      validate_pr_metadata_update(update_result.exit_code, update_result.stdout, update_result.stderr, commit_msg, pr_body, branch_recovery_note)
       println("Updated pull request #\{pr_num}")
     }
     None => {

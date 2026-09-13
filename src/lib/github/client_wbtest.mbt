@@ -1,4 +1,13 @@
 ///|
+test "PR metadata uses explicit repository and preserves multiline text" {
+  let client = GitHubClient::new("owner", "repo")
+  let body = "Release notes\n\n日本語 `literal` $(literal)"
+  assert_eq(client.update_pull_request_command(26, "chore: release v0.4.0", body),
+    ["api", "repos/owner/repo/issues/26", "--method", "PATCH", "--raw-field",
+     "title=chore: release v0.4.0", "--raw-field", "body=" + body])
+}
+
+///|
 test "client new" {
   let client = GitHubClient::new("owner", "repo")
   assert_eq(client.slug.owner(), "owner")

@@ -1,4 +1,27 @@
 ///|
+/// Validate the generated metadata before reporting a PR update as successful.
+fn validate_pr_metadata_update(
+  exit_code : Int,
+  stdout : String,
+  stderr : String,
+  title : String,
+  body : String,
+  recovery_note : String,
+) -> Unit raise WorkflowError {
+  if exit_code != 0 {
+    raise GitError("Failed to update PR title and body (exit \{exit_code}): " + stderr + recovery_note)
+  }
+  let response = @json.parse(stdout) catch { _ =>
+    raise GitError("Failed to verify PR title and body: invalid API response" + recovery_note)
+  }
+  match response {
+    Object(fields) if fields.get("title") is Some(String(actual_title)) && actual_title == title &&
+      fields.get("body") is Some(String(actual_body)) && actual_body == body => ()
+    _ => raise GitError("Failed to verify PR title and body: API response does not match generated metadata" + recovery_note)
+  }
+}
+
+///|
 /// Shared helper: extract first 7 characters of a hash string
 pub fn short_hash(hash : String) -> String {
   if hash.length() >= 7 {

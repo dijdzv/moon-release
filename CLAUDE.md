@@ -2,6 +2,8 @@
 
 公開 Issue・PR・文書に他のリポジトリへの参照を追加するのは、ユーザーの許可がある場合に限る。
 
+リリースのバージョン・PR タイトル・本文は moon-release の生成結果を正本とし、手動補正しない。不整合があれば生成・更新処理を修正する。
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Language

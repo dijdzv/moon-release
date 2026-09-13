@@ -1,4 +1,22 @@
 ///|
+test "failed or stale PR metadata cannot be reported as updated" {
+  for (code, stdout, stderr) in [
+    (1, "", "GraphQL failure"),
+    (0, "", ""),
+    (0, "{}", ""),
+    (0, "{\"title\":\"old\",\"body\":\"notes\"}", ""),
+    (0, "{\"title\":\"new\",\"body\":\"old\"}", ""),
+  ] {
+    try { validate_pr_metadata_update(code, stdout, stderr, "new", "notes", " recovery hint") } catch {
+      e => assert_true(e.to_string().contains("recovery hint"))
+    } noraise { _ => fail("Metadata update must fail") }
+  }
+  validate_pr_metadata_update(
+    0, "{\"title\":\"new\",\"body\":\"notes\"}", "",
+    "new", "notes", " recovery hint")
+}
+
+///|
 test "bump_priority - Major has highest priority" {
   assert_eq(bump_priority(@semver.Major), 3)
 }
