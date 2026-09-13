@@ -1,0 +1,35 @@
+import {
+  "moonbitlang/async@0.21.3",
+  "moonbitlang/async@0.21.3/fs",
+  "moonbitlang/async@0.21.3/process",
+  "moonbitlang/core/env",
+}
+
+async fn main {
+  let args = @env.args()
+  guard args.length() == 2 else { abort("Expected unused fixture directory") }
+  let (code, root, error) = @process.collect_output("git", ["rev-parse", "--show-toplevel"])
+  guard code == 0 else { abort(error.text()) }
+  let script = root.text().trim().to_owned() + "/scripts/release_pending.mbtx"
+  for i, (subject, tagged, expected) in [
+    ("chore: initial", false, false),
+    ("chore: release v0.3.2 (#25)", false, false),
+    ("chore: release v0.4.0 (#26)", false, true),
+    ("chore: release v0.4.0", true, false),
+    ("chore: release v0.4.01", false, false),
+  ] {
+    let cwd = args[1] + "/case-" + i.to_string()
+    guard !@fs.exists(cwd) else { abort("Fixture path already exists") }
+    @fs.mkdir(cwd, recursive=true)
+    @fs.write_file(cwd + "/moon.mod.json", "{\"name\":\"test/recovery\",\"version\":\"0.4.0\"}\n")
+    for command in [
+      ["init", "-q"], ["config", "user.name", "Test"],
+      ["config", "user.email", "test@example.invalid"], ["add", "moon.mod.json"],
+      ["-c", "commit.gpgsign=false", "commit", "-qm", subject],
+    ] { assert_eq(@process.run("git", command, cwd~), 0) }
+    if tagged { assert_eq(@process.run("git", ["tag", "v0.4.0"], cwd~), 0) }
+    assert_eq(@process.run("moon", ["run", script, "--", "result.txt"], cwd~), 0)
+    assert_eq(@fs.read_file(cwd + "/result.txt").text(), "pending=" + expected.to_string() + "\n")
+  }
+  println("Prepared, published, initial and unrelated release states passed")
+}

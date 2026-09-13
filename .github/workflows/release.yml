@@ -10,7 +10,7 @@ on:
         type: boolean
         default: false
       build-only:
-        description: 'Build binaries only (skip release-pr)'
+        description: 'Resume build and publication of the version already in the manifest (skip release-pr)'
         type: boolean
         default: false
 
@@ -43,7 +43,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Detect prepared release awaiting publication
+        id: pending
+        run: moon run scripts/release_pending.mbtx -- "$GITHUB_OUTPUT"
+
       - name: Run moon-release (release-pr)
+        if: steps.pending.outputs.pending != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DRY_RUN: ${{ github.event.inputs.dry-run }}
@@ -60,12 +65,13 @@ jobs:
   build:
     if: (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore:') && contains(github.event.head_commit.message, 'release v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.build-only == 'true')
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: linux-x86_64
             artifact: moon-release-linux-x86_64
-          - os: macos-14  # Apple Silicon runner
+          - os: macos-15  # Apple Silicon runner
             target: macos-arm64
             artifact: moon-release-macos-arm64
           - os: windows-latest
